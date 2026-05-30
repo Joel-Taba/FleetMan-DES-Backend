@@ -1,0 +1,1537 @@
+# Contexte du Projet : Fleet & Geofence API
+Généré le : Mon Dec 22 12:34:16 PM WAT 2025
+Framework : Spring Boot WebFlux (Reactive)
+
+## 1. Arborescence du Projet
+```
+.
+├── Dockerfile
+├── docs
+│   └── remarks_of_conception.md
+├── .gitattributes
+├── .gitignore
+├── import_context.sh
+├── mvnw
+├── mvnw.cmd
+├── pom.xml
+├── project_context.txt
+├── Readme.md
+└── src
+    ├── main
+    │   ├── java
+    │   │   └── com
+    │   │       └── yowyob
+    │   │           └── template
+    │   │               ├── application
+    │   │               │   └── service
+    │   │               │       └── ProductService.java
+    │   │               ├── domain
+    │   │               │   ├── exception
+    │   │               │   │   └── StockFullException.java
+    │   │               │   ├── model
+    │   │               │   │   └── Product.java
+    │   │               │   └── ports
+    │   │               │       ├── in
+    │   │               │       │   └── CreateProductUseCase.java
+    │   │               │       └── out
+    │   │               │           ├── ProductCachePort.java
+    │   │               │           ├── ProductEventPublisherPort.java
+    │   │               │           ├── ProductRepositoryPort.java
+    │   │               │           └── StockClientPort.java
+    │   │               ├── infrastructure
+    │   │               │   ├── adapters
+    │   │               │   │   ├── inbound
+    │   │               │   │   │   ├── kafka
+    │   │               │   │   │   │   └── ProductEventConsumer.java
+    │   │               │   │   │   └── rest
+    │   │               │   │   │       ├── dto
+    │   │               │   │   │       │   ├── ProductRequest.java
+    │   │               │   │   │       │   └── ProductResponse.java
+    │   │               │   │   │       ├── GlobalExceptionHandler.java
+    │   │               │   │   │       └── ProductController.java
+    │   │               │   │   └── outbound
+    │   │               │   │       ├── cache
+    │   │               │   │       │   └── RedisAdapter.java
+    │   │               │   │       ├── external
+    │   │               │   │       │   ├── client
+    │   │               │   │       │   │   └── StockApiClient.java
+    │   │               │   │       │   └── StockAdapter.java
+    │   │               │   │       ├── messaging
+    │   │               │   │       │   └── KafkaAdapter.java
+    │   │               │   │       └── persistence
+    │   │               │   │           ├── entity
+    │   │               │   │           │   └── ProductEntity.java
+    │   │               │   │           ├── PostgresR2dbcAdapter.java
+    │   │               │   │           └── repository
+    │   │               │   │               └── ProductR2dbcRepository.java
+    │   │               │   ├── config
+    │   │               │   │   ├── DatabaseInitConfig.java
+    │   │               │   │   ├── KafkaConfig.java
+    │   │               │   │   ├── OpenApiConfig.java
+    │   │               │   │   ├── RedisConfig.java
+    │   │               │   │   └── WebClientConfig.java
+    │   │               │   └── mappers
+    │   │               │       └── ProductMapper.java
+    │   │               └── TemplateApplication.java
+    │   └── resources
+    │       ├── application.yml
+    │       ├── prod.application.yml
+    │       └── schema.sql
+    └── test
+        └── java
+            └── com
+                └── yowyob
+                    └── reactive_hexagonal
+                        └── ReactiveHexagonalApplicationTests.java
+
+37 directories, 41 files
+```
+## 2. Contenu des Fichiers
+
+---
+### Fichier : `./bin/src/main/resources/application.yml`
+```yaml
+server:
+  port: 8080
+
+spring:
+  application:
+    name: reactive-hexagonal
+  
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/reactivedb
+    username: user
+    password: password
+  
+  sql:
+    init:
+      mode: always # start the scheme
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+# Custom Config 
+application:
+  external:
+    stock-service-url: http://localhost:8081 # Wiremock
+
+# Resilience4j Config
+resilience4j:
+  circuitbreaker:
+    instances:
+      stock-service:
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+        slidingWindowSize: 5```
+
+---
+### Fichier : `./bin/src/main/resources/schema.sql`
+```sql
+CREATE TABLE IF NOT EXISTS products (
+    id UUID PRIMARY KEY,
+    name VARCHAR(255),
+    price DECIMAL(10, 2),
+    status VARCHAR(50)
+);```
+
+---
+### Fichier : `./bin/.mvn/wrapper/maven-wrapper.properties`
+```properties
+wrapperVersion=3.3.4
+distributionType=only-script
+distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.zip
+```
+
+---
+### Fichier : `./bin/pom.xml`
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.4.0</version>
+        <relativePath/>
+    </parent>
+    
+    <groupId>com.yowyob</groupId>
+    <artifactId>reactive-hexagonal</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>reactive-hexagonal</name>
+    <description>Template Hexagonal Reactive pour com.yowyob</description>
+    
+    <properties>
+        <java.version>21</java.version>
+        <spring-cloud.version>2023.0.0</spring-cloud.version>
+        <mapstruct.version>1.5.5.Final</mapstruct.version>
+    </properties>
+    
+    <dependencies>
+        <!-- REACTIVE CORE -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- DATA (R2DBC & REDIS) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-r2dbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>r2dbc-postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
+        <!-- MESSAGING (KAFKA) -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+
+        <!-- CLOUD & RESILIENCE -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
+        </dependency>
+
+        <!-- TOOLS (Lombok & Mapstruct) -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${mapstruct.version}</version>
+        </dependency>
+        
+        <!-- Docker Compose Auto-setup -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-docker-compose</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+        
+        <!-- Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.30</version>
+                        </path>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${mapstruct.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok-mapstruct-binding</artifactId>
+                            <version>0.2.0</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>```
+
+---
+### Fichier : `./docs/remarks_of_conception.md`
+```md
+# Remarques cahier d'analyse et conception
+
+# Objectif
+L'objectif de ce document est de fournir des remarques pour le cahier d'analyse et conception du projet Fleet management et geofence s'integrant dans le projet synthese de 5Gi: Trans Ens
+
+# Liste des remarques
+
+Chaque remarque sera constitue d'un page du titre de la remarque et de la description
+
+---
+## R1: raphael au feminin 
+
+**page**: 2
+
+**descripion**:  
+Bihai rapahel
+rapahel est ecrit au feminin,est-ce normal?
+
+---
+## R2: utilisation de FareCalculator
+
+**page** : 14
+
+**description** : Notre systeme utilisera t'il reellement farecalculator ? si oui dans quel cas d'utilisation ?
+
+---
+
+## R3: Absence de Navigoo dans le diagarmme de contexte
+
+**page** : 14
+
+**description** : Notre systeme utilisera certainement l'api des cartes pour montrer au client,chauffeur,fleet amanager mais notre diagaramme de contexte de le met pas en evidence
+
+---
+
+## R4: fautre d'orthographe
+
+**page** : 14
+
+**description** : les acteurs (qui utilise le système),le verbe utiliser doit etre a la 3e personne du pluriel(`avec ent`)
+
+---
+
+## R5: Probleme de coherence entre les diagrammes de cas d'utilisation et de contexte
+
+**page** : 14 et 15
+
+**description** : sur le diagramme de contexte,on voit bien que farecalculator fait partie des acteurs externes et le customer aussi mais dans le diagramme de cas d'utilisation,on ne les retrpiuve pas. De plus,on retrouve navigoo qui n'etait pas dans le diagramme de contexte. 
+
+---
+
+## R6: diagramme de use case,coherence dans le regroupement des use case
+
+**page** : 15
+
+**description** : 
+Je remarque la factorisation qui est regroupage elegant des cas d'utilisation dans ce diagramme par l'heritage,ce qui est une bnne chose mais pour l'acteur fleet manager,je trouve que ce n'est pas suffisemment regroupe pour le management des vehicule(je parle de track vehicule,view vehicule statictics qui selpon moi sont des sous-cas de manage vehicule)
+
+---
+## R7: diagramme de sequence systeme
+**page** : 29
+
+**description** : 
+- la methode valider identifiant que le systeme envoir a l'api d'auth doit etre une fonction ayant pour parametre les identifiants(email,mot de passe)
+
+- Il y'a egalement un probleme de coherence linguistique,depuis le debut tous les diagrammes sont en anglais,mais celui ci est en francais.il nous faut une seule langue.
+
+- est ce que le token est un message ou une variable? je crois aussi qu'ici c'est une fontion que l'api d'auth utilise pour envoyer le token et le role...aussi le role 
+---
+```
+
+---
+### Fichier : `./src/test/java/com/yowyob/reactive_hexagonal/ReactiveHexagonalApplicationTests.java`
+```java
+package com.yowyob.reactive_hexagonal;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class ReactiveHexagonalApplicationTests {
+
+	@Test
+	void contextLoads() {
+	}
+
+}
+```
+
+---
+### Fichier : `./src/main/resources/application.yml`
+```yaml
+server:
+  port: 8080
+
+spring:
+  application:
+    name: reactive-hexagonal
+    
+  docker:
+    compose:
+      enabled: false
+
+  # POSTGRESQL (R2DBC)
+  r2dbc:
+    url: r2dbc:postgresql://168.119.122.86:5432/yowyob
+    username: master
+    password: Azerty1234*
+
+  sql:
+    init:
+      mode: always
+
+  # REDIS CLUSTER 
+  data:
+    redis:
+      host: 168.119.122.86
+      port: 7000
+      password: Azerty1234*
+      cluster:
+        enabled: false 
+
+  # KAFKA 
+  kafka:
+    bootstrap-servers: 168.119.122.86:9092
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+# CUSTOM CONFIG 
+application:
+  external:
+    stock-service-url: http://168.119.122.86:8081
+
+  kafka:
+    topics:
+      product-events: test-topic
+
+# RESILIENCE4J 
+resilience4j:
+  circuitbreaker:
+    instances:
+      stock-service:
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+        slidingWindowSize: 5
+```
+
+---
+### Fichier : `./src/main/resources/schema.sql`
+```sql
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+DROP TABLE IF EXISTS products CASCADE;
+
+CREATE TABLE IF NOT EXISTS products (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255),
+    price DECIMAL(10, 2),
+    status VARCHAR(50)
+);
+```
+
+---
+### Fichier : `./src/main/resources/prod.application.yml`
+```yaml
+server:
+  port: 8080
+
+spring:
+  application:
+    name: reactive-hexagonal
+    
+  docker:
+    compose:
+      enabled: false
+
+  # POSTGRESQL (R2DBC)
+  r2dbc:
+    url: r2dbc:postgresql://168.119.122.86:5432/yowyob
+    username: master
+    password: Azerty1234*
+
+  sql:
+    init:
+      mode: always
+
+  # REDIS CLUSTER 
+  data:
+    redis:
+      password: Azerty1234*
+      cluster:
+        nodes:
+          - 168.119.122.86:7001
+          - 168.119.122.86:7002
+          - 168.119.122.86:7003
+          - 168.119.122.86:7004
+          - 168.119.122.86:7005
+          - 168.119.122.86:7006
+
+  # KAFKA 
+  kafka:
+    bootstrap-servers: 168.119.122.86:9092
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+# CUSTOM CONFIG 
+application:
+  external:
+    stock-service-url: http://168.119.122.86:8081
+
+  kafka:
+    topics:
+      product-events: test-topic
+
+# RESILIENCE4J 
+resilience4j:
+  circuitbreaker:
+    instances:
+      stock-service:
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+        slidingWindowSize: 5
+```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/TemplateApplication.java`
+```java
+package com.yowyob.fleet;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class TemplateApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(TemplateApplication.class, args);
+	}
+
+}
+```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/mappers/ProductMapper.java`
+```java
+package com.yowyob.fleet.infrastructure.mappers;
+
+import com.yowyob.fleet.domain.model.Product;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ProductRequest;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ProductResponse;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.ProductEntity;
+import org.mapstruct.Mapper;
+
+@Mapper(componentModel = "spring")
+public interface ProductMapper {
+    Product toDomain(ProductRequest request);
+    ProductResponse toResponse(Product domain);
+    
+    ProductEntity toEntity(Product domain);
+    Product toDomain(ProductEntity entity);
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/adapters/outbound/external/StockAdapter.java`
+```java
+package com.yowyob.fleet.infrastructure.adapters.outbound.external;
+
+import com.yowyob.fleet.domain.ports.out.StockClientPort;
+import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.StockApiClient;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreaker;
+import org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreakerFactory;
+import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
+
+@Component
+@Slf4j
+@RequiredArgsConstructor
+public class StockAdapter implements StockClientPort {
+
+    private final StockApiClient client;
+    private final ReactiveCircuitBreakerFactory<?, ?> cbFactory;
+
+    @Override
+    public Mono<Boolean> isStockFull(String productName) {
+        ReactiveCircuitBreaker rcb = cbFactory.create("stock-service");
+
+        return rcb.run(
+                client.checkStock(productName).map(StockApiClient.StockResponse::full),
+                throwable -> fallbackStockCheck(productName, throwable)
+        );
+    }
+
+    private Mono<Boolean> fallbackStockCheck(String productName, Throwable t) {
+        log.warn("Circuit Breaker open or Service Down for {}. Error: {}", productName, t.getMessage());
+        // Fallback: if the service is down, consider the stock not full
+        return Mono.just(false);
+    }
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/adapters/outbound/external/client/StockApiClient.java`
+```java
+package com.yowyob.fleet.infrastructure.adapters.outbound.external.client;
+
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.service.annotation.GetExchange;
+import org.springframework.web.service.annotation.HttpExchange;
+import reactor.core.publisher.Mono;
+
+@HttpExchange("/api/stock")
+public interface StockApiClient {
+    @GetExchange("/check")
+    Mono<StockResponse> checkStock(@RequestParam("name") String name);
+
+    record StockResponse(boolean full) {}
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/adapters/outbound/messaging/KafkaAdapter.java`
+```java
+package com.yowyob.fleet.infrastructure.adapters.outbound.messaging;
+
+import com.yowyob.fleet.domain.model.Product;
+import com.yowyob.fleet.domain.ports.out.ProductEventPublisherPort;
+import lombok.RequiredArgsConstructor;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.core.reactive.ReactiveKafkaProducerTemplate;
+import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
+
+@Component
+@RequiredArgsConstructor
+public class KafkaAdapter implements ProductEventPublisherPort {
+
+    private final ReactiveKafkaProducerTemplate<String, Object> kafkaTemplate;
+
+    @Value("${application.kafka.topics.product-events}")
+    private String productEventsTopic;
+
+    @Override
+    public Mono<Void> publishProductCreated(Product product) {
+        return kafkaTemplate.send(productEventsTopic, product.id().toString(), product)
+                .then();
+    }
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/adapters/outbound/persistence/entity/ProductEntity.java`
+```java
+package com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Table;
+import java.math.BigDecimal;
+import java.util.UUID;
+
+@Table("products")
+@Data @NoArgsConstructor @AllArgsConstructor
+public class ProductEntity {
+    @Id
+    private UUID id;
+    private String name;
+    private BigDecimal price;
+    private String status;
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/adapters/outbound/persistence/repository/ProductR2dbcRepository.java`
+```java
+package com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository;
+
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.ProductEntity;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import java.util.UUID;
+
+public interface ProductR2dbcRepository extends ReactiveCrudRepository<ProductEntity, UUID> {}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/adapters/outbound/persistence/PostgresR2dbcAdapter.java`
+```java
+package com.yowyob.fleet.infrastructure.adapters.outbound.persistence;
+
+import com.yowyob.fleet.domain.model.Product;
+import com.yowyob.fleet.domain.ports.out.ProductRepositoryPort;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.ProductR2dbcRepository;
+import com.yowyob.fleet.infrastructure.mappers.ProductMapper;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
+
+@Component
+@RequiredArgsConstructor
+public class PostgresR2dbcAdapter implements ProductRepositoryPort {
+
+    private final ProductR2dbcRepository repository;
+    private final ProductMapper mapper;
+
+    @Override
+    public Mono<Product> save(Product product) {
+        return repository.save(mapper.toEntity(product))
+                .map(mapper::toDomain);
+    }
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/adapters/outbound/cache/RedisAdapter.java`
+```java
+package com.yowyob.fleet.infrastructure.adapters.outbound.cache;
+
+import com.yowyob.fleet.domain.model.Product;
+import com.yowyob.fleet.domain.ports.out.ProductCachePort;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.ReactiveRedisTemplate;
+import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
+import java.time.Duration;
+
+@Component
+@RequiredArgsConstructor
+public class RedisAdapter implements ProductCachePort {
+    private final ReactiveRedisTemplate<String, Object> redisTemplate;
+
+    @Override
+    public Mono<Boolean> saveInCache(Product product) {
+        return redisTemplate.opsForValue()
+                .set("product:" + product.id(), product, Duration.ofMinutes(10));
+    }
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/adapters/inbound/kafka/ProductEventConsumer.java`
+```java
+package com.yowyob.fleet.infrastructure.adapters.inbound.kafka;
+
+import com.yowyob.fleet.domain.model.Product;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+@Slf4j
+@Component
+public class ProductEventConsumer {
+
+    @Value("${application.kafka.topics.product-events}")
+    private String productEventsTopic;
+
+    @KafkaListener(topics = "${application.kafka.topics.product-events}", groupId = "template-group")
+    public void consume(Product product) {
+        log.info("CONSUMER: I received an event for product with id : {} and price : {}", 
+                 product.name(), product.price());
+    }
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/adapters/inbound/rest/ProductController.java`
+```java
+package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
+
+import com.yowyob.fleet.domain.ports.in.CreateProductUseCase;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ProductRequest;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ProductResponse;
+import com.yowyob.fleet.infrastructure.mappers.ProductMapper;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
+
+@RestController
+@RequestMapping("/api/v1/products")
+@RequiredArgsConstructor
+public class ProductController {
+
+    private final CreateProductUseCase useCase;
+    private final ProductMapper mapper;
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Créer un produit", description = "Vérifie le stock distant et sauvegarde le produit.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Produit créé avec succès"),
+        @ApiResponse(responseCode = "400", description = "Données invalides")
+    })
+    public Mono<ProductResponse> create(@RequestBody @Valid Mono<ProductRequest> requestMono) {
+        return requestMono
+                .map(mapper::toDomain)
+                .flatMap(useCase::createProduct)
+                .map(mapper::toResponse);
+    }
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/adapters/inbound/rest/GlobalExceptionHandler.java`
+```java
+package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
+
+import com.yowyob.fleet.domain.exception.StockFullException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.net.URI;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(StockFullException.class)
+    public ProblemDetail handleStockException(StockFullException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Stock Overflow");
+        problem.setType(URI.create("errors/stock-full"));
+        return problem;
+    }
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/adapters/inbound/rest/dto/ProductResponse.java`
+```java
+package com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto;
+import java.math.BigDecimal;
+import java.util.UUID;
+
+
+public record ProductResponse(UUID id, String name, BigDecimal price, String status) {}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/adapters/inbound/rest/dto/ProductRequest.java`
+```java
+package com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
+import java.math.BigDecimal;
+
+
+public record ProductRequest(@NotBlank String name, @Positive BigDecimal price) {}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/config/WebClientConfig.java`
+```java
+package com.yowyob.fleet.infrastructure.config;
+
+import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.StockApiClient;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.support.WebClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
+
+@Configuration
+public class WebClientConfig {
+
+    @Bean
+    public StockApiClient stockApiClient(WebClient.Builder builder, 
+                                         @Value("${application.external.stock-service-url}") String url) {
+                                            
+        WebClient webClient = builder.baseUrl(url).build();
+        WebClientAdapter adapter = WebClientAdapter.create(webClient);
+        HttpServiceProxyFactory factory = HttpServiceProxyFactory.builderFor(adapter).build();
+        
+        return factory.createClient(StockApiClient.class);
+    }
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/config/RedisConfig.java`
+```java
+package com.yowyob.fleet.infrastructure.config;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
+import org.springframework.data.redis.core.ReactiveRedisTemplate;
+import org.springframework.data.redis.serializer.*;
+
+@Configuration
+public class RedisConfig {
+
+    @Bean
+    public ReactiveRedisTemplate<String, Object> reactiveRedisTemplate(
+            ReactiveRedisConnectionFactory factory) {
+
+        ObjectMapper mapper = new ObjectMapper()
+                .registerModule(new ParameterNamesModule())
+                .registerModule(new JavaTimeModule());
+
+        Jackson2JsonRedisSerializer<Object> jsonSerializer =
+                new Jackson2JsonRedisSerializer<>(mapper, Object.class);
+
+        RedisSerializationContext<String, Object> context =
+                RedisSerializationContext.<String, Object>newSerializationContext(new StringRedisSerializer())
+                        .value(jsonSerializer)
+                        .hashValue(jsonSerializer)
+                        .build();
+
+        return new ReactiveRedisTemplate<>(factory, context);
+    }
+}
+```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/config/KafkaConfig.java`
+```java
+package com.yowyob.fleet.infrastructure.config;
+
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.core.reactive.ReactiveKafkaProducerTemplate;
+import reactor.kafka.sender.SenderOptions;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Configuration
+public class KafkaConfig {
+
+    @Value("${spring.kafka.bootstrap-servers}")
+    private String bootstrapServers;
+
+    @Bean
+    public ReactiveKafkaProducerTemplate<String, Object> reactiveKafkaProducerTemplate() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, org.springframework.kafka.support.serializer.JsonSerializer.class);
+
+        SenderOptions<String, Object> senderOptions = SenderOptions.create(props);
+
+        return new ReactiveKafkaProducerTemplate<>(senderOptions);
+    }
+}
+```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/config/DatabaseInitConfig.java`
+```java
+package com.yowyob.fleet.infrastructure.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.r2dbc.core.DatabaseClient;
+import jakarta.annotation.PostConstruct;
+import reactor.core.publisher.Flux;
+
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.stream.Collectors;
+
+@Configuration
+public class DatabaseInitConfig {
+
+    private final DatabaseClient databaseClient;
+
+    public DatabaseInitConfig(DatabaseClient databaseClient) {
+        this.databaseClient = databaseClient;
+    }
+
+    @PostConstruct
+    public void init() throws Exception {
+        ClassPathResource resource = new ClassPathResource("schema.sql");
+        String sql = Files.lines(Paths.get(resource.getURI()))
+                          .collect(Collectors.joining("\n"));
+
+        String[] statements = sql.split(";");
+
+        Flux.fromArray(statements)
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .flatMap(s -> databaseClient.sql(s).then())
+            .subscribe(
+                null,
+                err -> System.err.println("Erreur lors de l'init DB : " + err),
+                () -> System.out.println("Base initialisée avec succès")
+            );
+    }
+}
+```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/infrastructure/config/OpenApiConfig.java`
+```java
+package com.yowyob.fleet.infrastructure.config;
+
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.info.License;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class OpenApiConfig {
+
+    @Bean
+    public OpenAPI customOpenAPI() {
+        return new OpenAPI()
+                .info(new Info()
+                        .title("YowYob Microservice Template API")
+                        .version("1.0.0")
+                        .description("Documentation de l'API Réactive Hexagonale.")
+                        .contact(new Contact()
+                                .name("Équipe Backend")
+                                .email("dev@yowyob.com"))
+                        .license(new License()
+                                .name("Apache 2.0")
+                                .url("http://springdoc.org")));
+    }
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/domain/exception/StockFullException.java`
+```java
+package com.yowyob.fleet.domain.exception;
+
+public class StockFullException extends RuntimeException {
+    public StockFullException(String message) {
+        super(message);
+    }
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/domain/model/Product.java`
+```java
+package com.yowyob.fleet.domain.model;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+public record Product(UUID id, String name, BigDecimal price, String status) {}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/domain/ports/in/CreateProductUseCase.java`
+```java
+package com.yowyob.fleet.domain.ports.in;
+
+import com.yowyob.fleet.domain.model.Product;
+import reactor.core.publisher.Mono;
+
+public interface CreateProductUseCase {
+    Mono<Product> createProduct(Product product);
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/domain/ports/out/ProductEventPublisherPort.java`
+```java
+package com.yowyob.fleet.domain.ports.out;
+
+import com.yowyob.fleet.domain.model.Product;
+import reactor.core.publisher.Mono;
+
+public interface ProductEventPublisherPort {
+    Mono<Void> publishProductCreated(Product product);
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/domain/ports/out/ProductCachePort.java`
+```java
+package com.yowyob.fleet.domain.ports.out;
+
+import com.yowyob.fleet.domain.model.Product;
+import reactor.core.publisher.Mono;
+
+public interface ProductCachePort {
+    Mono<Boolean> saveInCache(Product product);
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/domain/ports/out/ProductRepositoryPort.java`
+```java
+package com.yowyob.fleet.domain.ports.out;
+
+import com.yowyob.fleet.domain.model.Product;
+import reactor.core.publisher.Mono;
+
+public interface ProductRepositoryPort {
+    Mono<Product> save(Product product);
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/domain/ports/out/StockClientPort.java`
+```java
+package com.yowyob.fleet.domain.ports.out;
+
+import reactor.core.publisher.Mono;
+
+public interface StockClientPort {
+    /**
+     * Verify if te stock is full.
+     * @return true full, false otherwise
+     */
+    Mono<Boolean> isStockFull(String productName);
+}```
+
+---
+### Fichier : `./src/main/java/com/yowyob/template/application/service/ProductService.java`
+```java
+package com.yowyob.fleet.application.service;
+
+import com.yowyob.fleet.domain.exception.StockFullException;
+import com.yowyob.fleet.domain.model.Product;
+import com.yowyob.fleet.domain.ports.in.CreateProductUseCase;
+import com.yowyob.fleet.domain.ports.out.ProductCachePort;
+import com.yowyob.fleet.domain.ports.out.ProductEventPublisherPort;
+import com.yowyob.fleet.domain.ports.out.ProductRepositoryPort;
+import com.yowyob.fleet.domain.ports.out.StockClientPort;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+
+// import java.util.UUID;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class ProductService implements CreateProductUseCase {
+
+    private final ProductRepositoryPort repository;
+    private final StockClientPort stockClient;
+    private final ProductCachePort cache;
+    private final ProductEventPublisherPort publisher;
+
+    @Override
+    public Mono<Product> createProduct(Product product) {
+        return stockClient.isStockFull(product.name())
+                .flatMap(isFull -> {
+                    if (isFull) {
+                        return Mono.error(new StockFullException("Stock is full for the product : " + product.name()));
+                    }
+                    return Mono.just(product);
+                })
+                .map(p -> new Product(null, p.name(), p.price(), "CREATED"))
+                .flatMap(repository::save)
+                .flatMap(savedProduct -> 
+                    // We cache and publish asynchronously, then return the object
+                    Mono.when(
+                        cache.saveInCache(savedProduct),
+                        publisher.publishProductCreated(savedProduct)
+                    ).thenReturn(savedProduct)
+                )
+                .doOnSuccess(p -> log.info("Product successfully created : {}", p.id()));
+    }
+}```
+
+---
+### Fichier : `./.mvn/wrapper/maven-wrapper.properties`
+```properties
+wrapperVersion=3.3.4
+distributionType=only-script
+distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.zip
+```
+
+---
+### Fichier : `./Readme.md`
+```md
+# Template Hexagonal Reactive - com.yowyob
+
+Ce projet est le **socle standard** pour le développement de microservices backend chez **com.yowyob**. Il fournit une structure clé en main respectant les principes de l'**Architecture Hexagonale** sur une stack technologique entièrement **Réactive** (Non-bloquante).
+
+## 📘 À propos de ce Template
+
+### Objectif
+L'objectif de ce repository n'est pas d'être un simple "Hello World", mais de fournir un **exemple complet et réaliste** d'un microservice de production. Il a été réalisé pour standardiser nos développements, assurer la cohérence du code entre les équipes et faciliter la maintenance.
+
+### Scénario d'implémentation (Comment il a été réalisé)
+Pour démontrer les capacités du template, nous avons implémenté un cas d'usage fonctionnel complet : **"La création d'un produit"**.
+
+Ce scénario a été choisi car il traverse toutes les couches techniques nécessaires dans un vrai système distribué :
+
+1.  **Entrée API** : Réception d'une requête POST (Layer REST).
+2.  **Validation Métier** : Appel à un service externe (Stock Service) pour vérifier la capacité via HTTP.
+3.  **Persistance** : Sauvegarde des données dans PostgreSQL (R2DBC).
+4.  **Performance** : Mise en cache du résultat dans Redis.
+5.  **Communication Asynchrone** : Publication d'un événement "ProductCreated" dans Kafka.
+6.  **Résilience** : Gestion des pannes du service externe via un Circuit Breaker.
+
+Ce flux permet aux développeurs de voir concrètement comment enchaîner ces opérations de manière réactive (Reactor/Mono/Flux) tout en gardant le cœur du métier pur.
+
+---
+
+## 📋 Prérequis
+
+- **Java 21**
+- **Maven 3.8+**
+- **Docker** (Optionel)
+
+## 🏗 Architecture du Projet
+
+L'architecture est divisée en trois couches distinctes pour isoler la logique métier des technologies.
+
+### 1. Domain (`src/main/java/com/yowyob/template/domain`)
+C'est le cœur du métier. **Aucune dépendance Spring** ne doit se trouver ici (sauf exception rare).
+- **`model/`** : Les objets métiers (Records Java).
+- **`ports/in/`** : Les interfaces (Use Cases) définissant ce que l'application *peut faire* (ex: `CreateProductUseCase`).
+- **`ports/out/`** : Les interfaces définissant ce dont l'application *a besoin* (ex: Repository, Client API, Bus d'événements).
+- **`exception/`** : Exceptions métier.
+
+### 2. Application (`src/main/java/com/yowyob/template/application`)
+L'orchestrateur.
+- Implémente les interfaces `ports/in`.
+- Utilise les interfaces `ports/out`.
+- Contient la logique des flux (Flows reactor).
+
+### 3. Infrastructure (`src/main/java/com/yowyob/template/infrastructure`)
+Tout ce qui est technique. C'est ici qu'on implémente Spring, les bases de données, etc.
+- **`adapters/inbound/`** : Ce qui *entre* dans l'app (Controlleurs REST, Listeners Kafka).
+- **`adapters/outbound/`** : Ce qui *sort* ou stocke (Implémentation R2DBC, Client WebClient, Redis, Kafka Producer).
+- **`config/`** : Configuration Spring (Beans, Security, Serializers).
+- **`mappers/`** : Conversion entre les DTOs, les Entités et le Domaine (MapStruct).
+
+
+## ⚙️ Configuration et URLs Externes
+
+La configuration est centralisée dans `src/main/resources/application.yml`.
+
+### Comment définir l'URL d'un Microservice externe ?
+
+Pour appeler un autre service (ex: Stock Service), nous utilisons `WebClient` configuré via une interface déclarative (Http Interface Client).
+
+1. **Définir l'URL dans le YAML** :
+   Dans `application.yml` (ou `prod.application.yml`), localisez la section `application.external` :
+   ```yaml
+   application:
+     external:
+       stock-service-url: http://168.119.122.86:8081
+   ```
+
+2. **Injection dans le Client** :
+   Dans `WebClientConfig.java`, cette valeur est injectée via `@Value("${application.external.stock-service-url}")` et passée au builder du client HTTP.
+
+3. **Utilisation** :
+   L'adaptateur (`StockAdapter`) utilise l'interface `StockApiClient` sans se soucier de l'URL.
+
+### Configuration Infrastructure (DB, Redis, Kafka)
+
+Les accès aux services de données sont définis dans les fichiers YAML.
+- **Profil par défaut (`application.yml`)** : Configuré pour le développement (Redis standalone).
+- **Profil Prod (`prod.application.yml`)** : Configuré pour la production (Redis Cluster, IPs statiques).
+
+---
+
+## 🚀 Comment Lancer l'Application
+
+### 1. En local (Développement)
+
+Assurez-vous que vos services (Postgres, Kafka, Redis) sont accessibles aux adresses définies dans `application.yml`.
+
+```bash
+mvn clean install
+mvn spring-boot:run
+```
+
+### 2. Via Docker
+
+Pour construire l'image et lancer un conteneur :
+
+```bash
+# Construire l'image
+docker build -t reactive-hexagonal .
+
+# Lancer (en pointant vers le profil prod par exemple)
+docker run -p 8080:8080 -e SPRING_PROFILES_ACTIVE=prod reactive-hexagonal
+```
+
+---
+
+## 🛠 Guide du Développeur : Comment ajouter une fonctionnalité ?
+
+Si vous devez ajouter une fonctionnalité (ex: "Supprimer un produit"), suivez cet ordre strict :
+
+1.  **Domain (Port In)** : Créez l'interface `DeleteProductUseCase` dans `domain/ports/in`.
+2.  **Domain (Port Out)** : Si besoin d'accès DB, créez/maj `ProductRepositoryPort` dans `domain/ports/out`.
+3.  **Application** : Implémentez le UseCase dans `ProductService` (ou un nouveau service `DeleteProductService`).
+4.  **Infrastructure (Out)** : Implémentez la méthode de suppression dans `PostgresR2dbcAdapter`.
+5.  **Infrastructure (In)** : Ajoutez l'endpoint `DELETE` dans `ProductController`.
+
+### Résilience (Circuit Breaker)
+
+Les appels externes sont protégés par Resilience4j.
+Pour modifier les seuils (ex: passer à 10s d'attente), modifiez la section `resilience4j` dans le fichier YAML.
+
+```yaml
+resilience4j:
+  circuitbreaker:
+    instances:
+      stock-service:
+        failureRateThreshold: 50 # Ouvre le circuit si 50% d'échecs
+```
+
+---
+
+## ✅ Vérifications avant commit
+
+- [ ] Les DTOs (Infrastructure) sont séparés des Objets du Domaine (Domain).
+- [ ] Aucune annotation Spring (`@Service`, `@Component`) dans le package `domain`.
+- [ ] Les tests unitaires couvrent la couche Application.
+
+## 📚 Documentation de l'API (Swagger UI)
+
+Le projet intègre **OpenAPI 3** (via Springdoc) pour documenter et tester les endpoints automatiquement.
+
+Une fois l'application lancée, la documentation est accessible ici :
+
+- **Interface Visuelle (Swagger UI)** : [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
+- **Définition JSON (OpenAPI)** : [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)```
+
+---
+### Fichier : `./pom.xml`
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.6</version>
+        <relativePath/>
+    </parent>
+    
+    <groupId>com.yowyob</groupId>
+    <artifactId>reactive-hexagonal</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>reactive-hexagonal</name>
+    <description>Template Hexagonal Reactive pour com.yowyob</description>
+    
+    <properties>
+        <java.version>21</java.version>
+        <spring-cloud.version>2023.0.0</spring-cloud.version>
+        <mapstruct.version>1.5.5.Final</mapstruct.version>
+    </properties>
+    
+    <dependencies>
+        <!-- REACTIVE CORE -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+             <groupId>org.springframework.boot</groupId>
+             <artifactId>spring-boot-starter-actuator</artifactId>
+	</dependency>
+	<dependency>
+	   <groupId>io.micrometer</groupId>
+	   <artifactId>micrometer-registry-prometheus</artifactId>
+	</dependency>
+
+        <!-- DATA (R2DBC & REDIS) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-r2dbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>r2dbc-postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
+        <!-- MESSAGING (KAFKA) -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor.kafka</groupId>
+            <artifactId>reactor-kafka</artifactId>
+            <version>1.3.22</version>
+        </dependency>
+
+        <!-- CLOUD & RESILIENCE -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
+        </dependency>
+
+        <!-- TOOLS (Lombok & Mapstruct) -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${mapstruct.version}</version>
+        </dependency>
+        
+        <!-- Docker Compose Auto-setup -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-docker-compose</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+        
+        <!-- Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Documentation API (Swagger/OpenAPI) -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+            <version>2.5.0</version>
+        </dependency>
+    </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.30</version>
+                        </path>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${mapstruct.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok-mapstruct-binding</artifactId>
+                            <version>0.2.0</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+```

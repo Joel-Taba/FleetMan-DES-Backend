@@ -1,0 +1,2461 @@
+\documentclass[12pt,a4paper]{report}
+
+% --- Encodage et langue (XeLaTeX natif UTF-8) --------------------------------
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setmainlanguage{french}
+
+% ─── Mise en page ─────────────────────────────────────────────────────────────
+\usepackage[top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% --- Typographie --------------------------------------------------------------
+\usepackage{microtype}
+\usepackage{parskip}
+
+% ─── Couleurs et graphiques ───────────────────────────────────────────────────
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds}
+
+% ─── Tableaux ─────────────────────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{array}
+
+% ─── Code source ──────────────────────────────────────────────────────────────
+\usepackage{listings}
+\usepackage{lstautogobble}
+
+% --- Liens et references ──────────────────────────────────────────────────────
+\usepackage[hidelinks]{hyperref}
+
+% --- En-tetes et pieds de page ────────────────────────────────────────────────
+\usepackage{fancyhdr}
+\usepackage{emptypage}
+
+% --- Boites et encadres ───────────────────────────────────────────────────────
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable, listings}
+
+% --- Numerotation ─────────────────────────────────────────────────────────────
+\usepackage{enumitem}
+\usepackage{titlesec}
+
+% --- Mathematiques ────────────────────────────────────────────────────────────
+\usepackage{amsmath}
+\usepackage{cleveref}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% DÉFINITION DES COULEURS DU PROJET
+% ─────────────────────────────────────────────────────────────────────────────
+\definecolor{fleetblue}{RGB}{19, 109, 236}
+\definecolor{fleetdark}{RGB}{11, 17, 32}
+\definecolor{fleetgray}{RGB}{107, 114, 128}
+\definecolor{fleetsuccess}{RGB}{16, 185, 129}
+\definecolor{fleetwarning}{RGB}{245, 158, 11}
+\definecolor{fleeterror}{RGB}{239, 68, 68}
+\definecolor{codebg}{RGB}{248, 249, 250}
+\definecolor{codefg}{RGB}{36, 41, 47}
+\definecolor{commentcolor}{RGB}{106, 153, 85}
+\definecolor{keywordcolor}{RGB}{86, 156, 214}
+\definecolor{stringcolor}{RGB}{206, 145, 120}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% CONFIGURATION DES LISTINGS (CODE)
+% ─────────────────────────────────────────────────────────────────────────────
+\lstdefinestyle{javaStyle}{
+  language=Java,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize\color{codefg},
+  keywordstyle=\color{keywordcolor}\bfseries,
+  stringstyle=\color{stringcolor},
+  commentstyle=\color{commentcolor}\itshape,
+  numberstyle=\tiny\color{fleetgray},
+  numbers=left,
+  numbersep=8pt,
+  stepnumber=1,
+  breaklines=true,
+  breakatwhitespace=false,
+  tabsize=4,
+  showstringspaces=false,
+  frame=single,
+  rulecolor=\color{fleetgray!40},
+  xleftmargin=15pt,
+  autogobble=true,
+  morekeywords={UUID, Mono, Flux, record, var, sealed, permits}
+}
+
+\lstdefinestyle{sqlStyle}{
+  language=SQL,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize\color{codefg},
+  keywordstyle=\color{keywordcolor}\bfseries,
+  stringstyle=\color{stringcolor},
+  commentstyle=\color{commentcolor}\itshape,
+  numberstyle=\tiny\color{fleetgray},
+  numbers=left,
+  numbersep=8pt,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{fleetgray!40},
+  xleftmargin=15pt,
+  autogobble=true
+}
+
+\lstdefinestyle{yamlStyle}{
+  language=bash,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize\color{codefg},
+  keywordstyle=\color{keywordcolor},
+  stringstyle=\color{stringcolor},
+  commentstyle=\color{commentcolor}\itshape,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{fleetgray!40},
+  xleftmargin=15pt,
+  autogobble=true
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% BOÎTES PERSONNALISÉES
+% ─────────────────────────────────────────────────────────────────────────────
+\newtcolorbox{infobox}[1][]{
+  colback=fleetblue!8,
+  colframe=fleetblue,
+  fonttitle=\bfseries,
+  title={Information},
+  #1
+}
+
+\newtcolorbox{warningbox}[1][]{
+  colback=fleetwarning!10,
+  colframe=fleetwarning,
+  fonttitle=\bfseries,
+  title={Remarque},
+  #1
+}
+
+\newtcolorbox{successbox}[1][]{
+  colback=fleetsuccess!8,
+  colframe=fleetsuccess,
+  fonttitle=\bfseries,
+  title={Résultat},
+  #1
+}
+
+\newtcolorbox{definitionbox}[2][]{
+  colback=fleetdark!5,
+  colframe=fleetdark,
+  fonttitle=\bfseries\color{white},
+  coltitle=white,
+  attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=fleetdark},
+  title={#2},
+  #1
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% STYLE DES TITRES
+% ─────────────────────────────────────────────────────────────────────────────
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\color{fleetdark}}
+  {\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-10pt}{30pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{fleetblue}}
+  {\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{fleetdark}}
+  {\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries\color{fleetgray}}
+  {\thesubsubsection}{1em}{}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% EN-TÊTES ET PIEDS DE PAGE
+% ─────────────────────────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{fleetgray}{\leftmark}}
+\fancyhead[R]{\small\textcolor{fleetblue}{\textbf{FleetMan — Rapport d'Évolution Backend}}}
+\fancyfoot[C]{\small\textcolor{fleetgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+\setlength{\headheight}{15pt}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% DÉBUT DU DOCUMENT
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% PAGE DE TITRE
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \pagecolor{fleetdark}
+  \color{white}
+  \centering
+  \vspace*{2cm}
+
+  % Logo / Titre principal
+  {\fontsize{60}{72}\selectfont\bfseries\textcolor{fleetblue}{FleetMan}}\\[0.5cm]
+  {\Large\textcolor{white!70}{Plateforme de Gestion de Flotte Intelligente}}\\[3cm]
+
+  % Ligne de séparation
+  \textcolor{fleetblue}{\rule{0.8\textwidth}{2pt}}\\[1cm]
+
+  % Titre du rapport
+  {\LARGE\bfseries Rapport d'Évolution du Backend}\\[0.5cm]
+  {\large Architecture Hexagonale Réactive — Analyse de l'Existant et des Apports}\\[1cm]
+
+  \textcolor{fleetblue}{\rule{0.8\textwidth}{1pt}}\\[2cm]
+
+  % Informations
+  \begin{tabular}{rl}
+    \textcolor{white!60}{Projet :}       & \textbf{TraEnSys — Module Fleet Management} \\[0.3cm]
+    \textcolor{white!60}{Technologie :}  & \textbf{Spring Boot 3.2 · WebFlux · R2DBC · PostgreSQL} \\[0.3cm]
+    \textcolor{white!60}{Architecture :} & \textbf{Hexagonale Réactive (Ports \& Adapters)} \\[0.3cm]
+    \textcolor{white!60}{Version :}      & \textbf{0.0.1-SNAPSHOT} \\[0.3cm]
+    \textcolor{white!60}{Date :}         & \textbf{Mai 2026} \\[0.3cm]
+    \textcolor{white!60}{Niveau :}       & \textbf{5\textsuperscript{eme} annee Genie Informatique} \\
+  \end{tabular}
+
+  \vfill
+
+  {\small\textcolor{white!50}{Ecole Polytechnique --- Departement Informatique}}\\
+  {\small\textcolor{white!50}{Rapport de Projet de Fin d'Etudes}}
+
+\end{titlepage}
+\nopagecolor
+
+% ─────────────────────────────────────────────────────────────────────────────
+% PAGE DE RÉSUMÉ
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter*{Résumé Exécutif}
+\addcontentsline{toc}{chapter}{Résumé Exécutif}
+\thispagestyle{fancy}
+
+Ce rapport présente une analyse détaillée de l'architecture et de l'évolution du backend de la plateforme \textbf{FleetMan}, un système de gestion de flotte de véhicules développé dans le cadre d'un projet de fin d'études de 5\textsuperscript{ème} année Génie Informatique.
+
+Le document est structuré en deux grandes parties :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Partie I — L'Existant :} Description exhaustive de l'architecture hexagonale réactive mise en place initialement, couvrant les modules d'authentification, de gestion des véhicules, des conducteurs, des flottes, du géorepérage et des trajets. Cette partie détaille les choix technologiques (Spring Boot 3.2, WebFlux, R2DBC, PostgreSQL, Redis, Kafka), les modèles de domaine, les ports et adapters, ainsi que la configuration de sécurité JWT.
+
+  \item \textbf{Partie II — Les Apports :} Description précise du module \textit{Opérations Terrain} intégré au projet existant, comprenant trois nouveaux agrégats métier (Maintenance, Incident, Recharge Carburant), leurs modèles de domaine purs, leurs use cases réactifs, leurs adapters de persistance R2DBC, leurs migrations Liquibase et leurs controllers REST documentés Swagger.
+\end{itemize}
+
+L'ensemble du système respecte scrupuleusement les principes de l'architecture hexagonale (Ports \& Adapters), du Domain-Driven Design (DDD) et de la programmation réactive (Project Reactor), garantissant une séparation stricte des responsabilités et une testabilité maximale.
+
+\vspace{1cm}
+\begin{successbox}[title={Résultat Global}]
+Le backend FleetMan expose \textbf{plus de 80 endpoints REST} documentés via Swagger/OpenAPI, gère \textbf{14 modules fonctionnels} distincts, et s'appuie sur \textbf{10 migrations Liquibase} pour une base de données PostgreSQL structurée en schéma \texttt{fleet}.
+\end{successbox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% TABLE DES MATIÈRES
+% ─────────────────────────────────────────────────────────────────────────────
+\tableofcontents
+\listoftables
+\listoffigures
+
+% ─────────────────────────────────────────────────────────────────────────────
+% INTRODUCTION GÉNÉRALE
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter*{Introduction Générale}
+\addcontentsline{toc}{chapter}{Introduction Générale}
+\thispagestyle{fancy}
+
+\section*{Contexte du Projet}
+
+Dans un contexte économique où la maîtrise des coûts logistiques est devenue un enjeu stratégique majeur pour les entreprises de transport en Afrique centrale, la gestion efficace d'une flotte de véhicules représente un défi opérationnel quotidien. Les entreprises de taxis, de livraison et de transport de marchandises font face à des problématiques récurrentes : manque de visibilité en temps réel sur la position de leurs véhicules, absence de traçabilité des incidents et des maintenances, difficulté à contrôler la consommation de carburant, et impossibilité de définir des zones géographiques d'activité autorisées.
+
+C'est dans ce contexte que le projet \textbf{FleetMan} (anciennement \textit{TraEnSys — Module Fleet Management}) a été conçu : une plateforme B2B permettant aux gestionnaires de flotte de superviser leurs véhicules en temps réel, de gérer leurs conducteurs, et de contrôler le respect des zones géographiques d'activité via le géorepérage.
+
+\section*{Objectifs du Rapport}
+
+Ce rapport d'évolution a pour objectifs de :
+
+\begin{enumerate}[leftmargin=2cm]
+  \item Documenter de manière exhaustive l'architecture technique du backend existant, en explicitant les choix de conception et les patterns architecturaux adoptés.
+  \item Présenter en détail les modules fonctionnels initialement développés, leurs modèles de données, leurs interfaces de programmation et leurs interactions.
+  \item Décrire précisément les apports réalisés dans le cadre de ce projet de fin d'études, notamment l'intégration du module \textit{Opérations Terrain} qui enrichit significativement les capacités de la plateforme.
+  \item Justifier les décisions techniques prises lors de l'intégration, en montrant comment elles s'inscrivent dans la cohérence architecturale du projet.
+\end{enumerate}
+
+\section*{Organisation du Document}
+
+Le présent rapport est organisé en deux parties principales :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Partie I} couvre l'architecture existante du backend FleetMan avant nos contributions. Elle comprend cinq chapitres traitant respectivement des fondements technologiques, de l'architecture hexagonale, des modules métier de base, de la couche infrastructure, et de la configuration système.
+
+  \item \textbf{Partie II} présente les apports réalisés dans le cadre de ce projet. Elle comprend quatre chapitres décrivant l'analyse des besoins, la conception du module Opérations Terrain, son implémentation technique complète, et les résultats obtenus.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% PARTIE I
+% ─────────────────────────────────────────────────────────────────────────────
+\part{L'Architecture Existante du Backend FleetMan}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\chapter{Fondements Technologiques et Choix d'Architecture}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\section{Présentation Générale du Projet}
+
+FleetMan est un service backend réactif développé en Java 21 avec le framework Spring Boot 3.2.6. Il constitue le cœur applicatif d'une plateforme de gestion de flotte de véhicules destinée aux entreprises de transport. Le projet est identifié sous les coordonnées Maven suivantes :
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Attribut} & \textbf{Valeur} \\
+\midrule
+\texttt{groupId}    & \texttt{com.yowyob} \\
+\texttt{artifactId} & \texttt{reactive-hexagonal} \\
+\texttt{version}    & \texttt{0.0.1-SNAPSHOT} \\
+\texttt{Java}       & \texttt{21 (LTS)} \\
+\texttt{Spring Boot} & \texttt{3.2.6} \\
+\texttt{Spring Cloud} & \texttt{2023.0.0} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Stack Technologique}
+
+\subsection{Technologies Principales}
+
+Le tableau suivant récapitule l'ensemble des technologies utilisées dans le projet :
+
+\begin{longtable}{p{4cm}p{3.5cm}p{6cm}}
+\toprule
+\textbf{Technologie} & \textbf{Version} & \textbf{Rôle} \\
+\midrule
+\endhead
+Spring Boot WebFlux & 3.2.6 & Framework web réactif (non-bloquant) \\
+Spring Data R2DBC & 3.2.6 & Accès base de données réactif \\
+Spring Security & 6.x & Sécurité, JWT, RBAC \\
+Spring Kafka & 3.x & Messagerie asynchrone \\
+Reactor Kafka & 1.3.22 & Kafka réactif (Mono/Flux) \\
+PostgreSQL (R2DBC) & r2dbc-postgresql & Driver réactif PostgreSQL \\
+PostgreSQL (JDBC) & runtime & Driver JDBC pour Liquibase \\
+Redis (Réactif) & Spring Data Redis & Cache télémétrie temps réel \\
+Liquibase & 4.x & Migrations de base de données \\
+MapStruct & 1.5.5.Final & Mapping objet-objet généré \\
+Lombok & 1.18.30 & Réduction du code boilerplate \\
+SpringDoc OpenAPI & 2.5.0 & Documentation Swagger/OpenAPI 3 \\
+Resilience4j & Spring Cloud & Circuit Breaker réactif \\
+Micrometer Prometheus & -- & Métriques et monitoring \\
+Spring Actuator & 3.2.6 & Endpoints de santé et métriques \\
+\bottomrule
+\caption{Stack technologique complète du projet FleetMan}
+\end{longtable}
+
+\subsection{Justification des Choix Technologiques}
+
+\subsubsection{Spring WebFlux et la Programmation Réactive}
+
+Le choix de Spring WebFlux plutôt que Spring MVC (bloquant) est fondamental dans ce projet. La gestion de flotte implique des flux de données continus : remontées GPS des véhicules, alertes de géorepérage, notifications en temps réel. Un modèle de programmation réactif basé sur Project Reactor (\texttt{Mono<T>} et \texttt{Flux<T>}) permet de traiter ces flux de manière non-bloquante, avec une utilisation optimale des ressources système (un seul thread peut gérer des milliers de connexions simultanées).
+
+\begin{definitionbox}{Principe Réactif}
+Dans ce projet, \textbf{toutes} les méthodes de service, de port et de repository retournent soit un \texttt{Mono<T>} (0 ou 1 résultat), soit un \texttt{Flux<T>} (0 à N résultats). Aucun appel bloquant n'est autorisé dans la chaîne de traitement principale.
+\end{definitionbox}
+
+\subsubsection{R2DBC vs JPA/Hibernate}
+
+Spring Data R2DBC est utilisé à la place de JPA/Hibernate pour l'accès à la base de données. Ce choix est cohérent avec le paradigme réactif : JPA est fondamentalement bloquant (il utilise JDBC en interne), ce qui serait incompatible avec WebFlux. R2DBC fournit un accès réactif natif à PostgreSQL, permettant des requêtes non-bloquantes.
+
+\subsubsection{Liquibase pour les Migrations}
+
+Liquibase est utilisé pour gérer les migrations de schéma de base de données. Il nécessite une connexion JDBC (bloquante), c'est pourquoi le projet maintient deux configurations de connexion distinctes : R2DBC pour l'application en runtime, et JDBC uniquement pour Liquibase au démarrage.
+
+\subsubsection{Redis pour la Télémétrie}
+
+Redis est utilisé comme cache en mémoire pour stocker les données de télémétrie des véhicules (position GPS, vitesse, niveau de carburant). Ces données sont hautement volatiles et nécessitent des accès en lecture/écriture très rapides. Redis, avec son accès en mémoire, est parfaitement adapté à ce cas d'usage.
+
+\subsubsection{Apache Kafka pour la Messagerie}
+
+Kafka est utilisé pour la communication asynchrone entre modules, notamment pour la publication d'événements de géorepérage et d'opérations terrain. Ce découplage permet à chaque module de fonctionner indépendamment et garantit la résilience du système en cas de défaillance partielle.
+
+% ═════════════════════════════════════════════════════════════════════════════
+\chapter{L'Architecture Hexagonale Réactive}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\section{Présentation du Pattern Hexagonal}
+
+L'architecture hexagonale, également connue sous le nom d'\textit{Architecture Ports \& Adapters} (Alistair Cockburn, 2005), est le pattern architectural central du projet FleetMan. Son principe fondamental est d'isoler le cœur métier (le domaine) de toutes les dépendances techniques (base de données, API externes, frameworks).
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  hexagon/.style={regular polygon, regular polygon sides=6, minimum size=5cm, draw=fleetblue, line width=2pt, fill=fleetblue!5},
+  inner/.style={regular polygon, regular polygon sides=6, minimum size=3cm, draw=fleetdark, line width=1.5pt, fill=fleetdark!10},
+  adapter/.style={rectangle, rounded corners=4pt, minimum width=2.5cm, minimum height=0.8cm, draw=fleetgray, fill=white, font=\small},
+  port/.style={rectangle, rounded corners=2pt, minimum width=1.8cm, minimum height=0.5cm, draw=fleetblue!60, fill=fleetblue!10, font=\tiny}
+]
+  \node[hexagon] (hex) at (0,0) {};
+  \node[inner] (core) at (0,0) {};
+  \node[font=\bfseries\small, text=fleetdark] at (0,0.3) {DOMAINE};
+  \node[font=\tiny, text=fleetgray] at (0,-0.2) {Modèles + Use Cases};
+
+  \node[adapter, fill=fleetblue!15] at (0, 3.5) {REST Controllers};
+  \node[adapter, fill=fleetblue!15] at (3.0, 1.75) {Kafka Consumer};
+  \node[adapter, fill=fleetsuccess!15] at (3.0, -1.75) {R2DBC Adapters};
+  \node[adapter, fill=fleetsuccess!15] at (0, -3.5) {Redis Adapter};
+  \node[adapter, fill=fleetwarning!15] at (-3.0, -1.75) {Kafka Producer};
+  \node[adapter, fill=fleetwarning!15] at (-3.0, 1.75) {HTTP Clients};
+
+  \node[font=\tiny\itshape, text=fleetblue] at (0, 2.5) {Ports Entrants};
+  \node[font=\tiny\itshape, text=fleetsuccess] at (2.2, -2.5) {Ports Sortants};
+\end{tikzpicture}
+\caption{Architecture hexagonale du projet FleetMan}
+\end{figure}
+
+\section{Structure des Packages}
+
+Le projet est organisé selon trois couches principales, reflétant directement l'architecture hexagonale :
+
+\begin{lstlisting}[style=yamlStyle, caption={Structure des packages Java}]
+com.yowyob.fleet/
+  FleetManagementApplication.java     # Point d'entrée Spring Boot
+
+  domain/                             # COUCHE DOMAINE (pur Java)
+    model/                            # Entités et Value Objects
+    ports/
+      in/                             # Use Cases (ports entrants)
+      out/                            # Ports sortants (persistance, events)
+    exception/                        # Exceptions métier typées
+
+  application/                        # COUCHE APPLICATION
+    service/                          # Implémentations des Use Cases
+
+  infrastructure/                     # COUCHE INFRASTRUCTURE
+    adapters/
+      inbound/
+        rest/                         # Controllers WebFlux
+          dto/                        # DTOs de requête/réponse
+        messaging/                    # Consommateurs Kafka
+      outbound/
+        persistence/                  # Adapters R2DBC
+          entity/                     # Entités R2DBC
+          repository/                 # Repositories Spring Data
+        external/                     # Clients HTTP externes
+          client/                     # WebClient wrappers
+          dto/                        # DTOs externes
+        messaging/                    # Producteurs Kafka
+    config/                           # Configurations Spring
+      security/                       # JWT, CORS
+      bootstrap/                      # Initialisation données
+    mappers/                          # MapStruct mappers
+\end{lstlisting}
+
+\section{La Règle de Dépendance}
+
+La règle fondamentale de l'architecture hexagonale est que \textbf{les dépendances ne pointent que vers l'intérieur}. Concrètement dans ce projet :
+
+\begin{itemize}[leftmargin=2cm]
+  \item Le package \texttt{domain} ne contient \textbf{aucune} annotation Spring (\texttt{@Service}, \texttt{@Repository}), JPA (\texttt{@Entity}, \texttt{@Column}), ou Jackson (\texttt{@JsonProperty}).
+  \item Les classes du domaine sont du \textbf{Java pur} : records immuables, classes avec méthodes métier, interfaces.
+  \item Les services applicatifs (\texttt{application/service}) dépendent uniquement des ports définis dans \texttt{domain/ports}.
+  \item Les adapters d'infrastructure (\texttt{infrastructure/adapters}) implémentent les ports et dépendent des frameworks techniques.
+\end{itemize}
+
+\section{Les Ports : Contrats du Domaine}
+
+\subsection{Ports Entrants (Use Cases)}
+
+Les ports entrants définissent ce que le domaine \textit{offre} au monde extérieur. Chaque port est une interface Java dont les méthodes retournent des types réactifs :
+
+\begin{longtable}{p{5.5cm}p{7.5cm}}
+\toprule
+\textbf{Interface (Port Entrant)} & \textbf{Responsabilité} \\
+\midrule
+\endhead
+\texttt{AuthUseCase} & Authentification, inscription, rafraîchissement de token \\
+\texttt{ManageVehicleUseCase} & CRUD véhicules, paramètres, télémétrie \\
+\texttt{ManageDriverUseCase} & CRUD conducteurs, assignation véhicule \\
+\texttt{ManageFleetUseCase} & CRUD flottes, assignation véhicules \\
+\texttt{ManageFleetManagerUseCase} & Gestion des gestionnaires de flotte \\
+\texttt{ManageTripUseCase} & Démarrage/fin de trajet, télémétrie GPS \\
+\texttt{ManageGeofenceUseCase} & Zones géographiques, alertes \\
+\texttt{ManageIncidentUseCase} & Incidents terrain, cycle de vie \\
+\texttt{ManageMaintenanceUseCase} & Maintenances véhicules \\
+\texttt{ManageFuelRechargeUseCase} & Recharges carburant \\
+\texttt{ManageAdminUseCase} & Administration des comptes \\
+\texttt{ManageSuperAdminUseCase} & Super-administration \\
+\texttt{AdminStatsUseCase} & Statistiques globales \\
+\bottomrule
+\caption{Ports entrants (Use Cases) du projet FleetMan}
+\end{longtable}
+
+\subsection{Ports Sortants}
+
+Les ports sortants définissent ce que le domaine \textit{requiert} de l'infrastructure :
+
+\begin{longtable}{p{5.5cm}p{7.5cm}}
+\toprule
+\textbf{Interface (Port Sortant)} & \textbf{Responsabilité} \\
+\midrule
+\endhead
+\texttt{AuthPort} & Délégation de l'authentification au service Auth externe \\
+\texttt{VehiclePersistencePort} & Persistance des véhicules \\
+\texttt{DriverPersistencePort} & Persistance des conducteurs \\
+\texttt{FleetRepositoryPort} & Persistance des flottes \\
+\texttt{FleetManagerPersistencePort} & Persistance des gestionnaires \\
+\texttt{MaintenancePersistencePort} & Persistance des maintenances \\
+\texttt{IncidentPersistencePort} & Persistance des incidents \\
+\texttt{FuelRechargePersistencePort} & Persistance des recharges carburant \\
+\texttt{GeofencePersistencePort} & Persistance des zones géographiques \\
+\texttt{IncidentPersistencePort} & Persistance des incidents \\
+\texttt{ExternalGeofencePort} & Communication avec le service géorepérage \\
+\texttt{ExternalVehiclePort} & Communication avec le service véhicule externe \\
+\texttt{ExternalPaymentPort} & Communication avec le service paiement \\
+\texttt{OperationEventPort} & Publication d'événements opérationnels (Kafka) \\
+\texttt{SendNotificationPort} & Envoi de notifications \\
+\texttt{StatisticsPort} & Calcul de statistiques \\
+\texttt{DistanceCalculatorPort} & Calcul de distances GPS \\
+\texttt{NotificationHistoryRepositoryPort} & Historique des notifications \\
+\texttt{NotificationSettingsRepositoryPort} & Paramètres de notification \\
+\bottomrule
+\caption{Ports sortants du projet FleetMan}
+\end{longtable}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\chapter{Les Modules Métier Existants}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\section{Les Acteurs du Système}
+
+Le système FleetMan distingue trois types d'acteurs, chacun disposant de rôles et de permissions spécifiques :
+
+\begin{longtable}{p{3.5cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Acteur} & \textbf{Rôle Spring} & \textbf{Responsabilités} \\
+\midrule
+\endhead
+Super Administrateur & \texttt{SUPER\_ADMIN} & Gestion globale de la plateforme, création des administrateurs \\
+Administrateur & \texttt{FLEET\_ADMIN} & Gestion des gestionnaires de flotte, supervision \\
+Gestionnaire de Flotte & \texttt{FLEET\_MANAGER} & Gestion de sa flotte, véhicules, conducteurs, zones \\
+Conducteur & \texttt{FLEET\_DRIVER} & Démarrage/fin de trajet, déclaration d'incidents \\
+\bottomrule
+\caption{Acteurs et rôles du système FleetMan}
+\end{longtable}
+
+\section{Module d'Authentification}
+
+\subsection{Architecture du Module Auth}
+
+L'authentification dans FleetMan est déléguée à un service externe centralisé (service Auth de l'écosystème TraEnSys). Le module local ne gère pas les mots de passe : il délègue toutes les opérations d'authentification via le port \texttt{AuthPort}.
+
+\begin{lstlisting}[style=javaStyle, caption={Interface AuthUseCase — Port entrant d'authentification}]
+public interface AuthUseCase {
+    Mono<AuthPort.AuthResponse> login(String identifier, String password);
+    Mono<AuthPort.AuthResponse> refreshToken(String refreshToken);
+    Mono<AuthPort.AuthResponse> register(RegisterCommand command);
+
+    record RegisterCommand(
+        String username, String password, String email,
+        String phone, String firstName, String lastName,
+        List<String> roles, FileContent photo
+    ) {}
+
+    record FileContent(String filename, String contentType, byte[] data) {}
+}
+\end{lstlisting}
+
+\subsection{Sécurité JWT Réactive}
+
+La sécurité est implémentée via deux composants clés dans \texttt{infrastructure/config/security/} :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{\texttt{BearerTokenServerAuthenticationConverter}} : Extrait le token JWT de l'en-tête \texttt{Authorization: Bearer <token>} de chaque requête HTTP entrante.
+  \item \textbf{\texttt{JwtAuthenticationManager}} : Valide le token JWT en interrogeant le service Auth externe. En cas de succès, construit un objet \texttt{Authentication} contenant les informations de l'utilisateur (\texttt{UserDetail} avec \texttt{id}, \texttt{username}, \texttt{roles}).
+\end{itemize}
+
+\subsection{Configuration de Sécurité}
+
+La classe \texttt{SecurityConfig} configure la chaîne de filtres WebFlux Security :
+
+\begin{lstlisting}[style=javaStyle, caption={Configuration de sécurité WebFlux}]
+@Configuration
+@EnableWebFluxSecurity
+@EnableReactiveMethodSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
+        return http
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .csrf(ServerHttpSecurity.CsrfSpec::disable)
+            .authorizeExchange(exchanges -> exchanges
+                .pathMatchers("/v3/api-docs/**", "/swagger-ui/**",
+                              "/actuator/**", "/api/v1/auth/**").permitAll()
+                .pathMatchers(HttpMethod.OPTIONS).permitAll()
+                .anyExchange().authenticated()
+            )
+            .addFilterAt(jwtFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+            .build();
+    }
+}
+\end{lstlisting}
+
+Les routes publiques incluent la documentation Swagger, les endpoints Actuator et les routes d'authentification. Toutes les autres routes nécessitent un token JWT valide. Le contrôle d'accès fin est assuré par \texttt{@PreAuthorize} sur chaque méthode de controller.
+
+\subsection{CORS}
+
+La configuration CORS autorise toutes les origines (\texttt{allowedOriginPatterns: "*"}) avec toutes les méthodes HTTP et tous les en-têtes, ce qui est adapté à un environnement de développement multi-plateforme (web, mobile Android).
+
+\section{Module de Gestion des Véhicules}
+
+\subsection{Modèle de Domaine}
+
+Le véhicule est modélisé comme un \textbf{record Java immuable} dans le domaine :
+
+\begin{lstlisting}[style=javaStyle, caption={Modèle de domaine Vehicle}]
+public record Vehicle(
+    UUID id,
+    UUID fleetId,           // Flotte d'appartenance (optionnelle)
+    UUID managerId,         // Gestionnaire propriétaire (obligatoire)
+    UUID currentDriverId,   // Conducteur actuellement assigné
+    UUID vehicleTypeId,     // Type de véhicule (référentiel)
+    String licensePlate,    // Plaque d'immatriculation (unique)
+    String vehicleSerialNumber,
+    String brand, String model,
+    Integer manufacturingYear,
+    String transmissionType, String fuelType,
+    Double tankCapacity,
+    Integer totalSeatNumber,
+    Double averageFuelConsumption,
+    String color, String status,
+    String photoUrl, String serialNumberPhotoUrl,
+    String registrationPhotoUrl,
+    List<String> illustrationImages,
+    VehicleParameters.Financial financialParameters,
+    VehicleParameters.Maintenance maintenanceParameters,
+    VehicleParameters.Operational operationalParameters,
+    String geofenceRemoteId
+) {}
+\end{lstlisting}
+
+\subsection{Paramètres du Véhicule}
+
+Le véhicule est enrichi de trois groupes de paramètres, modélisés comme des records imbriqués dans \texttt{VehicleParameters} :
+
+\begin{longtable}{p{3.5cm}p{9cm}}
+\toprule
+\textbf{Groupe} & \textbf{Champs} \\
+\midrule
+\endhead
+\textbf{Financial} & \texttt{insuranceNumber}, \texttt{insuranceExpiredAt}, \texttt{registeredAt}, \texttt{purchasedAt}, \texttt{depreciationRate}, \texttt{costPerKm} \\
+\textbf{Maintenance} & \texttt{lastMaintenanceAt}, \texttt{nextMaintenanceDue}, \texttt{engineStatus} (OK/NEEDS\_SERVICE/OUT\_OF\_SERVICE), \texttt{batteryHealth}, \texttt{maintenanceStatus} (UP\_TO\_DATE/PENDING/OVERDUE) \\
+\textbf{Operational} & \texttt{status}, \texttt{currentSpeed}, \texttt{fuelLevel}, \texttt{mileage}, \texttt{odometerReading}, \texttt{bearing}, \texttt{timestamp} \\
+\bottomrule
+\caption{Groupes de paramètres du véhicule}
+\end{longtable}
+
+\subsection{Référentiels Véhicule}
+
+Le module véhicule gère également un ensemble de référentiels (données de base) stockés localement :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Types de véhicule} (\texttt{vehicle\_types}) : BUS, CAR, TRUCK, MOTORCYCLE, etc.
+  \item \textbf{Fabricants} (\texttt{manufacturers}) : constructeurs industriels
+  \item \textbf{Marques} (\texttt{brands}) : marques commerciales
+  \item \textbf{Modèles} (\texttt{models}) : modèles de véhicules
+  \item \textbf{Tailles} (\texttt{sizes}) : gabarits
+  \item \textbf{Types d'usage} (\texttt{usages}) : Taxi, VIP, Livraison, etc.
+  \item \textbf{Types de carburant} (\texttt{fuel\_types}) : Essence, Diesel, Électrique, etc.
+  \item \textbf{Types de transmission} (\texttt{transmissions}) : Manuelle, Automatique, etc.
+  \item \textbf{Couleurs} (\texttt{colors}) : catalogue des couleurs autorisées
+\end{itemize}
+
+\subsection{Endpoints REST du Module Véhicule}
+
+\begin{longtable}{p{1.5cm}p{6cm}p{2.5cm}p{2.5cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle requis} & \textbf{Description} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/vehicles} & MANAGER & Créer un véhicule \\
+GET & \texttt{/api/v1/vehicles} & MANAGER & Lister mes véhicules \\
+GET & \texttt{/api/v1/vehicles/\{id\}} & MANAGER/ADMIN & Détails complets \\
+PATCH & \texttt{/api/v1/vehicles/\{id\}} & MANAGER & Mise à jour partielle \\
+PUT & \texttt{/api/v1/vehicles/\{id\}/financial-parameters} & MANAGER & Paramètres financiers \\
+PUT & \texttt{/api/v1/vehicles/\{id\}/maintenance-parameters} & MANAGER & Paramètres maintenance \\
+GET & \texttt{/api/v1/vehicles/\{id\}/operational} & DRIVER/MANAGER & Télémétrie temps réel \\
+PATCH & \texttt{/api/v1/vehicles/\{id\}/operational} & DRIVER & Mise à jour terrain \\
+DELETE & \texttt{/api/v1/vehicles/\{id\}} & MANAGER & Supprimer un véhicule \\
+GET & \texttt{/api/v1/vehicles/lookup/\{resource\}} & PUBLIC & Référentiels \\
+GET & \texttt{/api/v1/vehicles/resources/all} & PUBLIC & Catalogue complet \\
+\bottomrule
+\caption{Endpoints REST du module Véhicule}
+\end{longtable}
+
+\section{Module de Gestion des Conducteurs}
+
+\subsection{Modèle de Domaine}
+
+Le conducteur est modélisé comme un record Java immuable :
+
+\begin{lstlisting}[style=javaStyle, caption={Modèle de domaine Driver}]
+public record Driver(
+    UUID userId,            // ID partagé avec le service Auth
+    UUID fleetId,           // Flotte d'appartenance
+    String licenceNumber,   // Numéro de permis (unique)
+    String status,          // ACTIVE / INACTIVE
+    UUID assignedVehicleId, // Véhicule actuellement assigné
+    String photoUrl         // URL de la photo de profil
+) {}
+\end{lstlisting}
+
+\subsection{Fonctionnalités du Module Conducteur}
+
+Le module conducteur gère les opérations suivantes :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Enregistrement} : Création du compte Auth + profil local + photo de profil (upload multipart)
+  \item \textbf{Listing} : Filtrage par flotte et par état d'assignation
+  \item \textbf{Recherche} : Par email ou username
+  \item \textbf{Assignation} : Association d'un conducteur à un véhicule
+  \item \textbf{Désassignation} : Libération du conducteur de son véhicule
+\end{itemize}
+
+\subsection{Endpoints REST du Module Conducteur}
+
+\begin{longtable}{p{1.5cm}p{7cm}p{2.5cm}p{2cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle requis} & \textbf{Description} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/fleets/\{fleetId\}/drivers/register} & MANAGER & Créer un conducteur \\
+GET & \texttt{/api/v1/drivers} & Authentifié & Lister les conducteurs \\
+GET & \texttt{/api/v1/drivers/search} & Authentifié & Rechercher par identifiant \\
+POST & \texttt{/api/v1/drivers/\{userId\}/assign-vehicle} & MANAGER & Assigner un véhicule \\
+POST & \texttt{/api/v1/drivers/\{userId\}/unassign-vehicle} & MANAGER & Désassigner \\
+\bottomrule
+\caption{Endpoints REST du module Conducteur}
+\end{longtable}
+
+\section{Module de Gestion des Flottes}
+
+\subsection{Modèle de Domaine}
+
+\begin{lstlisting}[style=javaStyle, caption={Modèle de domaine Fleet}]
+public record Fleet(
+    UUID id,
+    UUID managerId,      // Gestionnaire propriétaire
+    String name,         // Nom de la flotte
+    String phoneNumber,  // Numéro de contact
+    Instant createdAt,   // Date de création
+    Integer vehicleCount // Nombre de véhicules (calculé)
+) {}
+\end{lstlisting}
+
+\subsection{Fonctionnalités du Module Flotte}
+
+Le module flotte permet au gestionnaire de :
+\begin{itemize}[leftmargin=2cm]
+  \item Créer et gérer plusieurs flottes (une entreprise peut avoir plusieurs flottes distinctes)
+  \item Assigner des véhicules à une flotte
+  \item Consulter les statistiques par flotte
+  \item Gérer les zones de géorepérage associées à une flotte
+\end{itemize}
+
+\section{Module de Gestion des Trajets}
+
+\subsection{Modèle de Domaine}
+
+\begin{lstlisting}[style=javaStyle, caption={Modèle de domaine Trip}]
+public record Trip(
+    UUID id,
+    UUID vehicleId,
+    UUID driverId,
+    String status,          // SCHEDULED, ONGOING, COMPLETED, CANCELLED
+    LocalDate startDate,
+    LocalTime startTime,
+    LocalDate endDate,
+    LocalTime endTime,
+    Double distanceKm,
+    Integer durationMinutes
+) {}
+\end{lstlisting}
+
+\subsection{Cycle de Vie d'un Trajet}
+
+Un trajet suit un cycle de vie précis :
+
+\begin{center}
+\begin{tikzpicture}[
+  state/.style={rectangle, rounded corners=8pt, minimum width=2.5cm, minimum height=0.8cm,
+                draw=fleetblue, fill=fleetblue!10, font=\small\bfseries},
+  arrow/.style={->, >=Stealth, thick, color=fleetdark}
+]
+  \node[state] (s) at (0,0) {SCHEDULED};
+  \node[state] (o) at (4,0) {ONGOING};
+  \node[state] (c) at (8,0) {COMPLETED};
+  \node[state, draw=fleeterror, fill=fleeterror!10] (x) at (4,-2) {CANCELLED};
+
+  \draw[arrow] (s) -- node[above, font=\tiny] {startTrip()} (o);
+  \draw[arrow] (o) -- node[above, font=\tiny] {endTrip()} (c);
+  \draw[arrow] (s) -- node[left, font=\tiny] {cancel()} (x);
+  \draw[arrow] (o) -- node[right, font=\tiny] {cancel()} (x);
+\end{tikzpicture}
+\end{center}
+
+\subsection{Télémétrie GPS}
+
+Pendant un trajet en cours (\texttt{ONGOING}), le conducteur envoie régulièrement des données de télémétrie via l'endpoint \texttt{POST /api/v1/trips/\{id\}/telemetry}. Ces données (latitude, longitude, vitesse) sont stockées dans Redis pour un accès temps réel, et déclenchent la vérification des règles de géorepérage.
+
+\subsection{Endpoints REST du Module Trajet}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.5cm}p{3cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle requis} & \textbf{Description} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/trips/start} & DRIVER & Démarrer un trajet \\
+POST & \texttt{/api/v1/trips/\{id\}/telemetry} & DRIVER & Envoyer position GPS \\
+POST & \texttt{/api/v1/trips/\{id\}/end} & DRIVER & Terminer un trajet \\
+GET & \texttt{/api/v1/trips/my-active} & DRIVER & Mon trajet en cours \\
+GET & \texttt{/api/v1/trips/\{id\}} & MANAGER & Détails d'un trajet \\
+GET & \texttt{/api/v1/trips} & MANAGER & Lister les trajets \\
+\bottomrule
+\caption{Endpoints REST du module Trajet}
+\end{longtable}
+
+\section{Module de Géorepérage (Geofencing)}
+
+\subsection{Présentation}
+
+Le géorepérage est l'une des fonctionnalités clés de FleetMan. Il permet aux gestionnaires de définir des zones géographiques (polygones ou cercles) et de recevoir des alertes lorsqu'un véhicule entre ou sort de ces zones.
+
+\subsection{Architecture du Module Geofence}
+
+Le module géorepérage est hybride : il stocke les métadonnées localement (en base PostgreSQL) mais délègue le moteur spatial à un service externe (\texttt{geofence-service} de l'écosystème TraEnSys). Cette délégation est réalisée via le port sortant \texttt{ExternalGeofencePort}.
+
+\subsection{Modèles de Domaine}
+
+\begin{lstlisting}[style=javaStyle, caption={Modèles GeofenceZone et GeofencePoint}]
+public record GeofenceZone(
+    UUID id, UUID fleetId, UUID managerId,
+    String title, String description,
+    String type,                    // POLYGON ou CIRCLE
+    Double centerLatitude, Double centerLongitude,
+    Double radius,                  // Pour les cercles (en mètres)
+    Boolean isTemporalEnabled,
+    LocalTime startTime, LocalTime endTime,
+    String remoteId,                // ID dans le service externe
+    Boolean isConditionalEnabled,
+    // ... autres champs de configuration
+    Boolean isActive,
+    List<GeofencePoint> vertices    // Sommets du polygone
+) {}
+
+public record GeofencePoint(
+    UUID id, Double latitude, Double longitude, Integer vertexOrder
+) {}
+\end{lstlisting}
+
+\subsection{Endpoints REST du Module Geofence}
+
+\begin{longtable}{p{1.5cm}p{6cm}p{2.5cm}p{2.5cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle requis} & \textbf{Description} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/geofence/zones} & MANAGER/ADMIN & Créer une zone \\
+GET & \texttt{/api/v1/geofence/circles} & MANAGER & Zones circulaires \\
+GET & \texttt{/api/v1/geofence/polygons} & MANAGER & Zones polygonales \\
+GET & \texttt{/api/v1/geofence/my-zones} & MANAGER & Mes zones \\
+GET & \texttt{/api/v1/geofence/fleet/\{fleetId\}} & MANAGER & Zones d'une flotte \\
+GET & \texttt{/api/v1/geofence/zones/\{id\}} & Authentifié & Détails d'une zone \\
+PUT & \texttt{/api/v1/geofence/\{type\}/\{id\}} & MANAGER/ADMIN & Modifier une zone \\
+PATCH & \texttt{/api/v1/geofence/\{id\}/assign-fleet/\{fleetId\}} & Authentifié & Assigner à une flotte \\
+DELETE & \texttt{/api/v1/geofence/\{type\}/\{id\}} & MANAGER/ADMIN & Supprimer une zone \\
+GET & \texttt{/api/v1/geofence/alerts} & MANAGER & Mes alertes \\
+GET & \texttt{/api/v1/geofence/alerts/all} & Authentifié & Toutes les alertes \\
+\bottomrule
+\caption{Endpoints REST du module Geofence}
+\end{longtable}
+
+\section{Module de Notifications}
+
+Le module de notifications permet l'envoi d'alertes aux utilisateurs. Il est implémenté via le port sortant \texttt{SendNotificationPort}, avec deux modes configurables :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Mode HTTP} : Délégation au service de notification externe de l'écosystème TraEnSys via \texttt{HttpNotificationAdapter}
+  \item \textbf{Mode local} : Stockage en base de données pour consultation ultérieure
+\end{itemize}
+
+Les templates de notification sont configurés dans \texttt{application.yml} avec des IDs numériques :
+
+\begin{lstlisting}[style=yamlStyle, caption={Configuration des templates de notification}]
+application:
+  notification:
+    templates:
+      new-offer: 1
+      driver-applied: 2
+      driver-selected: 3
+      ride-confirmed: 4
+      ride-cancelled: 5
+      admin-validation: 7
+      maintenance-created: 8
+      incident-reported: 9
+      incident-critical: 10
+\end{lstlisting}
+
+\section{Module d'Administration}
+
+\subsection{Administrateur}
+
+Le module administrateur (\texttt{AdminService}, \texttt{AdminManagerController}) permet :
+\begin{itemize}[leftmargin=2cm]
+  \item La gestion des comptes gestionnaires de flotte (création, suspension, suppression)
+  \item La supervision globale de la plateforme
+  \item L'envoi de notifications système à tous les utilisateurs
+\end{itemize}
+
+\subsection{Super Administrateur}
+
+Le super administrateur (\texttt{SuperAdminService}, \texttt{SuperAdminController}) dispose des droits les plus élevés :
+\begin{itemize}[leftmargin=2cm]
+  \item Gestion des administrateurs
+  \item Accès aux statistiques globales via \texttt{AdminStatsService}
+  \item Initialisation du système (compte créé automatiquement au démarrage via \texttt{SystemUserInitializer})
+\end{itemize}
+
+\subsection{Initialisation Automatique}
+
+La classe \texttt{SystemUserInitializer} crée automatiquement le compte super-administrateur au premier démarrage si celui-ci n'existe pas. Les credentials sont configurables via \texttt{application.yml} :
+
+\begin{lstlisting}[style=yamlStyle, caption={Configuration du super-administrateur initial}]
+application:
+  bootstrap:
+    admin:
+      username: "superadmin123"
+      email: "superadmin123@transens.com"
+      password: "password123"
+      phone: "+23761213141516"
+      firstname: "System"
+      lastname: "Administrator"
+\end{lstlisting}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\chapter{La Couche Infrastructure Existante}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\section{La Base de Données PostgreSQL}
+
+\subsection{Organisation en Schémas}
+
+La base de données est organisée en deux schémas distincts :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Schéma \texttt{public}} : Tables partagées avec d'autres services de l'écosystème (notamment la table \texttt{users} gérée par le service Auth)
+  \item \textbf{Schéma \texttt{fleet}} : Tables propres au service FleetMan
+\end{itemize}
+
+\subsection{Migrations Liquibase}
+
+Les migrations sont gérées par Liquibase via un fichier maître \texttt{db.changelog-master.yaml} qui orchestre l'exécution séquentielle des changesets :
+
+\begin{longtable}{p{4cm}p{9cm}}
+\toprule
+\textbf{Fichier} & \textbf{Contenu} \\
+\midrule
+\endhead
+\texttt{001-init-schemas.sql} & Création des schémas \texttt{public} et \texttt{fleet} \\
+\texttt{002-fleet-tables.sql} & Tables principales : véhicules, conducteurs, flottes, trajets, géorepérage \\
+\texttt{003-create-notification-settings.sql} & Tables de paramètres et historique de notifications \\
+\texttt{004-update\_geofence\_tables.sql} & Enrichissement des tables de géorepérage \\
+\texttt{005-move-users-to-fleet.sql} & Migration des utilisateurs vers le schéma fleet \\
+\texttt{006-add-photo-url-to-users.sql} & Ajout du champ photo\_url aux utilisateurs \\
+\texttt{007-add-geofence-remote-id.sql} & Ajout de l'ID distant pour les zones géographiques \\
+\texttt{008-add-vehicle-resources.sql} & Tables des référentiels véhicule \\
+\texttt{009-add-geofence-details.sql} & Détails supplémentaires des zones géographiques \\
+\texttt{010-operations-tables.sql} & \textbf{[AJOUT]} Tables du module Opérations Terrain \\
+\bottomrule
+\caption{Historique des migrations Liquibase}
+\end{longtable}
+
+\subsection{Schéma de la Base de Données Principale}
+
+Le schéma \texttt{fleet} contient les tables suivantes avant nos ajouts :
+
+\begin{longtable}{p{4.5cm}p{8.5cm}}
+\toprule
+\textbf{Table} & \textbf{Description} \\
+\midrule
+\endhead
+\texttt{fleet.vehicle\_types} & Référentiel des types de véhicules \\
+\texttt{fleet.fleet\_managers} & Profils des gestionnaires de flotte \\
+\texttt{fleet.fleets} & Flottes de véhicules \\
+\texttt{fleet.drivers} & Profils des conducteurs \\
+\texttt{fleet.vehicles} & Véhicules avec leurs caractéristiques \\
+\texttt{fleet.vehicle\_illustration\_images} & Galerie photos des véhicules \\
+\texttt{fleet.operational\_parameters} & Télémétrie temps réel (1-1 avec vehicle) \\
+\texttt{fleet.financial\_parameters} & Paramètres financiers (1-1 avec vehicle) \\
+\texttt{fleet.maintenance\_parameters} & Paramètres de maintenance (1-1 avec vehicle) \\
+\texttt{fleet.trips} & Trajets effectués \\
+\texttt{fleet.geofence\_zones} & Zones géographiques \\
+\texttt{fleet.geofence\_points} & Points GPS des zones \\
+\texttt{fleet.geofence\_point\_zone\_linkages} & Association points-zones \\
+\texttt{fleet.geofence\_events} & Événements d'entrée/sortie de zones \\
+\texttt{fleet.routes} & Routes des trajets \\
+\bottomrule
+\caption{Tables du schéma fleet avant les ajouts}
+\end{longtable}
+
+\section{Les Adapters de Persistance R2DBC}
+
+\subsection{Pattern Adapter de Persistance}
+
+Chaque adapter de persistance suit le même pattern :
+
+\begin{lstlisting}[style=javaStyle, caption={Pattern d'un adapter de persistance R2DBC}]
+@Component
+@RequiredArgsConstructor
+public class VehiclePersistenceAdapter implements VehiclePersistencePort {
+
+    private final VehicleLocalR2dbcRepository vehicleRepo;
+    private final VehicleLocalMapper mapper;
+
+    @Override
+    public Mono<Vehicle> save(Vehicle vehicle) {
+        VehicleLocalEntity entity = mapper.toEntity(vehicle);
+        return vehicleRepo.save(entity)
+                          .map(mapper::toDomain);
+    }
+
+    @Override
+    public Mono<Vehicle> findById(UUID id) {
+        return vehicleRepo.findById(id)
+                          .map(mapper::toDomain)
+                          .switchIfEmpty(Mono.error(
+                              VehicleException.notFound(id)));
+    }
+    // ...
+}
+\end{lstlisting}
+
+\subsection{Repositories Spring Data R2DBC}
+
+Les repositories étendent \texttt{ReactiveCrudRepository<Entity, UUID>} et définissent des requêtes personnalisées via l'annotation \texttt{@Query} :
+
+\begin{lstlisting}[style=javaStyle, caption={Exemple de repository R2DBC avec requêtes personnalisées}]
+public interface VehicleLocalR2dbcRepository
+        extends ReactiveCrudRepository<VehicleLocalEntity, UUID> {
+
+    @Query("SELECT * FROM fleet.vehicles WHERE manager_id = :managerId")
+    Flux<VehicleLocalEntity> findByManagerId(UUID managerId);
+
+    @Query("SELECT * FROM fleet.vehicles WHERE fleet_id = :fleetId")
+    Flux<VehicleLocalEntity> findByFleetId(UUID fleetId);
+
+    @Query("SELECT * FROM fleet.vehicles WHERE license_plate = :plate")
+    Mono<VehicleLocalEntity> findByLicensePlate(String plate);
+}
+\end{lstlisting}
+
+\section{Les Adapters Externes (HTTP Clients)}
+
+\subsection{Architecture des Clients HTTP}
+
+Le projet communique avec plusieurs services externes via des clients HTTP basés sur \texttt{WebClient} (non-bloquant) :
+
+\begin{longtable}{p{4.5cm}p{3.5cm}p{5cm}}
+\toprule
+\textbf{Client} & \textbf{Service Cible} & \textbf{Rôle} \\
+\midrule
+\endhead
+\texttt{AuthApiClient} & Service Auth & Authentification, gestion des comptes \\
+\texttt{VehicleApiClient} & Service Véhicule & Enregistrement distant des véhicules \\
+\texttt{GeofenceApiClient} & Service Geofence & Gestion des zones géographiques \\
+\texttt{GeofenceAuthClient} & Service Auth & Authentification pour le geofence \\
+\texttt{NotificationApiClient} & Service Notification & Envoi de notifications push \\
+\bottomrule
+\caption{Clients HTTP externes du projet}
+\end{longtable}
+
+\subsection{Adapters Externes}
+
+Chaque client HTTP est encapsulé dans un adapter qui implémente le port sortant correspondant :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \texttt{RemoteAuthAdapter} : Implémente \texttt{AuthPort} via \texttt{AuthApiClient}
+  \item \texttt{FakeAuthAdapter} : Implémentation de test (mode local sans service Auth)
+  \item \texttt{VehicleApiAdapter} : Implémente \texttt{ExternalVehiclePort}
+  \item \texttt{GeofenceApiAdapter} : Implémente \texttt{ExternalGeofencePort}
+  \item \texttt{PaymentApiAdapter} : Implémente \texttt{ExternalPaymentPort}
+  \item \texttt{FakeDistanceAdapter} : Implémentation de test pour le calcul de distances
+\end{itemize}
+
+\section{Les Adapters Kafka}
+
+\subsection{Configuration Kafka}
+
+Kafka est configuré dans \texttt{KafkaConfig} avec deux topics principaux :
+
+\begin{lstlisting}[style=yamlStyle, caption={Configuration Kafka dans application.yml}]
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: fleet-management-group
+      auto-offset-reset: earliest
+    producer:
+      key-serializer: StringSerializer
+      value-serializer: JsonSerializer
+
+application:
+  kafka:
+    topics:
+      geofence-alerts: geofence-alerts-topic
+      operation-events: operation-events-topic
+\end{lstlisting}
+
+\subsection{Producteurs et Consommateurs}
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{\texttt{KafkaOperationEventAdapter}} : Producteur — publie les événements de maintenance et d'incident sur le topic \texttt{operation-events-topic}
+  \item \textbf{\texttt{GeofenceAlertEventPublisherAdapter}} : Producteur — publie les alertes de géorepérage sur \texttt{geofence-alerts-topic}
+  \item \textbf{\texttt{OperationEventConsumer}} : Consommateur — traite les événements opérationnels reçus
+\end{itemize}
+
+\section{Les Mappers MapStruct}
+
+MapStruct est utilisé pour la conversion entre les entités R2DBC (couche infrastructure) et les modèles de domaine (couche domaine). Quatre mappers sont définis :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \texttt{VehicleLocalMapper} : \texttt{VehicleLocalEntity} $\leftrightarrow$ \texttt{Vehicle}
+  \item \texttt{DriverMapper} : \texttt{DriverEntity} $\leftrightarrow$ \texttt{Driver}
+  \item \texttt{FleetMapper} : \texttt{FleetEntity} $\leftrightarrow$ \texttt{Fleet}
+  \item \texttt{GeofenceMapper} : \texttt{GeofenceZoneEntity} $\leftrightarrow$ \texttt{GeofenceZone}
+\end{itemize}
+
+\section{Configuration du Monitoring}
+
+\subsection{Spring Actuator}
+
+Les endpoints Actuator exposés sont : \texttt{health}, \texttt{info}, \texttt{prometheus}. L'endpoint \texttt{health} expose les détails complets et les probes Kubernetes (liveness/readiness).
+
+\subsection{Métriques Prometheus}
+
+Micrometer avec le registre Prometheus est configuré pour exporter les métriques de l'application. Ces métriques peuvent être collectées par un serveur Prometheus et visualisées dans Grafana.
+
+\subsection{Circuit Breaker Resilience4j}
+
+Resilience4j est intégré via Spring Cloud Circuit Breaker pour protéger les appels aux services externes. En cas de défaillance répétée d'un service externe, le circuit s'ouvre et les appels sont court-circuités, évitant la propagation des erreurs.
+
+% ═════════════════════════════════════════════════════════════════════════════
+\chapter{Configuration Système et Déploiement}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\section{Configuration de l'Application}
+
+\subsection{Profils Spring}
+
+Le projet utilise deux profils Spring :
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Profil \texttt{local}} : Configuration pour le développement local avec Docker Compose
+  \item \textbf{Profil \texttt{prod}} : Configuration pour l'environnement de production (fichier \texttt{prod.application.yml})
+\end{itemize}
+
+\subsection{Configuration des Services Externes}
+
+\begin{lstlisting}[style=yamlStyle, caption={Configuration des services externes}]
+application:
+  external:
+    vehicle-service-url:  https://traefikdev.yowyob.com/vehicule
+    geofence-service-url: https://traefikdev.yowyob.com/geofence-service
+    payment-service-url:  https://traefikdev.yowyob.com/payment
+  auth:
+    mode: remote
+    url: https://traefikdev.yowyob.com/auth
+  notification:
+    mode: http
+    url: https://traefikdev.yowyob.com/notification
+\end{lstlisting}
+
+\section{Containerisation Docker}
+
+\subsection{Dockerfile}
+
+Le projet est containerisé via un Dockerfile multi-stage optimisé pour la production. L'image finale est basée sur une JRE 21 allégée.
+
+\subsection{Docker Compose}
+
+Le fichier \texttt{docker-compose.yml} orchestre les services nécessaires au développement local :
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{PostgreSQL} : Base de données principale (port 5433)
+  \item \textbf{Redis} : Cache télémétrie (port 6380)
+  \item \textbf{Apache Kafka} : Messagerie asynchrone (port 9092)
+  \item \textbf{Zookeeper} : Coordination Kafka
+\end{itemize}
+
+\section{CI/CD}
+
+Un pipeline GitHub Actions est configuré dans \texttt{.github/workflows/ci-cd.yml} pour automatiser la compilation, les tests et le déploiement.
+
+\section{Documentation API}
+
+La documentation de l'API est générée automatiquement par SpringDoc OpenAPI 2.5.0 et accessible via :
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Swagger UI} : \texttt{http://localhost:8080/swagger-ui.html}
+  \item \textbf{OpenAPI JSON} : \texttt{http://localhost:8080/v3/api-docs}
+\end{itemize}
+
+Les tags Swagger sont organisés par module fonctionnel, numérotés de 01 à 14 pour faciliter la navigation.
+
+% ─────────────────────────────────────────────────────────────────────────────
+% PARTIE II
+% ─────────────────────────────────────────────────────────────────────────────
+\part{Les Apports : Module Opérations Terrain}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\chapter{Analyse des Besoins et Conception du Module Opérations}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\section{Contexte et Motivation}
+
+Avant nos contributions, le backend FleetMan disposait d'une architecture solide pour la gestion des véhicules, des conducteurs, des trajets et du géorepérage. Cependant, un aspect crucial de la gestion de flotte était absent : la \textbf{traçabilité des opérations terrain}.
+
+Dans la réalité opérationnelle d'une entreprise de transport, trois types d'événements surviennent quotidiennement et nécessitent un suivi rigoureux :
+
+\begin{enumerate}[leftmargin=2cm]
+  \item \textbf{Les maintenances} : Interventions techniques planifiées ou correctives sur les véhicules (vidange, remplacement de pièces, réparations)
+  \item \textbf{Les incidents} : Événements imprévus pouvant affecter la sécurité ou la disponibilité des véhicules (accidents, pannes, vols, infractions)
+  \item \textbf{Les recharges de carburant} : Pleins effectués par les conducteurs, représentant un poste de coût majeur à maîtriser
+\end{enumerate}
+
+L'absence de ces fonctionnalités rendait impossible la construction de tableaux de bord opérationnels complets et la maîtrise des coûts d'exploitation.
+
+\section{Analyse des Besoins Fonctionnels}
+
+\subsection{Besoins liés aux Maintenances}
+
+\begin{itemize}[leftmargin=2cm]
+  \item Enregistrer une intervention technique avec son objet, son coût, son rapport et sa localisation GPS
+  \item Consulter l'historique des maintenances par véhicule, par conducteur ou par période
+  \item Mettre à jour automatiquement les paramètres de maintenance du véhicule après chaque intervention
+  \item Notifier le gestionnaire de flotte lors de la déclaration d'une maintenance
+\end{itemize}
+
+\subsection{Besoins liés aux Incidents}
+
+\begin{itemize}[leftmargin=2cm]
+  \item Déclarer un incident avec son type, sa description, sa sévérité et sa localisation
+  \item Gérer le cycle de vie complet d'un incident : REPORTED → UNDER\_INVESTIGATION → RESOLVED → CLOSED
+  \item Filtrer les incidents par type, sévérité, statut ou période
+  \item Calculer les coûts totaux des incidents par véhicule ou par conducteur (KPIs)
+  \item Déclencher des alertes prioritaires pour les incidents critiques (HIGH ou CRITICAL)
+  \item Enregistrer les informations de témoins et les numéros officiels (PV police, déclaration assurance)
+\end{itemize}
+
+\subsection{Besoins liés aux Recharges Carburant}
+
+\begin{itemize}[leftmargin=2cm]
+  \item Enregistrer un plein avec la quantité, le prix, la station et la localisation GPS
+  \item Calculer automatiquement le coût unitaire (prix par litre)
+  \item Mettre à jour automatiquement le niveau de carburant du véhicule après chaque recharge
+  \item Calculer la consommation totale et les coûts carburant par véhicule (KPIs)
+\end{itemize}
+
+\section{Analyse des Besoins Non-Fonctionnels}
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Cohérence architecturale} : Les nouveaux modules doivent respecter scrupuleusement l'architecture hexagonale réactive existante
+  \item \textbf{Réactivité} : Toutes les opérations doivent être non-bloquantes (Mono/Flux)
+  \item \textbf{Isolation} : Le module Opérations ne doit pas créer de couplage fort avec les autres modules
+  \item \textbf{Sécurité} : Les données opérationnelles sont cloisonnées par gestionnaire (un manager ne voit que ses propres données)
+  \item \textbf{Intégrité} : Les invariants métier doivent être validés dans le domaine, pas dans les services
+\end{itemize}
+
+\section{Identification des Agrégats DDD}
+
+L'analyse des besoins a conduit à identifier trois agrégats distincts dans le bounded context \textit{Opérations Terrain} :
+
+\begin{longtable}{p{3cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Agrégat} & \textbf{Racine} & \textbf{Invariants Métier} \\
+\midrule
+\endhead
+\textbf{Maintenance} & \texttt{Maintenance} & Sujet obligatoire, véhicule obligatoire, coût $\geq$ 0 \\
+\textbf{Incident} & \texttt{Incident} & Type obligatoire, véhicule obligatoire, machine à états \\
+\textbf{FuelRecharge} & \texttt{FuelRecharge} & Quantité $>$ 0, prix $\geq$ 0, véhicule obligatoire \\
+\bottomrule
+\caption{Agrégats DDD du module Opérations Terrain}
+\end{longtable}
+
+\section{Stratégie d'Intégration}
+
+Le module Opérations Terrain a été développé dans le projet \texttt{Fleetman Backend} (architecture Spring MVC classique) puis intégré dans \texttt{fleet-management-back} (architecture hexagonale réactive). Cette intégration a nécessité plusieurs adaptations :
+
+\begin{longtable}{p{5cm}p{8cm}}
+\toprule
+\textbf{Point d'adaptation} & \textbf{Transformation appliquée} \\
+\midrule
+\endhead
+IDs de type \texttt{Long} & Remplacés par \texttt{UUID} (cohérence avec le projet principal) \\
+Paradigme synchrone (\texttt{List}, \texttt{Optional}) & Adapté en réactif (\texttt{Flux}, \texttt{Mono}) \\
+Package \texttt{com.polytechnique} & Migré vers \texttt{com.yowyob.fleet} \\
+Annotations JPA dans le domaine & Supprimées (domaine pur) \\
+Migrations SQL absentes & Créées en changesets Liquibase \\
+\bottomrule
+\caption{Adaptations réalisées lors de l'intégration}
+\end{longtable}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\chapter{Implémentation — Couche Domaine}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\section{Le Value Object \texttt{Coordinates}}
+
+\subsection{Conception}
+
+Le premier apport au domaine est le value object \texttt{Coordinates}, un record Java immuable représentant une position géographique. Ce concept était absent du domaine existant, qui stockait les coordonnées de façon dispersée dans différentes entités.
+
+\begin{lstlisting}[style=javaStyle, caption={Value Object Coordinates — domaine pur}]
+public record Coordinates(double longitude, double latitude) {
+
+    public Coordinates {
+        if (longitude < -180 || longitude > 180) {
+            throw new IllegalArgumentException(
+                "Longitude invalide : " + longitude +
+                ". Doit etre comprise entre -180 et 180.");
+        }
+        if (latitude < -90 || latitude > 90) {
+            throw new IllegalArgumentException(
+                "Latitude invalide : " + latitude +
+                ". Doit etre comprise entre -90 et 90.");
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "POINT(" + longitude + " " + latitude + ")";
+    }
+}
+\end{lstlisting}
+
+\subsection{Caractéristiques Techniques}
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Record Java immuable} : Garantit l'immuabilité des coordonnées une fois créées
+  \item \textbf{Validation dans le bloc compact} : Les bornes géographiques sont vérifiées à la construction, jamais dans un service externe
+  \item \textbf{Format WKT} : La méthode \texttt{toString()} retourne le format \textit{Well-Known Text} compatible PostGIS (\texttt{POINT(lon lat)})
+  \item \textbf{Domaine pur} : Aucune dépendance externe (les librairies \texttt{ugeojson} du dossier \texttt{libs} ne sont pas utilisées dans le domaine)
+\end{itemize}
+
+\section{L'Entité \texttt{Maintenance}}
+
+\subsection{Conception}
+
+L'entité \texttt{Maintenance} représente une intervention technique sur un véhicule. Contrairement aux modèles de domaine existants (records immuables), \texttt{Maintenance} est une classe Java avec état mutable, car elle dispose de méthodes métier qui modifient son état.
+
+\subsection{Invariants Métier}
+
+Les invariants sont validés dans le constructeur :
+
+\begin{lstlisting}[style=javaStyle, caption={Invariants métier de Maintenance}]
+public Maintenance(UUID id, String subject, BigDecimal cost,
+                   LocalDateTime dateTime, String report,
+                   Coordinates location, String locationName,
+                   UUID vehicleId, String vehicleRegistrationNumber,
+                   UUID driverId, String driverFullName) {
+
+    if (subject == null || subject.isBlank()) {
+        throw new IllegalArgumentException(
+            "L'objet de la maintenance est obligatoire.");
+    }
+    if (vehicleId == null) {
+        throw new IllegalArgumentException(
+            "Le vehicule est obligatoire pour une maintenance.");
+    }
+    // ... initialisation des champs
+}
+\end{lstlisting}
+
+\subsection{Méthodes Métier}
+
+\begin{longtable}{p{5cm}p{8cm}}
+\toprule
+\textbf{Méthode} & \textbf{Comportement} \\
+\midrule
+\endhead
+\texttt{addReport(String)} & Ajoute ou met à jour le rapport d'intervention \\
+\texttt{updateCost(BigDecimal)} & Met à jour le coût (validation : coût $\geq$ 0) \\
+\texttt{updateLocation(Coordinates, String)} & Met à jour la localisation GPS et le nom du lieu \\
+\bottomrule
+\caption{Méthodes métier de l'entité Maintenance}
+\end{longtable}
+
+\subsection{Données Dénormalisées}
+
+L'entité stocke des données dénormalisées pour l'affichage (\texttt{vehicleRegistrationNumber}, \texttt{driverFullName}), évitant des jointures supplémentaires. Ce pattern est déjà utilisé dans le projet principal.
+
+\section{L'Entité \texttt{Incident} — Machine à États}
+
+\subsection{Conception}
+
+L'entité \texttt{Incident} est la plus complexe du module. Elle implémente une \textbf{machine à états} complète avec des méthodes métier expressives.
+
+\subsection{Enums du Domaine}
+
+\begin{lstlisting}[style=javaStyle, caption={Enums imbriqués de l'entité Incident}]
+public class Incident {
+
+    public enum Type {
+        ACCIDENT, BREAKDOWN, THEFT,
+        VANDALISM, TRAFFIC_VIOLATION, OTHER
+    }
+
+    public enum Severity {
+        LOW, MEDIUM, HIGH, CRITICAL
+    }
+
+    public enum Status {
+        REPORTED, UNDER_INVESTIGATION, RESOLVED, CLOSED
+    }
+}
+\end{lstlisting}
+
+\subsection{Machine à États}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  state/.style={rectangle, rounded corners=8pt, minimum width=3cm, minimum height=0.9cm,
+                draw=fleetblue, fill=fleetblue!10, font=\small\bfseries, text=fleetdark},
+  closed/.style={rectangle, rounded corners=8pt, minimum width=3cm, minimum height=0.9cm,
+                 draw=fleetgray, fill=fleetgray!15, font=\small\bfseries, text=fleetgray},
+  arrow/.style={->, >=Stealth, thick, color=fleetdark},
+  label/.style={font=\tiny\itshape, color=fleetgray}
+]
+  \node[state] (r) at (0,0) {REPORTED};
+  \node[state] (u) at (4,0) {UNDER\_INV.};
+  \node[state, draw=fleetsuccess, fill=fleetsuccess!10] (res) at (8,0) {RESOLVED};
+  \node[closed] (c) at (4,-2.5) {CLOSED};
+
+  \draw[arrow] (r) -- node[above, label] {updateStatus()} (u);
+  \draw[arrow] (u) -- node[above, label] {resolve(report)} (res);
+  \draw[arrow] (res) -- node[right, label] {close()} (c);
+  \draw[arrow] (r) to[bend right=20] node[below, label] {close()} (c);
+  \draw[arrow] (u) -- node[left, label] {close()} (c);
+\end{tikzpicture}
+\caption{Machine à états de l'entité Incident}
+\end{figure}
+
+\subsection{Méthodes Métier}
+
+\begin{lstlisting}[style=javaStyle, caption={Méthodes métier de la machine à états Incident}]
+public void resolve(String report) {
+    if (this.status == Status.CLOSED) {
+        throw new IllegalStateException(
+            "Un incident cloture ne peut pas etre resolu.");
+    }
+    this.status = Status.RESOLVED;
+    this.report = report;
+    this.resolvedAt = LocalDateTime.now();
+}
+
+public void close() {
+    this.status = Status.CLOSED;
+    if (this.resolvedAt == null) {
+        this.resolvedAt = LocalDateTime.now();
+    }
+}
+
+public boolean isCritical() {
+    return this.severity == Severity.CRITICAL
+        || this.severity == Severity.HIGH;
+}
+
+public boolean isOpen() {
+    return this.status == Status.REPORTED
+        || this.status == Status.UNDER_INVESTIGATION;
+}
+\end{lstlisting}
+
+\section{L'Entité \texttt{FuelRecharge}}
+
+\subsection{Conception}
+
+L'entité \texttt{FuelRecharge} représente un plein de carburant. Ses champs \texttt{quantity} et \texttt{price} sont \texttt{final} (invariants métier), ce qui garantit l'intégrité des données financières.
+
+\subsection{Méthode Métier \texttt{unitCost()}}
+
+\begin{lstlisting}[style=javaStyle, caption={Calcul du coût unitaire}]
+public BigDecimal unitCost() {
+    if (quantity.compareTo(BigDecimal.ZERO) == 0) {
+        return BigDecimal.ZERO;
+    }
+    return price.divide(quantity, 2, RoundingMode.HALF_UP);
+}
+\end{lstlisting}
+
+Cette méthode calcule le coût par litre avec une précision de 2 décimales et une protection contre la division par zéro.
+
+\subsection{Enum \texttt{StationName}}
+
+L'enum \texttt{StationName} liste les stations-service disponibles dans le contexte camerounais : \texttt{TOTAL}, \texttt{SHELL}, \texttt{OILIBYA}, \texttt{CAMRAIL}, \texttt{OTHER}.
+
+\section{L'Exception Métier \texttt{OperationException}}
+
+\subsection{Conception}
+
+\texttt{OperationException} hérite de \texttt{DomainException} (pattern identique aux exceptions existantes \texttt{VehicleException}, \texttt{TripException}, etc.) et définit des codes d'erreur typés :
+
+\begin{longtable}{p{2cm}p{2.5cm}p{8cm}}
+\toprule
+\textbf{Code} & \textbf{HTTP} & \textbf{Description} \\
+\midrule
+\endhead
+OPR\_001 & 404 & Maintenance introuvable \\
+OPR\_002 & 400 & Sujet de maintenance obligatoire \\
+OPR\_003 & 400 & Coût négatif interdit \\
+OPR\_004 & 404 & Incident introuvable \\
+OPR\_005 & 400 & Type d'incident obligatoire \\
+OPR\_006 & 422 & Incident déjà clôturé \\
+OPR\_007 & 422 & Transition de statut invalide \\
+OPR\_008 & 404 & Recharge de carburant introuvable \\
+OPR\_009 & 400 & Quantité de carburant invalide \\
+OPR\_010 & 400 & Prix de recharge invalide \\
+OPR\_011 & 404 & Véhicule introuvable pour l'opération \\
+OPR\_012 & 404 & Chauffeur introuvable pour l'opération \\
+\bottomrule
+\caption{Codes d'erreur de OperationException}
+\end{longtable}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\chapter{Implémentation — Ports et Services Applicatifs}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\section{Les Ports Entrants (Use Cases)}
+
+\subsection{\texttt{ManageMaintenanceUseCase}}
+
+L'interface \texttt{ManageMaintenanceUseCase} définit 9 méthodes réactives couvrant l'ensemble du cycle de vie des maintenances :
+
+\begin{lstlisting}[style=javaStyle, caption={Interface ManageMaintenanceUseCase}]
+public interface ManageMaintenanceUseCase {
+
+    Mono<Maintenance> createMaintenance(CreateMaintenanceCommand cmd);
+    Mono<Maintenance> getById(UUID id);
+    Flux<Maintenance> getAllByManager(UUID managerId);
+    Flux<Maintenance> getByVehicleId(UUID vehicleId);
+    Flux<Maintenance> getByDriverId(UUID driverId);
+    Flux<Maintenance> getByDateRange(LocalDateTime start,
+                                     LocalDateTime end,
+                                     UUID managerId);
+    Mono<Long> countByDriverId(UUID driverId);
+    Mono<Maintenance> update(UpdateMaintenanceCommand cmd);
+    Mono<Void> delete(UUID id);
+
+    record CreateMaintenanceCommand(
+        String subject, BigDecimal cost, String report,
+        Double longitude, Double latitude, String locationName,
+        UUID vehicleId, UUID driverId
+    ) {}
+
+    record UpdateMaintenanceCommand(
+        UUID maintenanceId, String subject, BigDecimal cost,
+        String report, Double longitude, Double latitude,
+        String locationName
+    ) {}
+}
+\end{lstlisting}
+
+\subsection{\texttt{ManageIncidentUseCase}}
+
+L'interface la plus riche du module avec 16 méthodes réactives, incluant des KPIs financiers :
+
+\begin{lstlisting}[style=javaStyle, caption={Méthodes KPI de ManageIncidentUseCase}]
+Flux<Incident> getByType(Incident.Type type, UUID managerId);
+Flux<Incident> getBySeverity(Incident.Severity severity, UUID managerId);
+Flux<Incident> getByStatus(Incident.Status status, UUID managerId);
+Flux<Incident> getOpenIncidents(UUID managerId);
+Mono<Incident> updateStatus(UUID id, Incident.Status status);
+Mono<Long> countByVehicleId(UUID vehicleId);
+Mono<BigDecimal> getTotalCostByVehicleId(UUID vehicleId);
+Mono<BigDecimal> getTotalCostByDriverId(UUID driverId);
+\end{lstlisting}
+
+\subsection{\texttt{ManageFuelRechargeUseCase}}
+
+L'interface \texttt{ManageFuelRechargeUseCase} définit 10 méthodes réactives avec des agrégats de consommation :
+
+\begin{lstlisting}[style=javaStyle, caption={Méthodes KPI de ManageFuelRechargeUseCase}]
+Mono<BigDecimal> getTotalQuantityByVehicleId(UUID vehicleId);
+Mono<BigDecimal> getTotalCostByVehicleId(UUID vehicleId);
+\end{lstlisting}
+
+\section{Les Ports Sortants}
+
+\subsection{\texttt{OperationEventPort} — Port Événementiel}
+
+Ce port découplé permet au domaine de publier des événements sans dépendre de Spring ni de Kafka :
+
+\begin{lstlisting}[style=javaStyle, caption={Port événementiel OperationEventPort}]
+public interface OperationEventPort {
+
+    Mono<Void> publishMaintenanceCreated(MaintenanceCreatedEvent event);
+    Mono<Void> publishIncidentReported(IncidentReportedEvent event);
+
+    record MaintenanceCreatedEvent(
+        UUID maintenanceId, String subject,
+        UUID vehicleId, String vehicleRegistration,
+        UUID driverId, UUID fleetManagerId
+    ) {}
+
+    record IncidentReportedEvent(
+        UUID incidentId, String incidentType, String severity,
+        UUID vehicleId, String vehicleRegistration,
+        UUID driverId, UUID fleetManagerId, boolean isCritical
+    ) {}
+}
+\end{lstlisting}
+
+Le champ \texttt{fleetManagerId} dans chaque événement permet de router les notifications vers le bon gestionnaire.
+
+\section{Les Services Applicatifs}
+
+\subsection{\texttt{MaintenanceService}}
+
+Le service \texttt{MaintenanceService} implémente \texttt{ManageMaintenanceUseCase} et orchestre la logique métier de création d'une maintenance :
+
+\begin{lstlisting}[style=javaStyle, caption={Logique de création d'une maintenance}]
+@Override
+public Mono<Maintenance> createMaintenance(CreateMaintenanceCommand cmd) {
+    return vehiclePersistencePort.findById(cmd.vehicleId())
+        .switchIfEmpty(Mono.error(
+            OperationException.vehicleNotFound(cmd.vehicleId())))
+        .flatMap(vehicle -> {
+            // Verification optionnelle du chauffeur
+            Mono<Driver> driverMono = cmd.driverId() != null
+                ? driverPersistencePort.findById(cmd.driverId())
+                    .switchIfEmpty(Mono.error(
+                        OperationException.driverNotFound(cmd.driverId())))
+                : Mono.empty();
+
+            return driverMono.defaultIfEmpty(null)
+                .flatMap(driver -> {
+                    // Construction avec invariants
+                    Coordinates coords = buildCoordinates(
+                        cmd.longitude(), cmd.latitude());
+                    Maintenance maintenance = new Maintenance(
+                        null, cmd.subject(), cmd.cost(),
+                        LocalDateTime.now(), cmd.report(),
+                        coords, cmd.locationName(),
+                        vehicle.id(), vehicle.licensePlate(),
+                        driver != null ? driver.userId() : null,
+                        driver != null ? /* nom */ null : null
+                    );
+                    return maintenancePersistencePort.save(maintenance)
+                        .flatMap(saved -> syncMaintenanceParams(saved)
+                            .thenReturn(saved))
+                        .doOnSuccess(saved ->
+                            publishMaintenanceEvent(saved, vehicle)
+                                .subscribe());
+                });
+        });
+}
+\end{lstlisting}
+
+\subsection{Synchronisation Inter-Modules}
+
+Après chaque création de maintenance, le service met à jour automatiquement les paramètres de maintenance du véhicule :
+
+\begin{lstlisting}[style=javaStyle, caption={Synchronisation des paramètres de maintenance}]
+private Mono<Void> syncMaintenanceParams(Maintenance saved) {
+    return maintenanceParameterRepo
+        .findByVehicleId(saved.getVehicleId())
+        .flatMap(params -> {
+            params.setLastMaintenanceAt(
+                saved.getDateTime().toLocalDate());
+            params.setMaintenanceStatus("UP_TO_DATE");
+            return maintenanceParameterRepo.save(params);
+        })
+        .then();
+}
+\end{lstlisting}
+
+\subsection{\texttt{IncidentService} — Gestion du Cycle de Vie}
+
+Le service \texttt{IncidentService} délègue les transitions d'état à la machine à états de l'entité :
+
+\begin{lstlisting}[style=javaStyle, caption={Délégation à la machine à états}]
+@Override
+public Mono<Incident> updateStatus(UUID id, Incident.Status newStatus) {
+    return incidentPersistencePort.findById(id)
+        .switchIfEmpty(Mono.error(
+            OperationException.incidentNotFound(id)))
+        .flatMap(incident -> {
+            if (incident.getStatus() == Incident.Status.CLOSED) {
+                return Mono.error(
+                    OperationException.incidentAlreadyClosed(id));
+            }
+            switch (newStatus) {
+                case RESOLVED -> incident.resolve(null);
+                case CLOSED   -> incident.close();
+                default       -> incident.updateStatus(newStatus);
+            }
+            return incidentPersistencePort.save(incident);
+        });
+}
+\end{lstlisting}
+
+\subsection{\texttt{FuelRechargeService} — Synchronisation du Niveau Carburant}
+
+Après chaque recharge, le service met à jour le niveau de carburant du véhicule :
+
+\begin{lstlisting}[style=javaStyle, caption={Mise à jour du niveau carburant}]
+private Mono<Void> syncFuelLevel(FuelRecharge saved, Vehicle vehicle) {
+    if (vehicle.tankCapacity() == null || vehicle.tankCapacity() == 0) {
+        log.warn("Capacite reservoir inconnue pour vehicule {}",
+                 vehicle.id());
+        return Mono.empty();
+    }
+    double percentage = (saved.getQuantity().doubleValue()
+                         / vehicle.tankCapacity()) * 100;
+    String fuelLevel = percentage >= 100 ? "FULL"
+                     : String.valueOf((int) Math.min(percentage, 100));
+
+    return operationalParamRepo.findByVehicleId(vehicle.id())
+        .flatMap(params -> {
+            params.setFuelLevel(fuelLevel);
+            params.setTimestamp(LocalDateTime.now());
+            return operationalParamRepo.save(params);
+        })
+        .then();
+}
+\end{lstlisting}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\chapter{Implémentation — Couche Infrastructure}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\section{Migration Liquibase — Changeset 010}
+
+Le changeset \texttt{010-operations-tables.sql} crée les trois nouvelles tables dans le schéma \texttt{fleet} :
+
+\subsection{Table \texttt{fleet.maintenances}}
+
+\begin{lstlisting}[style=sqlStyle, caption={Création de la table fleet.maintenances}]
+CREATE TABLE IF NOT EXISTS fleet.maintenances (
+    id                   UUID PRIMARY KEY,
+    subject              VARCHAR(255) NOT NULL,
+    cost                 NUMERIC(12, 2),
+    date_time            TIMESTAMP NOT NULL DEFAULT now(),
+    report               TEXT,
+    longitude            NUMERIC(10, 7),
+    latitude             NUMERIC(10, 7),
+    location_name        VARCHAR(255),
+    vehicle_id           UUID NOT NULL
+                         REFERENCES fleet.vehicles(id) ON DELETE CASCADE,
+    vehicle_registration VARCHAR(50),
+    driver_id            UUID
+                         REFERENCES fleet.drivers(user_id) ON DELETE SET NULL,
+    driver_full_name     VARCHAR(255)
+);
+
+CREATE INDEX IF NOT EXISTS idx_maintenances_vehicle_id
+    ON fleet.maintenances(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_maintenances_driver_id
+    ON fleet.maintenances(driver_id);
+CREATE INDEX IF NOT EXISTS idx_maintenances_date_time
+    ON fleet.maintenances(date_time DESC);
+\end{lstlisting}
+
+\subsection{Table \texttt{fleet.incidents}}
+
+\begin{lstlisting}[style=sqlStyle, caption={Création de la table fleet.incidents}]
+CREATE TABLE IF NOT EXISTS fleet.incidents (
+    id                      UUID PRIMARY KEY,
+    type                    VARCHAR(50) NOT NULL
+        CHECK (type IN ('ACCIDENT','BREAKDOWN','THEFT',
+                        'VANDALISM','TRAFFIC_VIOLATION','OTHER')),
+    description             TEXT,
+    severity                VARCHAR(50) DEFAULT 'MEDIUM'
+        CHECK (severity IN ('LOW','MEDIUM','HIGH','CRITICAL')),
+    incident_date_time      TIMESTAMP NOT NULL DEFAULT now(),
+    longitude               NUMERIC(10, 7),
+    latitude                NUMERIC(10, 7),
+    cost                    NUMERIC(12, 2),
+    status                  VARCHAR(50) DEFAULT 'REPORTED'
+        CHECK (status IN ('REPORTED','UNDER_INVESTIGATION',
+                          'RESOLVED','CLOSED')),
+    report                  TEXT,
+    witness_name            VARCHAR(255),
+    witness_contact         VARCHAR(255),
+    police_report_number    VARCHAR(100),
+    insurance_claim_number  VARCHAR(100),
+    reported_by             VARCHAR(255),
+    resolved_at             TIMESTAMP,
+    vehicle_id              UUID NOT NULL
+        REFERENCES fleet.vehicles(id) ON DELETE CASCADE,
+    vehicle_registration    VARCHAR(50),
+    driver_id               UUID
+        REFERENCES fleet.drivers(user_id) ON DELETE SET NULL,
+    driver_full_name        VARCHAR(255)
+);
+\end{lstlisting}
+
+\subsection{Table \texttt{fleet.fuel\_recharges}}
+
+\begin{lstlisting}[style=sqlStyle, caption={Création de la table fleet.fuel\_recharges}]
+CREATE TABLE IF NOT EXISTS fleet.fuel_recharges (
+    id                   UUID PRIMARY KEY,
+    quantity             NUMERIC(10, 2) NOT NULL,
+    price                NUMERIC(12, 2) NOT NULL,
+    recharge_date_time   TIMESTAMP NOT NULL DEFAULT now(),
+    longitude            NUMERIC(10, 7),
+    latitude             NUMERIC(10, 7),
+    station_name         VARCHAR(50)
+        CHECK (station_name IN ('TOTAL','SHELL','OILIBYA',
+                                'CAMRAIL','OTHER')),
+    vehicle_id           UUID NOT NULL
+        REFERENCES fleet.vehicles(id) ON DELETE CASCADE,
+    vehicle_registration VARCHAR(50),
+    driver_id            UUID
+        REFERENCES fleet.drivers(user_id) ON DELETE SET NULL,
+    driver_full_name     VARCHAR(255)
+);
+\end{lstlisting}
+
+\subsection{Décisions de Conception des Tables}
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Enums en VARCHAR} : Les enums sont stockés en VARCHAR plutôt qu'en types ENUM PostgreSQL natifs, pour éviter les problèmes de conversion avec R2DBC et simplifier les migrations futures
+  \item \textbf{Coordonnées en deux colonnes} : \texttt{longitude} et \texttt{latitude} sont stockées séparément (pas de type PostGIS \texttt{POINT}) pour éviter la dépendance à l'extension PostGIS dans les entités R2DBC
+  \item \textbf{Clés étrangères avec comportements} : \texttt{ON DELETE CASCADE} pour les véhicules (si un véhicule est supprimé, ses opérations le sont aussi), \texttt{ON DELETE SET NULL} pour les conducteurs (si un conducteur est supprimé, l'opération est conservée)
+  \item \textbf{Index stratégiques} : Index sur \texttt{vehicle\_id}, \texttt{driver\_id} et les colonnes de date pour optimiser les requêtes de filtrage les plus fréquentes
+\end{itemize}
+
+\section{Les Entités R2DBC}
+
+\subsection{Pattern des Entités}
+
+Les entités R2DBC implémentent \texttt{Persistable<UUID>} avec un flag \texttt{isNew} pour distinguer les insertions des mises à jour (pattern identique aux entités existantes \texttt{TripEntity}, \texttt{MaintenanceParameterEntity}) :
+
+\begin{lstlisting}[style=javaStyle, caption={Pattern d'entité R2DBC avec Persistable}]
+@Table("fleet.maintenances")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class MaintenanceEntity implements Persistable<UUID> {
+
+    @Id
+    private UUID id;
+    private String subject;
+    private BigDecimal cost;
+    private LocalDateTime dateTime;
+    private String report;
+    private BigDecimal longitude;
+    private BigDecimal latitude;
+    private String locationName;
+    private UUID vehicleId;
+    private String vehicleRegistration;
+    private UUID driverId;
+    private String driverFullName;
+
+    @Transient
+    private boolean isNew;
+
+    @Override
+    public boolean isNew() { return isNew; }
+}
+\end{lstlisting}
+
+\section{Les Repositories R2DBC}
+
+\subsection{\texttt{IncidentR2dbcRepository} — Le Plus Riche}
+
+Le repository des incidents est le plus complet avec 12 méthodes dont 8 requêtes \texttt{@Query} avec JOIN sur \texttt{fleet.vehicles} :
+
+\begin{lstlisting}[style=javaStyle, caption={Requêtes avancées du repository Incident}]
+public interface IncidentR2dbcRepository
+        extends ReactiveCrudRepository<IncidentEntity, UUID> {
+
+    @Query("SELECT i.* FROM fleet.incidents i " +
+           "JOIN fleet.vehicles v ON i.vehicle_id = v.id " +
+           "WHERE v.manager_id = :managerId " +
+           "ORDER BY i.incident_date_time DESC")
+    Flux<IncidentEntity> findAllByManagerId(UUID managerId);
+
+    @Query("SELECT i.* FROM fleet.incidents i " +
+           "JOIN fleet.vehicles v ON i.vehicle_id = v.id " +
+           "WHERE i.status IN ('REPORTED','UNDER_INVESTIGATION') " +
+           "AND v.manager_id = :managerId")
+    Flux<IncidentEntity> findOpenIncidentsByManagerId(UUID managerId);
+
+    @Query("SELECT COALESCE(SUM(cost), 0) FROM fleet.incidents " +
+           "WHERE vehicle_id = :vehicleId")
+    Mono<BigDecimal> getTotalCostByVehicleId(UUID vehicleId);
+
+    @Query("SELECT COALESCE(SUM(cost), 0) FROM fleet.incidents " +
+           "WHERE driver_id = :driverId")
+    Mono<BigDecimal> getTotalCostByDriverId(UUID driverId);
+}
+\end{lstlisting}
+
+\textbf{Note technique} : L'utilisation de \texttt{COALESCE(SUM(...), 0)} évite les valeurs \texttt{null} dans les \texttt{Mono<BigDecimal>} des KPIs, cohérent avec le \texttt{.defaultIfEmpty(ZERO)} des services.
+
+\section{Les Adapters de Persistance}
+
+\subsection{Conversion Entity $\leftrightarrow$ Domain}
+
+Chaque adapter assure la conversion bidirectionnelle entre l'entité R2DBC et le modèle de domaine. La conversion la plus complexe est celle de \texttt{IncidentPersistenceAdapter} qui doit gérer les enums stockés en String :
+
+\begin{lstlisting}[style=javaStyle, caption={Conversion Entity vers Domain pour Incident}]
+private Incident toDomain(IncidentEntity entity) {
+    Coordinates coords = null;
+    if (entity.getLongitude() != null && entity.getLatitude() != null) {
+        coords = new Coordinates(
+            entity.getLongitude().doubleValue(),
+            entity.getLatitude().doubleValue()
+        );
+    }
+
+    Incident incident = new Incident(
+        entity.getId(),
+        Incident.Type.valueOf(entity.getType()),
+        entity.getDescription(),
+        entity.getSeverity() != null
+            ? Incident.Severity.valueOf(entity.getSeverity())
+            : Incident.Severity.MEDIUM,
+        entity.getIncidentDateTime(),
+        coords,
+        entity.getCost(),
+        entity.getReportedBy(),
+        entity.getVehicleId(),
+        entity.getVehicleRegistration(),
+        entity.getDriverId(),
+        entity.getDriverFullName()
+    );
+
+    // Restauration de l'etat complet
+    if (entity.getReport() != null)
+        incident.setReport(entity.getReport());
+    if (entity.getPoliceReportNumber() != null)
+        incident.setPoliceReportNumber(entity.getPoliceReportNumber());
+    if (entity.getWitnessName() != null)
+        incident.addWitness(entity.getWitnessName(),
+                            entity.getWitnessContact());
+
+    return incident;
+}
+\end{lstlisting}
+
+\section{L'Adapter Kafka — \texttt{KafkaOperationEventAdapter}}
+
+L'adapter Kafka implémente \texttt{OperationEventPort} via \texttt{ReactiveKafkaProducerTemplate} :
+
+\begin{lstlisting}[style=javaStyle, caption={Publication d'événements via Kafka réactif}]
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class KafkaOperationEventAdapter implements OperationEventPort {
+
+    private final ReactiveKafkaProducerTemplate<String, Object> kafkaTemplate;
+
+    @Value("${application.kafka.topics.operation-events:operation-events-topic}")
+    private String operationEventsTopic;
+
+    @Override
+    public Mono<Void> publishIncidentReported(IncidentReportedEvent event) {
+        if (event.isCritical()) {
+            log.warn("INCIDENT CRITIQUE signale : vehicule={}, type={}",
+                     event.vehicleId(), event.incidentType());
+        }
+        return kafkaTemplate
+            .send(operationEventsTopic, event.incidentId().toString(), event)
+            .doOnSuccess(result -> log.debug(
+                "Evenement incident publie sur offset {}",
+                result.recordMetadata().offset()))
+            .doOnError(e -> log.error(
+                "Echec publication evenement incident", e))
+            .then();
+    }
+}
+\end{lstlisting}
+
+\textbf{Décision technique} : Le topic est configurable via \texttt{\$\{application.kafka.topics.operation-events:operation-events-topic\}} avec une valeur par défaut, permettant au projet de démarrer sans configuration supplémentaire.
+
+% ═════════════════════════════════════════════════════════════════════════════
+\chapter{Implémentation — API REST et Résultats}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\section{Les DTOs de Requête et Réponse}
+
+\subsection{DTOs de Requête}
+
+Les DTOs de requête sont des records Java avec annotations de validation Jakarta :
+
+\begin{lstlisting}[style=javaStyle, caption={DTO de requête MaintenanceRequest}]
+public record MaintenanceRequest(
+    @NotBlank(message = "L'objet est obligatoire")
+    @Schema(description = "Objet de l'intervention",
+            example = "Vidange + filtre huile")
+    String subject,
+
+    @PositiveOrZero(message = "Le cout ne peut pas etre negatif")
+    @Schema(description = "Cout en FCFA", example = "45000.00")
+    BigDecimal cost,
+
+    @Schema(description = "Rapport detaille de l'intervention")
+    String report,
+
+    @Schema(description = "Longitude GPS", example = "3.8480")
+    Double longitude,
+
+    @Schema(description = "Latitude GPS", example = "11.5021")
+    Double latitude,
+
+    @Schema(description = "Nom du lieu", example = "Garage Central Yaounde")
+    String locationName,
+
+    @NotNull(message = "Le vehicule est obligatoire")
+    @Schema(description = "ID du vehicule")
+    UUID vehicleId,
+
+    @Schema(description = "ID du chauffeur (optionnel)")
+    UUID driverId
+) {}
+\end{lstlisting}
+
+\subsection{DTOs de Réponse}
+
+Les DTOs de réponse incluent des méthodes de fabrique statiques \texttt{from(Domain)} :
+
+\begin{lstlisting}[style=javaStyle, caption={DTO de réponse MaintenanceResponse avec fabrique}]
+public record MaintenanceResponse(
+    UUID id, String subject, BigDecimal cost,
+    LocalDateTime dateTime, String report,
+    LocationDto location,
+    UUID vehicleId, String vehicleRegistration,
+    UUID driverId, String driverFullName
+) {
+    public record LocationDto(
+        Double longitude, Double latitude, String locationName
+    ) {}
+
+    public static MaintenanceResponse from(Maintenance m) {
+        LocationDto loc = null;
+        if (m.getLocation() != null) {
+            loc = new LocationDto(
+                m.getLocation().longitude(),
+                m.getLocation().latitude(),
+                m.getLocationName()
+            );
+        }
+        return new MaintenanceResponse(
+            m.getId(), m.getSubject(), m.getCost(),
+            m.getDateTime(), m.getReport(), loc,
+            m.getVehicleId(), m.getVehicleRegistrationNumber(),
+            m.getDriverId(), m.getDriverFullName()
+        );
+    }
+}
+\end{lstlisting}
+
+\section{Les Controllers WebFlux}
+
+\subsection{\texttt{MaintenanceController}}
+
+\begin{lstlisting}[style=javaStyle, caption={Controller WebFlux MaintenanceController}]
+@RestController
+@RequestMapping("/api/v1/operations/maintenances")
+@RequiredArgsConstructor
+@Tag(name = OpenApiConfig.TAG_OPS_MAINTENANCE)
+@SecurityRequirement(name = "bearerAuth")
+public class MaintenanceController {
+
+    private final ManageMaintenanceUseCase maintenanceUseCase;
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
+    @Operation(summary = "Declarer une maintenance",
+               description = "Notifie automatiquement le Fleet Manager.")
+    public Mono<MaintenanceResponse> create(
+            @Valid @RequestBody MaintenanceRequest request) {
+        ManageMaintenanceUseCase.CreateMaintenanceCommand cmd =
+            new ManageMaintenanceUseCase.CreateMaintenanceCommand(
+                request.subject(), request.cost(), request.report(),
+                request.longitude(), request.latitude(),
+                request.locationName(), request.vehicleId(),
+                request.driverId()
+            );
+        return maintenanceUseCase.createMaintenance(cmd)
+                                 .map(MaintenanceResponse::from);
+    }
+    // ... autres endpoints
+}
+\end{lstlisting}
+
+\subsection{Récapitulatif des Endpoints du Module Opérations}
+
+\subsubsection{Endpoints Maintenance}
+
+\begin{longtable}{p{1.5cm}p{6.5cm}p{2.5cm}p{2cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle requis} & \textbf{HTTP} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/operations/maintenances} & MANAGER/DRIVER & 201 \\
+GET & \texttt{/api/v1/operations/maintenances} & MANAGER & 200 \\
+GET & \texttt{/api/v1/operations/maintenances/\{id\}} & MANAGER/DRIVER & 200 \\
+GET & \texttt{/api/v1/operations/maintenances/vehicle/\{vehicleId\}} & MANAGER & 200 \\
+GET & \texttt{/api/v1/operations/maintenances/driver/\{driverId\}} & MANAGER & 200 \\
+GET & \texttt{/api/v1/operations/maintenances/range} & MANAGER & 200 \\
+PUT & \texttt{/api/v1/operations/maintenances/\{id\}} & MANAGER & 200 \\
+DELETE & \texttt{/api/v1/operations/maintenances/\{id\}} & MANAGER & 204 \\
+\bottomrule
+\caption{Endpoints REST du module Maintenance}
+\end{longtable}
+
+\subsubsection{Endpoints Incident}
+
+\begin{longtable}{p{1.5cm}p{6.5cm}p{2.5cm}p{2cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle requis} & \textbf{HTTP} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/operations/incidents} & MANAGER/DRIVER & 201 \\
+GET & \texttt{/api/v1/operations/incidents} & MANAGER & 200 \\
+GET & \texttt{/api/v1/operations/incidents/\{id\}} & MANAGER/DRIVER & 200 \\
+GET & \texttt{/api/v1/operations/incidents/vehicle/\{vehicleId\}} & MANAGER & 200 \\
+GET & \texttt{/api/v1/operations/incidents/driver/\{driverId\}} & MANAGER & 200 \\
+GET & \texttt{/api/v1/operations/incidents/open} & MANAGER & 200 \\
+GET & \texttt{/api/v1/operations/incidents/filter} & MANAGER & 200 \\
+GET & \texttt{/api/v1/operations/incidents/range} & MANAGER & 200 \\
+GET & \texttt{/api/v1/operations/incidents/vehicle/\{id\}/cost} & MANAGER & 200 \\
+PUT & \texttt{/api/v1/operations/incidents/\{id\}} & MANAGER & 200 \\
+PATCH & \texttt{/api/v1/operations/incidents/\{id\}/status} & MANAGER & 200 \\
+DELETE & \texttt{/api/v1/operations/incidents/\{id\}} & MANAGER & 204 \\
+\bottomrule
+\caption{Endpoints REST du module Incident}
+\end{longtable}
+
+\subsubsection{Endpoints Recharge Carburant}
+
+\begin{longtable}{p{1.5cm}p{6.5cm}p{2.5cm}p{2cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle requis} & \textbf{HTTP} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/operations/fuel-recharges} & DRIVER & 201 \\
+GET & \texttt{/api/v1/operations/fuel-recharges} & MANAGER & 200 \\
+GET & \texttt{/api/v1/operations/fuel-recharges/\{id\}} & MANAGER/DRIVER & 200 \\
+GET & \texttt{/api/v1/operations/fuel-recharges/vehicle/\{vehicleId\}} & MANAGER & 200 \\
+GET & \texttt{/api/v1/operations/fuel-recharges/driver/\{driverId\}} & MANAGER & 200 \\
+GET & \texttt{/api/v1/operations/fuel-recharges/range} & MANAGER & 200 \\
+PUT & \texttt{/api/v1/operations/fuel-recharges/\{id\}} & MANAGER & 200 \\
+DELETE & \texttt{/api/v1/operations/fuel-recharges/\{id\}} & MANAGER & 204 \\
+\bottomrule
+\caption{Endpoints REST du module Recharge Carburant}
+\end{longtable}
+
+\section{Bilan des Fichiers Créés}
+
+\subsection{Récapitulatif Global}
+
+Le tableau suivant liste l'ensemble des fichiers créés dans le cadre de ce projet :
+
+\begin{longtable}{p{7cm}p{2cm}p{4cm}}
+\toprule
+\textbf{Fichier} & \textbf{Couche} & \textbf{Rôle} \\
+\midrule
+\endhead
+\texttt{domain/model/Coordinates.java} & Domaine & Value Object GPS \\
+\texttt{domain/model/Maintenance.java} & Domaine & Entité Maintenance \\
+\texttt{domain/model/Incident.java} & Domaine & Entité Incident \\
+\texttt{domain/model/FuelRecharge.java} & Domaine & Entité Recharge \\
+\texttt{domain/exception/OperationException.java} & Domaine & Exception métier \\
+\texttt{domain/ports/in/ManageMaintenanceUseCase.java} & Domaine & Port entrant \\
+\texttt{domain/ports/in/ManageIncidentUseCase.java} & Domaine & Port entrant \\
+\texttt{domain/ports/in/ManageFuelRechargeUseCase.java} & Domaine & Port entrant \\
+\texttt{domain/ports/out/MaintenancePersistencePort.java} & Domaine & Port sortant \\
+\texttt{domain/ports/out/IncidentPersistencePort.java} & Domaine & Port sortant \\
+\texttt{domain/ports/out/FuelRechargePersistencePort.java} & Domaine & Port sortant \\
+\texttt{domain/ports/out/OperationEventPort.java} & Domaine & Port événementiel \\
+\texttt{application/service/MaintenanceService.java} & Application & Service métier \\
+\texttt{application/service/IncidentService.java} & Application & Service métier \\
+\texttt{application/service/FuelRechargeService.java} & Application & Service métier \\
+\texttt{persistence/entity/MaintenanceEntity.java} & Infrastructure & Entité R2DBC \\
+\texttt{persistence/entity/IncidentEntity.java} & Infrastructure & Entité R2DBC \\
+\texttt{persistence/entity/FuelRechargeEntity.java} & Infrastructure & Entité R2DBC \\
+\texttt{persistence/repository/MaintenanceR2dbcRepository.java} & Infrastructure & Repository \\
+\texttt{persistence/repository/IncidentR2dbcRepository.java} & Infrastructure & Repository \\
+\texttt{persistence/repository/FuelRechargeR2dbcRepository.java} & Infrastructure & Repository \\
+\texttt{persistence/MaintenancePersistenceAdapter.java} & Infrastructure & Adapter R2DBC \\
+\texttt{persistence/IncidentPersistenceAdapter.java} & Infrastructure & Adapter R2DBC \\
+\texttt{persistence/FuelRechargePersistenceAdapter.java} & Infrastructure & Adapter R2DBC \\
+\texttt{messaging/KafkaOperationEventAdapter.java} & Infrastructure & Adapter Kafka \\
+\texttt{rest/dto/MaintenanceRequest.java} & Infrastructure & DTO requête \\
+\texttt{rest/dto/MaintenanceResponse.java} & Infrastructure & DTO réponse \\
+\texttt{rest/dto/IncidentRequest.java} & Infrastructure & DTO requête \\
+\texttt{rest/dto/IncidentUpdateRequest.java} & Infrastructure & DTO mise à jour \\
+\texttt{rest/dto/IncidentStatusRequest.java} & Infrastructure & DTO statut \\
+\texttt{rest/dto/IncidentResponse.java} & Infrastructure & DTO réponse \\
+\texttt{rest/dto/FuelRechargeRequest.java} & Infrastructure & DTO requête \\
+\texttt{rest/dto/FuelRechargeResponse.java} & Infrastructure & DTO réponse \\
+\texttt{rest/MaintenanceController.java} & Infrastructure & Controller REST \\
+\texttt{rest/IncidentController.java} & Infrastructure & Controller REST \\
+\texttt{rest/FuelRechargeController.java} & Infrastructure & Controller REST \\
+\texttt{db/changelog/changes/010-operations-tables.sql} & Base de données & Migration Liquibase \\
+\bottomrule
+\caption{Récapitulatif des 37 fichiers créés}
+\end{longtable}
+
+\subsection{Fichiers Modifiés}
+
+\begin{longtable}{p{7cm}p{6cm}}
+\toprule
+\textbf{Fichier} & \textbf{Modification} \\
+\midrule
+\endhead
+\texttt{db/changelog/db.changelog-master.yaml} & Ajout de l'entrée \texttt{010-operations-tables.sql} \\
+\texttt{application/service/FleetManagerService.java} & Enrichissement des KPIs avec les données opérationnelles \\
+\texttt{infrastructure/adapters/inbound/rest/FleetManagerController.java} & Endpoint \texttt{/kpis} enrichi \\
+\bottomrule
+\caption{Fichiers modifiés lors de l'intégration}
+\end{longtable}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\chapter{Décisions Techniques et Bilan}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\section{Décisions Techniques Majeures}
+
+\subsection{Pas de Records pour les Entités Mutables}
+
+Les entités \texttt{Maintenance}, \texttt{Incident} et \texttt{FuelRecharge} sont des classes Java classiques (pas des records), contrairement aux modèles existants (\texttt{Vehicle}, \texttt{Driver}, \texttt{Fleet}, \texttt{Trip} qui sont des records immuables). Cette décision est justifiée par la nature de ces entités :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \texttt{Incident} implémente une machine à états avec des méthodes qui modifient son état (\texttt{resolve()}, \texttt{close()})
+  \item \texttt{Maintenance} dispose de méthodes métier qui modifient ses champs (\texttt{addReport()}, \texttt{updateCost()})
+  \item Les records Java sont immuables par nature, incompatibles avec ces patterns
+\end{itemize}
+
+\subsection{Fire \& Forget pour les Événements}
+
+La publication des événements Kafka est réalisée en mode \textit{fire \& forget} via \texttt{.subscribe()} :
+
+\begin{lstlisting}[style=javaStyle, caption={Pattern fire and forget pour les événements}]
+.doOnSuccess(saved ->
+    operationEventPort.publishMaintenanceCreated(event)
+        .subscribe(
+            null,
+            e -> log.warn("Echec publication evenement: {}", e.getMessage())
+        )
+)
+\end{lstlisting}
+
+Cette approche garantit que l'échec de publication d'un événement Kafka ne fait pas échouer la création de l'opération. La traçabilité est assurée par les logs.
+
+\subsection{Synchronisation Inter-Modules via Repositories Directs}
+
+Les synchronisations inter-modules (\texttt{maintenance\_parameters}, \texttt{operational\_parameters}) sont réalisées en injectant directement les repositories R2DBC dans les services, plutôt que de créer de nouveaux ports. Cette décision évite la sur-ingénierie pour des cas d'usage simples déjà couverts par les repositories existants.
+
+\subsection{Enums en VARCHAR}
+
+Les enums sont stockés en VARCHAR plutôt qu'en types ENUM PostgreSQL natifs. Cette décision est cohérente avec le reste du projet et évite les problèmes de conversion avec R2DBC, qui ne supporte pas nativement les types ENUM PostgreSQL sans convertisseurs complexes.
+
+\subsection{Coordonnées en Deux Colonnes}
+
+Les coordonnées GPS sont stockées en deux colonnes séparées (\texttt{longitude}, \texttt{latitude}) plutôt qu'en type PostGIS \texttt{POINT}. Cette décision évite la dépendance à l'extension PostGIS dans les entités R2DBC et simplifie la conversion dans les adapters.
+
+\section{Respect des Règles Architecturales}
+
+\begin{longtable}{p{7cm}p{2cm}p{4cm}}
+\toprule
+\textbf{Règle} & \textbf{Respectée} & \textbf{Vérification} \\
+\midrule
+\endhead
+Le domaine ne dépend de rien & \textcolor{fleetsuccess}{\textbf{Oui}} & Aucune annotation Spring/JPA dans \texttt{domain/} \\
+Les IDs sont des UUID & \textcolor{fleetsuccess}{\textbf{Oui}} & Tous les IDs sont \texttt{UUID} \\
+Tout est réactif & \textcolor{fleetsuccess}{\textbf{Oui}} & Mono/Flux dans tous les ports et services \\
+Invariants dans le constructeur & \textcolor{fleetsuccess}{\textbf{Oui}} & Validation dans les constructeurs des entités \\
+Commands en records imbriqués & \textcolor{fleetsuccess}{\textbf{Oui}} & Records dans les interfaces Use Case \\
+Exceptions typées & \textcolor{fleetsuccess}{\textbf{Oui}} & \texttt{OperationException} avec codes OPR\_xxx \\
+Adapters sans logique métier & \textcolor{fleetsuccess}{\textbf{Oui}} & Adapters = conversion + délégation uniquement \\
+Tables dans le schéma \texttt{fleet} & \textcolor{fleetsuccess}{\textbf{Oui}} & Toutes les nouvelles tables dans \texttt{fleet.*} \\
+\bottomrule
+\caption{Vérification du respect des règles architecturales}
+\end{longtable}
+
+\section{Bilan Quantitatif}
+
+\begin{longtable}{p{7cm}p{6cm}}
+\toprule
+\textbf{Indicateur} & \textbf{Valeur} \\
+\midrule
+\endhead
+Fichiers Java créés & 36 \\
+Fichiers Java modifiés & 2 \\
+Fichiers SQL créés & 1 \\
+Fichiers YAML modifiés & 1 \\
+Nouveaux endpoints REST & 28 \\
+Nouvelles tables PostgreSQL & 3 \\
+Nouveaux index de base de données & 9 \\
+Phases d'implémentation & 6 \\
+Erreurs de compilation & 0 \\
+\bottomrule
+\caption{Bilan quantitatif des apports}
+\end{longtable}
+
+\section{Intégration avec les Modules Existants}
+
+Le module Opérations Terrain s'intègre naturellement avec les modules existants :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Module Véhicule} : Vérification de l'existence du véhicule avant toute opération, mise à jour des paramètres de maintenance et du niveau carburant
+  \item \textbf{Module Conducteur} : Vérification optionnelle de l'existence du conducteur, dénormalisation du nom pour l'affichage
+  \item \textbf{Module Notification} : Publication d'événements Kafka consommés par le module de notification pour alerter le gestionnaire
+  \item \textbf{Module Fleet Manager} : Enrichissement des KPIs avec les données opérationnelles (coûts incidents, coûts maintenances, consommation carburant)
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% CONCLUSION GÉNÉRALE
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter*{Conclusion Générale}
+\addcontentsline{toc}{chapter}{Conclusion Générale}
+\thispagestyle{fancy}
+
+\section*{Synthèse des Travaux}
+
+Ce rapport a présenté l'architecture et l'évolution du backend de la plateforme FleetMan, un système de gestion de flotte de véhicules développé en Java 21 avec Spring Boot 3.2.6 et une architecture hexagonale réactive.
+
+\textbf{La Partie I} a décrit l'architecture existante, caractérisée par :
+\begin{itemize}[leftmargin=2cm]
+  \item Une architecture hexagonale (Ports \& Adapters) garantissant la séparation stricte des responsabilités
+  \item Un paradigme entièrement réactif (WebFlux, R2DBC, Reactor Kafka) pour des performances optimales
+  \item Une sécurité JWT déléguée à un service d'authentification centralisé
+  \item Des modules fonctionnels couvrant la gestion des véhicules, conducteurs, flottes, trajets et géorepérage
+  \item Une infrastructure robuste avec PostgreSQL, Redis, Kafka et Liquibase
+\end{itemize}
+
+\textbf{La Partie II} a présenté les apports réalisés dans le cadre de ce projet de fin d'études :
+\begin{itemize}[leftmargin=2cm]
+  \item L'intégration du module \textit{Opérations Terrain} avec trois agrégats métier (Maintenance, Incident, FuelRecharge)
+  \item La création de 36 fichiers Java couvrant toutes les couches de l'architecture hexagonale
+  \item L'implémentation de 28 nouveaux endpoints REST documentés Swagger
+  \item La création de 3 nouvelles tables PostgreSQL avec 9 index stratégiques
+  \item Des synchronisations inter-modules enrichissant les données des véhicules et les KPIs des gestionnaires
+\end{itemize}
+
+\section*{Apport Pédagogique}
+
+Ce projet a permis de mettre en pratique des concepts avancés de génie logiciel :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Domain-Driven Design (DDD)} : Identification des agrégats, value objects, invariants métier, bounded contexts
+  \item \textbf{Architecture Hexagonale} : Isolation du domaine, ports et adapters, règle de dépendance
+  \item \textbf{Programmation Réactive} : Mono/Flux, opérateurs de transformation, gestion des erreurs réactives
+  \item \textbf{Patterns d'Intégration} : Anti-Corruption Layer, Event-Driven Architecture, CQRS partiel
+  \item \textbf{Qualité Logicielle} : Validation des invariants, gestion des exceptions typées, documentation API
+\end{itemize}
+
+\section*{Perspectives d'Évolution}
+
+Plusieurs axes d'amélioration sont envisageables pour les prochaines itérations :
+
+\begin{enumerate}[leftmargin=2cm]
+  \item \textbf{Tests automatisés} : Ajout de tests unitaires pour les entités de domaine et de tests d'intégration pour les adapters
+  \item \textbf{Pagination} : Implémentation de la pagination sur les endpoints de listing pour les grandes flottes
+  \item \textbf{Rapports PDF} : Génération automatique de rapports d'incidents et de maintenances
+  \item \textbf{Tableau de bord temps réel} : Intégration WebSocket pour les alertes d'incidents critiques
+  \item \textbf{Mode hors-ligne} : Synchronisation différée pour les conducteurs en zone sans réseau
+  \item \textbf{Intelligence artificielle} : Prédiction des maintenances préventives basée sur l'historique
+\end{enumerate}
+
+\vspace{1cm}
+\begin{successbox}[title={Conclusion}]
+Le module Opérations Terrain apporte une valeur métier significative à la plateforme FleetMan en comblant un manque fonctionnel majeur. Son intégration respecte scrupuleusement l'architecture hexagonale réactive existante, garantissant la cohérence et la maintenabilité du système. L'ensemble du code compile sans erreur et est prêt pour les tests d'intégration.
+\end{successbox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% ANNEXES
+% ─────────────────────────────────────────────────────────────────────────────
+\appendix
+
+\chapter{Glossaire Technique}
+
+\begin{longtable}{p{4cm}p{9cm}}
+\toprule
+\textbf{Terme} & \textbf{Définition} \\
+\midrule
+\endhead
+\textbf{Agrégat} & Groupe d'objets du domaine traités comme une unité cohérente, avec une racine d'agrégat \\
+\textbf{Architecture Hexagonale} & Pattern architectural isolant le domaine métier des dépendances techniques via des ports et adapters \\
+\textbf{Bounded Context} & Limite explicite dans laquelle un modèle de domaine particulier s'applique \\
+\textbf{DDD} & Domain-Driven Design — approche de conception centrée sur le domaine métier \\
+\textbf{Flux} & Type réactif représentant un flux de 0 à N éléments (Project Reactor) \\
+\textbf{Geofencing} & Technique de délimitation de zones géographiques virtuelles avec déclenchement d'alertes \\
+\textbf{Invariant} & Règle métier qui doit toujours être vraie pour un objet du domaine \\
+\textbf{Liquibase} & Outil de gestion des migrations de schéma de base de données \\
+\textbf{Mono} & Type réactif représentant 0 ou 1 résultat (Project Reactor) \\
+\textbf{Port} & Interface définissant un contrat entre le domaine et l'infrastructure \\
+\textbf{R2DBC} & Reactive Relational Database Connectivity — API réactive pour les bases de données relationnelles \\
+\textbf{Record Java} & Type de classe immuable introduit en Java 16 \\
+\textbf{Value Object} & Objet du domaine défini par ses valeurs, sans identité propre \\
+\textbf{WebFlux} & Framework web réactif de Spring, basé sur Project Reactor \\
+\bottomrule
+\caption{Glossaire des termes techniques}
+\end{longtable}
+
+\chapter{Récapitulatif des Endpoints REST}
+
+\section*{Tableau Complet des Endpoints}
+
+\begin{longtable}{p{1.5cm}p{7cm}p{2.5cm}p{1.5cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Module} & \textbf{HTTP} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/auth/login} & Auth & 200 \\
+POST & \texttt{/api/v1/auth/register} & Auth & 200 \\
+POST & \texttt{/api/v1/auth/refresh} & Auth & 200 \\
+POST & \texttt{/api/v1/vehicles} & Véhicule & 201 \\
+GET & \texttt{/api/v1/vehicles} & Véhicule & 200 \\
+GET & \texttt{/api/v1/vehicles/\{id\}} & Véhicule & 200 \\
+PATCH & \texttt{/api/v1/vehicles/\{id\}} & Véhicule & 200 \\
+DELETE & \texttt{/api/v1/vehicles/\{id\}} & Véhicule & 204 \\
+GET & \texttt{/api/v1/vehicles/lookup/\{resource\}} & Véhicule & 200 \\
+POST & \texttt{/api/v1/fleets/\{id\}/drivers/register} & Conducteur & 201 \\
+GET & \texttt{/api/v1/drivers} & Conducteur & 200 \\
+POST & \texttt{/api/v1/drivers/\{id\}/assign-vehicle} & Conducteur & 200 \\
+POST & \texttt{/api/v1/trips/start} & Trajet & 201 \\
+POST & \texttt{/api/v1/trips/\{id\}/telemetry} & Trajet & 200 \\
+POST & \texttt{/api/v1/trips/\{id\}/end} & Trajet & 200 \\
+GET & \texttt{/api/v1/trips} & Trajet & 200 \\
+POST & \texttt{/api/v1/geofence/zones} & Geofence & 201 \\
+GET & \texttt{/api/v1/geofence/my-zones} & Geofence & 200 \\
+DELETE & \texttt{/api/v1/geofence/\{type\}/\{id\}} & Geofence & 204 \\
+POST & \texttt{/api/v1/operations/maintenances} & \textbf{Maintenance} & 201 \\
+GET & \texttt{/api/v1/operations/maintenances} & \textbf{Maintenance} & 200 \\
+GET & \texttt{/api/v1/operations/maintenances/\{id\}} & \textbf{Maintenance} & 200 \\
+PUT & \texttt{/api/v1/operations/maintenances/\{id\}} & \textbf{Maintenance} & 200 \\
+DELETE & \texttt{/api/v1/operations/maintenances/\{id\}} & \textbf{Maintenance} & 204 \\
+POST & \texttt{/api/v1/operations/incidents} & \textbf{Incident} & 201 \\
+GET & \texttt{/api/v1/operations/incidents} & \textbf{Incident} & 200 \\
+GET & \texttt{/api/v1/operations/incidents/open} & \textbf{Incident} & 200 \\
+GET & \texttt{/api/v1/operations/incidents/filter} & \textbf{Incident} & 200 \\
+PATCH & \texttt{/api/v1/operations/incidents/\{id\}/status} & \textbf{Incident} & 200 \\
+DELETE & \texttt{/api/v1/operations/incidents/\{id\}} & \textbf{Incident} & 204 \\
+POST & \texttt{/api/v1/operations/fuel-recharges} & \textbf{Carburant} & 201 \\
+GET & \texttt{/api/v1/operations/fuel-recharges} & \textbf{Carburant} & 200 \\
+DELETE & \texttt{/api/v1/operations/fuel-recharges/\{id\}} & \textbf{Carburant} & 204 \\
+\bottomrule
+\caption{Sélection des endpoints REST principaux (les modules en gras sont les apports)}
+\end{longtable}
+
+\end{document}

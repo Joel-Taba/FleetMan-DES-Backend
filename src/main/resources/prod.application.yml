@@ -1,0 +1,174 @@
+server:
+  port: 8080
+  # INDISPENSABLE EN PROD : Permet à Spring de gérer correctement les redirections HTTPS derrière Nginx
+  forward-headers-strategy: framework
+
+# Config Swagger
+app:
+  swagger:
+    server-url: ${FLEET_SERVER_URL:https://traefikdev.yowyob.com/fleet-management}
+
+spring:
+  application:
+    name: fleet-management
+
+  docker:
+    compose:
+      enabled: false
+
+  # ------------------------------------------------------------------
+  # DATABASE — Liquibase
+  # ------------------------------------------------------------------
+  liquibase:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:yowyob}
+    user: ${DB_LIQUIBASE_USERNAME}
+    password: ${DB_LIQUIBASE_PASSWORD}
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+    default-schema: ${DB_SCHEMA:fleet}
+    liquibase-schema: ${DB_SCHEMA:fleet}
+    driver-class-name: org.postgresql.Driver
+
+  # ------------------------------------------------------------------
+  # DATABASE — R2DBC réactif
+  # ------------------------------------------------------------------
+  r2dbc:
+    url: r2dbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:yowyob}?schema=${DB_SCHEMA:fleet}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    pool:
+      enabled: true
+      initial-size: 5
+      max-size: 20
+      max-idle-time: 30m
+      validation-query: SELECT 1
+
+  sql:
+    init:
+      mode: never
+
+  # ------------------------------------------------------------------
+  # REDIS CLUSTER
+  # ------------------------------------------------------------------
+  data:
+    redis:
+      username: ${REDIS_USERNAME}
+      password: ${REDIS_PASSWORD}
+      cluster:
+        nodes:
+          - redis-node-1:6379
+          - redis-node-2:6379
+          - redis-node-3:6379
+          - redis-node-4:6379
+          - redis-node-5:6379
+          - redis-node-6:6379
+        max-redirects: 3
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+        cluster:
+          refresh:
+            adaptive: true
+            period: 30s
+            dynamic-refresh-sources: false
+
+  # ------------------------------------------------------------------
+  # KAFKA — Connexion sécurisée SASL/SCRAM-SHA-256
+  # ------------------------------------------------------------------
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST}:${KAFKA_PORT:29092}
+
+    # ── Authentification SASL/SCRAM-SHA-256 ────────────────────────
+    properties:
+      security.protocol: SASL_PLAINTEXT
+      sasl.mechanism: SCRAM-SHA-256
+      sasl.jaas.config: >
+        org.apache.kafka.common.security.scram.ScramLoginModule required
+        username="${KAFKA_BACKEND_USER}" password="${KAFKA_BACKEND_PASSWORD}";
+    consumer:
+      group-id: ${KAFKA_GROUP_ID:fleet-management-group}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+# SWAGGER / OPENAPI (Configuration Explicite Prod)
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operationsSorter: method
+    tagsSorter: alpha
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+
+# CONFIG METIER
+application:
+  external:
+    vehicle-service-url: https://traefikdev.yowyob.com/vehicule
+    geofence-service-url: https://traefikdev.yowyob.com/geofence-service
+    payment-service-url: https://traefikdev.yowyob.com/payment
+  auth:
+    mode: remote
+    url: https://traefikdev.yowyob.com/auth
+
+  notification:
+    mode: http # 'http' ou 'kafka'
+    url: https://traefikdev.yowyob.com/notification
+    # URL du Swagger fourni
+    service-token: "a77599d3-8de7-4d52-b9d0-2202b2e13a9e" # Token récupéré après enregistrement du service
+    templates:
+      new-offer: 1 # ID template: Nouvelle offre pour les chauffeurs
+      driver-applied: 2 # ID template: Un chauffeur a postulé (pour le client)
+      driver-selected: 3 # ID template: Vous avez été choisi (pour le chauffeur)
+      ride-confirmed: 4 # ID template: Le chauffeur arrive (pour le client)
+      ride-cancelled: 5 # ID template: Course annulée
+      admin-validation: 7 # ID template: admin a validé le profil du driver
+
+  geofence-system-user:
+    username: "yowyob_fleet_internal_admin"
+    password: "system_password_secure_2026"
+    organization-id: "723e4567-e89b-12d3-a456-426614174000" # UUID de notre application dans
+
+  bootstrap:
+    admin:
+      username: "superadmin123"
+      email: "superadmin@transens.com"
+      password: "password123"
+      phone: "+23761213141516"
+      firstname: "System"
+      lastname: "Administrator"
+  kafka:
+    topics:
+      geofence-alerts: geofence-alerts-topic
+
+# MONITORING & RESILIENCE
+management:
+  endpoints:
+    web:
+      exposure:
+        include: [ "health", "info", "prometheus", "liveness", "readiness" ]
+  endpoint:
+    health:
+      show-details: "always"
+      probes:
+        enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      stock-service:
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+        slidingWindowSize: 5

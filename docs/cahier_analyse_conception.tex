@@ -1,0 +1,1867 @@
+\documentclass[12pt,a4paper]{report}
+
+% --- Encodage et langue (XeLaTeX natif UTF-8) --------------------------------
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setmainlanguage{french}
+
+% --- Mise en page ------------------------------------------------------------
+\usepackage[top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% --- Typographie -------------------------------------------------------------
+\usepackage{microtype}
+\usepackage{parskip}
+
+% --- Couleurs et graphiques --------------------------------------------------
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds, calc}
+
+% --- Tableaux ----------------------------------------------------------------
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{array}
+
+% --- Code source -------------------------------------------------------------
+\usepackage{listings}
+\usepackage{lstautogobble}
+
+% --- Liens -------------------------------------------------------------------
+\usepackage[hidelinks]{hyperref}
+\usepackage{amsmath}
+\usepackage{cleveref}
+
+% --- En-têtes ----------------------------------------------------------------
+\usepackage{fancyhdr}
+\usepackage{emptypage}
+
+% --- Boîtes ------------------------------------------------------------------
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable, listings}
+
+% --- Listes ------------------------------------------------------------------
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{pifont}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% COULEURS
+% ─────────────────────────────────────────────────────────────────────────────
+\definecolor{fleetblue}{RGB}{19, 109, 236}
+\definecolor{fleetdark}{RGB}{11, 17, 32}
+\definecolor{fleetgray}{RGB}{107, 114, 128}
+\definecolor{fleetsuccess}{RGB}{16, 185, 129}
+\definecolor{fleetwarning}{RGB}{245, 158, 11}
+\definecolor{fleeterror}{RGB}{239, 68, 68}
+\definecolor{fleetpurple}{RGB}{139, 92, 246}
+\definecolor{fleetcyan}{RGB}{6, 182, 212}
+\definecolor{codebg}{RGB}{248, 249, 250}
+\definecolor{codefg}{RGB}{36, 41, 47}
+\definecolor{commentcolor}{RGB}{106, 153, 85}
+\definecolor{keywordcolor}{RGB}{86, 156, 214}
+\definecolor{stringcolor}{RGB}{206, 145, 120}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% LISTINGS
+% ─────────────────────────────────────────────────────────────────────────────
+\lstdefinestyle{sqlStyle}{
+  language=SQL,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize\color{codefg},
+  keywordstyle=\color{keywordcolor}\bfseries,
+  stringstyle=\color{stringcolor},
+  commentstyle=\color{commentcolor}\itshape,
+  numberstyle=\tiny\color{fleetgray},
+  numbers=left, numbersep=8pt,
+  breaklines=true, frame=single,
+  rulecolor=\color{fleetgray!40},
+  xleftmargin=15pt, autogobble=true
+}
+
+\lstdefinestyle{javaStyle}{
+  language=Java,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize\color{codefg},
+  keywordstyle=\color{keywordcolor}\bfseries,
+  stringstyle=\color{stringcolor},
+  commentstyle=\color{commentcolor}\itshape,
+  numberstyle=\tiny\color{fleetgray},
+  numbers=left, numbersep=8pt,
+  breaklines=true, frame=single,
+  rulecolor=\color{fleetgray!40},
+  xleftmargin=15pt, autogobble=true,
+  morekeywords={UUID, Mono, Flux, record, var}
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% BOITES
+% ─────────────────────────────────────────────────────────────────────────────
+\newtcolorbox{featurebox}[2][]{
+  colback=#2!6, colframe=#2,
+  fonttitle=\bfseries\small,
+  title={#1}, breakable, #1
+}
+
+\newtcolorbox{prioritybox}[2][]{
+  colback=fleetdark!4, colframe=fleetdark,
+  fonttitle=\bfseries\color{white},
+  coltitle=white,
+  attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=#2},
+  title={#1}, breakable
+}
+
+\newtcolorbox{reqbox}[1][]{
+  colback=fleetblue!5, colframe=fleetblue!60,
+  fonttitle=\bfseries\small\color{fleetblue},
+  title={Exigence}, breakable, #1
+}
+
+\newtcolorbox{notebox}[1][]{
+  colback=fleetwarning!8, colframe=fleetwarning,
+  fonttitle=\bfseries\small,
+  title={Note Experte}, breakable, #1
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% TITRES
+% ─────────────────────────────────────────────────────────────────────────────
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\color{fleetdark}}
+  {\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-10pt}{30pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{fleetblue}}
+  {\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{fleetdark}}
+  {\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries\color{fleetgray}}
+  {\thesubsubsection}{1em}{}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% EN-TETES
+% ─────────────────────────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{fleetgray}{\leftmark}}
+\fancyhead[R]{\small\textcolor{fleetblue}{\textbf{FleetMan — Cahier d'Analyse \& Conception}}}
+\fancyfoot[C]{\small\textcolor{fleetgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+\setlength{\headheight}{15pt}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% COMMANDES UTILITAIRES
+% ─────────────────────────────────────────────────────────────────────────────
+\newcommand{\prio}[1]{%
+  \ifnum#1=1 \textcolor{fleeterror}{\textbf{P1 — Critique}}%
+  \else\ifnum#1=2 \textcolor{fleetwarning}{\textbf{P2 — Haute}}%
+  \else\ifnum#1=3 \textcolor{fleetsuccess}{\textbf{P3 — Normale}}%
+  \else \textcolor{fleetgray}{\textbf{P4 — Basse}}%
+  \fi\fi\fi}
+
+\newcommand{\effort}[1]{\textcolor{fleetpurple}{\textbf{#1}}}
+\newcommand{\api}[2]{\texttt{\textcolor{fleetblue}{#1}\ #2}}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% DEBUT DU DOCUMENT
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% PAGE DE TITRE
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \pagecolor{fleetdark}
+  \color{white}
+  \centering
+  \vspace*{1.5cm}
+
+  {\fontsize{55}{66}\selectfont\bfseries\textcolor{fleetblue}{FleetMan}}\\[0.4cm]
+  {\Large\textcolor{white!70}{Plateforme de Gestion de Flotte Intelligente}}\\[2.5cm]
+
+  \textcolor{fleetblue}{\rule{0.85\textwidth}{2pt}}\\[0.8cm]
+
+  {\LARGE\bfseries Cahier d'Analyse et de Conception}\\[0.4cm]
+  {\large Nouvelles Fonctionnalités — Vision Expert Métier}\\[0.8cm]
+
+  \textcolor{fleetblue}{\rule{0.85\textwidth}{1pt}}\\[1.8cm]
+
+  \begin{tabular}{rl}
+    \textcolor{white!60}{Type :}         & \textbf{Cahier des Charges Fonctionnel \& Technique} \\[0.3cm]
+    \textcolor{white!60}{Domaine :}      & \textbf{Gestion de Flotte de Véhicules (B2B)} \\[0.3cm]
+    \textcolor{white!60}{Périmètre :}    & \textbf{Backend Spring Boot — Nouvelles Fonctionnalités} \\[0.3cm]
+    \textcolor{white!60}{Modules :}      & \textbf{8 nouveaux modules proposés} \\[0.3cm]
+    \textcolor{white!60}{Version :}      & \textbf{1.0 — Mai 2026} \\[0.3cm]
+    \textcolor{white!60}{Niveau :}       & \textbf{5\textsuperscript{ème} année Génie Informatique} \\
+  \end{tabular}
+
+  \vfill
+
+  {\small\textcolor{white!50}{École Polytechnique — Département Informatique}}\\
+  {\small\textcolor{white!50}{Document de Spécification Technique}}
+\end{titlepage}
+\nopagecolor
+
+\tableofcontents
+\newpage
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter*{Introduction}
+\addcontentsline{toc}{chapter}{Introduction}
+\thispagestyle{fancy}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section*{Contexte}
+
+Le backend FleetMan dispose aujourd'hui d'une base solide couvrant la gestion des véhicules, des conducteurs, des flottes, des trajets, du géorepérage et des opérations terrain (maintenances, incidents, carburant). Cependant, une plateforme de gestion de flotte professionnelle à destination des entreprises de transport africaines doit aller bien au-delà de ces fonctionnalités de base pour être compétitive face aux solutions internationales (Samsara, Verizon Connect, Geotab).
+
+\section*{Objectif du Document}
+
+Ce cahier d'analyse et de conception identifie \textbf{8 nouveaux modules fonctionnels} à fort impact métier, issus de l'expertise du domaine de la gestion de flotte. Pour chaque module, il détaille :
+\begin{itemize}[leftmargin=2cm]
+  \item Les exigences fonctionnelles et non-fonctionnelles
+  \item Le modèle de données (tables SQL supplémentaires)
+  \item Les endpoints REST proposés
+  \item La priorité d'implémentation et l'effort estimé
+\end{itemize}
+
+\section*{Synthèse des Modules Proposés}
+
+\begin{longtable}{p{0.5cm}p{4cm}p{5.5cm}p{2cm}p{1.5cm}}
+\toprule
+\textbf{\#} & \textbf{Module} & \textbf{Valeur Métier} & \textbf{Priorité} & \textbf{Effort} \\
+\midrule
+\endhead
+1 & Planification \& Ordonnancement & Optimisation des tournées et affectations & \prio{1} & \effort{L} \\
+2 & Gestion des Contrats \& Documents & Conformité légale et alertes d'expiration & \prio{1} & \effort{M} \\
+3 & Tableau de Bord KPI Avancé & Pilotage de la performance opérationnelle & \prio{1} & \effort{M} \\
+4 & Gestion des Dépenses \& Budget & Maîtrise des coûts d'exploitation & \prio{2} & \effort{M} \\
+5 & Scoring Conducteur & Sécurité routière et éco-conduite & \prio{2} & \effort{L} \\
+6 & Maintenance Préventive & Réduction des pannes et coûts & \prio{2} & \effort{M} \\
+7 & Gestion des Clients \& Missions & Facturation et suivi des prestations & \prio{3} & \effort{L} \\
+8 & Alertes \& Règles Métier & Automatisation de la supervision & \prio{3} & \effort{S} \\
+\bottomrule
+\caption{Vue d'ensemble des 8 modules proposés (S=Small, M=Medium, L=Large)}
+\end{longtable}
+
+\begin{notebox}
+Les priorités sont définies selon l'impact métier immédiat pour une entreprise de transport en Afrique centrale. P1 = bloquant pour la commercialisation, P2 = différenciateur concurrentiel, P3 = enrichissement de l'offre.
+\end{notebox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Exigences Globales du Système Étendu}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Exigences Fonctionnelles Transversales}
+
+\begin{reqbox}
+\textbf{EF-T01 — Cloisonnement des données :} Chaque gestionnaire de flotte ne doit accéder qu'aux données de ses propres flottes, véhicules et conducteurs. Aucune fuite de données inter-organisations n'est tolérée.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-T02 — Traçabilité des actions :} Toute création, modification ou suppression d'une ressource métier doit être horodatée et associée à l'utilisateur ayant effectué l'action (\texttt{created\_by}, \texttt{updated\_by}, \texttt{deleted\_at}).
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-T03 — Soft Delete :} Les suppressions de ressources critiques (véhicules, conducteurs, contrats) doivent être logiques (champ \texttt{deleted\_at}) et non physiques, pour préserver l'historique.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-T04 — Pagination et filtrage :} Tous les endpoints de listing doivent supporter la pagination (\texttt{page}, \texttt{size}), le tri (\texttt{sort}) et le filtrage par critères métier.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-T05 — Export de données :} Les données tabulaires (rapports, historiques) doivent être exportables en CSV et PDF via des endpoints dédiés.
+\end{reqbox}
+
+\section{Exigences Non-Fonctionnelles}
+
+\begin{longtable}{p{2cm}p{3.5cm}p{7.5cm}}
+\toprule
+\textbf{Code} & \textbf{Catégorie} & \textbf{Exigence} \\
+\midrule
+\endhead
+ENF-01 & Performance & Temps de réponse $\leq$ 200ms pour 95\% des requêtes en charge normale (100 utilisateurs simultanés) \\
+ENF-02 & Disponibilité & Disponibilité $\geq$ 99,5\% (hors maintenance planifiée) \\
+ENF-03 & Scalabilité & Architecture stateless permettant le scaling horizontal (Kubernetes) \\
+ENF-04 & Sécurité & Chiffrement TLS 1.3 en transit, données sensibles chiffrées au repos (AES-256) \\
+ENF-05 & Conformité & Respect du RGPD pour les données personnelles des conducteurs \\
+ENF-06 & Réactivité & Latence GPS $\leq$ 5 secondes entre position réelle et affichage \\
+ENF-07 & Résilience & Circuit Breaker sur tous les appels aux services externes \\
+ENF-08 & Observabilité & Logs structurés (JSON), métriques Prometheus, traces distribuées \\
+ENF-09 & Maintenabilité & Couverture de tests $\geq$ 70\% sur la couche domaine \\
+ENF-10 & Internationalisation & Support multilingue (FR, EN) pour les messages d'erreur et notifications \\
+\bottomrule
+\caption{Exigences non-fonctionnelles du système étendu}
+\end{longtable}
+
+\section{Schéma d'Extension de la Base de Données}
+
+Les nouvelles tables s'intègrent dans le schéma \texttt{fleet} existant. Le tableau suivant liste les 18 nouvelles tables proposées :
+
+\begin{longtable}{p{5cm}p{2.5cm}p{5.5cm}}
+\toprule
+\textbf{Table} & \textbf{Module} & \textbf{Description} \\
+\midrule
+\endhead
+\texttt{fleet.schedules} & Planification & Plannings de service \\
+\texttt{fleet.assignments} & Planification & Affectations véhicule-conducteur-mission \\
+\texttt{fleet.vehicle\_documents} & Documents & Documents légaux des véhicules \\
+\texttt{fleet.driver\_documents} & Documents & Documents légaux des conducteurs \\
+\texttt{fleet.document\_alerts} & Documents & Alertes d'expiration \\
+\texttt{fleet.kpi\_snapshots} & KPI & Instantanés de KPIs périodiques \\
+\texttt{fleet.expense\_categories} & Dépenses & Catégories de dépenses \\
+\texttt{fleet.expenses} & Dépenses & Dépenses opérationnelles \\
+\texttt{fleet.budgets} & Dépenses & Budgets par flotte/période \\
+\texttt{fleet.driver\_scores} & Scoring & Scores de conduite \\
+\texttt{fleet.driving\_events} & Scoring & Événements de conduite (excès vitesse, etc.) \\
+\texttt{fleet.maintenance\_plans} & Maintenance & Plans de maintenance préventive \\
+\texttt{fleet.maintenance\_tasks} & Maintenance & Tâches de maintenance planifiées \\
+\texttt{fleet.clients} & Clients & Clients de l'entreprise \\
+\texttt{fleet.missions} & Clients & Missions/prestations \\
+\texttt{fleet.invoices} & Clients & Factures \\
+\texttt{fleet.alert\_rules} & Alertes & Règles d'alerte configurables \\
+\texttt{fleet.alert\_history} & Alertes & Historique des alertes déclenchées \\
+\bottomrule
+\caption{18 nouvelles tables proposées}
+\end{longtable}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Module 1 — Planification et Ordonnancement}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{tcolorbox}[colback=fleetblue!5, colframe=fleetblue, title={\bfseries Résumé du Module}, fonttitle=\color{white}]
+\textbf{Priorité :} \prio{1} \quad \textbf{Effort :} \effort{Large (3-4 semaines)} \quad \textbf{Impact :} Très élevé
+
+Permet aux gestionnaires de planifier les services, d'affecter les véhicules et conducteurs aux missions, et d'optimiser l'utilisation de la flotte. C'est le module le plus demandé par les entreprises de transport.
+\end{tcolorbox}
+
+\section{Exigences Fonctionnelles}
+
+\begin{reqbox}
+\textbf{EF-PL01 — Création de planning :} Le gestionnaire doit pouvoir créer des plannings hebdomadaires ou mensuels définissant les plages de service de chaque conducteur et véhicule.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-PL02 — Affectation intelligente :} Le système doit proposer automatiquement les affectations optimales en tenant compte de la disponibilité des conducteurs, de l'état des véhicules et des contraintes légales (temps de conduite maximum).
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-PL03 — Détection de conflits :} Le système doit détecter et signaler les conflits d'affectation (même conducteur ou véhicule affecté à deux missions simultanées).
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-PL04 — Suivi en temps réel :} Le gestionnaire doit visualiser en temps réel l'état d'avancement de chaque affectation (En attente, En cours, Terminée, Annulée).
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-PL05 — Historique des affectations :} L'historique complet des affectations doit être consultable avec filtres par période, conducteur, véhicule ou statut.
+\end{reqbox}
+
+\section{Modèle de Données}
+
+\begin{lstlisting}[style=sqlStyle, caption={Tables du module Planification}]
+-- Planning de service (semaine ou mois)
+CREATE TABLE IF NOT EXISTS fleet.schedules (
+    id              UUID PRIMARY KEY,
+    fleet_id        UUID NOT NULL REFERENCES fleet.fleets(id),
+    manager_id      UUID NOT NULL REFERENCES fleet.fleet_managers(user_id),
+    title           VARCHAR(255) NOT NULL,
+    period_type     VARCHAR(20) NOT NULL
+                    CHECK (period_type IN ('DAILY','WEEKLY','MONTHLY')),
+    start_date      DATE NOT NULL,
+    end_date        DATE NOT NULL,
+    status          VARCHAR(20) DEFAULT 'DRAFT'
+                    CHECK (status IN ('DRAFT','PUBLISHED','ARCHIVED')),
+    notes           TEXT,
+    created_at      TIMESTAMP DEFAULT now(),
+    created_by      UUID REFERENCES fleet.fleet_managers(user_id)
+);
+
+-- Affectation : un conducteur + un vehicule pour une plage horaire
+CREATE TABLE IF NOT EXISTS fleet.assignments (
+    id              UUID PRIMARY KEY,
+    schedule_id     UUID REFERENCES fleet.schedules(id) ON DELETE CASCADE,
+    fleet_id        UUID NOT NULL REFERENCES fleet.fleets(id),
+    vehicle_id      UUID NOT NULL REFERENCES fleet.vehicles(id),
+    driver_id       UUID NOT NULL REFERENCES fleet.drivers(user_id),
+    mission_id      UUID,  -- FK vers fleet.missions (Module 7)
+    start_datetime  TIMESTAMP NOT NULL,
+    end_datetime    TIMESTAMP NOT NULL,
+    status          VARCHAR(30) DEFAULT 'PENDING'
+                    CHECK (status IN ('PENDING','IN_PROGRESS',
+                                      'COMPLETED','CANCELLED','NO_SHOW')),
+    start_location  VARCHAR(255),
+    end_location    VARCHAR(255),
+    estimated_km    NUMERIC(10,2),
+    actual_km       NUMERIC(10,2),
+    notes           TEXT,
+    created_at      TIMESTAMP DEFAULT now(),
+    CONSTRAINT chk_dates CHECK (end_datetime > start_datetime)
+);
+
+CREATE INDEX IF NOT EXISTS idx_assignments_vehicle
+    ON fleet.assignments(vehicle_id, start_datetime);
+CREATE INDEX IF NOT EXISTS idx_assignments_driver
+    ON fleet.assignments(driver_id, start_datetime);
+CREATE INDEX IF NOT EXISTS idx_assignments_schedule
+    ON fleet.assignments(schedule_id);
+\end{lstlisting}
+
+\section{Endpoints REST Proposés}
+
+\begin{longtable}{p{1.5cm}p{6.5cm}p{2.5cm}p{2cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle} & \textbf{HTTP} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/schedules} & MANAGER & 201 \\
+GET & \texttt{/api/v1/schedules} & MANAGER & 200 \\
+GET & \texttt{/api/v1/schedules/\{id\}} & MANAGER & 200 \\
+PUT & \texttt{/api/v1/schedules/\{id\}/publish} & MANAGER & 200 \\
+DELETE & \texttt{/api/v1/schedules/\{id\}} & MANAGER & 204 \\
+POST & \texttt{/api/v1/assignments} & MANAGER & 201 \\
+GET & \texttt{/api/v1/assignments} & MANAGER & 200 \\
+GET & \texttt{/api/v1/assignments/conflicts} & MANAGER & 200 \\
+PATCH & \texttt{/api/v1/assignments/\{id\}/status} & MANAGER/DRIVER & 200 \\
+GET & \texttt{/api/v1/assignments/driver/\{id\}/today} & DRIVER & 200 \\
+GET & \texttt{/api/v1/assignments/vehicle/\{id\}/availability} & MANAGER & 200 \\
+\bottomrule
+\caption{Endpoints du module Planification}
+\end{longtable}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Module 2 — Gestion des Contrats et Documents Légaux}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{tcolorbox}[colback=fleeterror!5, colframe=fleeterror, title={\bfseries Résumé du Module}, fonttitle=\color{white}]
+\textbf{Priorité :} \prio{1} \quad \textbf{Effort :} \effort{Medium (2 semaines)} \quad \textbf{Impact :} Critique
+
+La conformité légale est non-négociable dans le transport. Ce module gère les documents des véhicules (assurance, visite technique, carte grise) et des conducteurs (permis, visite médicale), avec alertes automatiques avant expiration.
+\end{tcolorbox}
+
+\section{Exigences Fonctionnelles}
+
+\begin{reqbox}
+\textbf{EF-DOC01 — Gestion documentaire véhicule :} Le système doit gérer les documents légaux obligatoires : assurance, carte grise, visite technique, vignette, autorisation de transport.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-DOC02 — Gestion documentaire conducteur :} Le système doit gérer : permis de conduire (catégories), visite médicale, carte professionnelle, contrat de travail.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-DOC03 — Alertes d'expiration :} Le système doit envoyer des notifications automatiques à J-30, J-15 et J-7 avant l'expiration de tout document. Un document expiré doit bloquer l'affectation du véhicule ou conducteur concerné.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-DOC04 — Stockage des fichiers :} Les documents numérisés (PDF, JPEG) doivent pouvoir être attachés à chaque entrée documentaire.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-DOC05 — Tableau de bord conformité :} Une vue synthétique doit afficher le taux de conformité documentaire de la flotte (nombre de documents valides / total).
+\end{reqbox}
+
+\section{Modèle de Données}
+
+\begin{lstlisting}[style=sqlStyle, caption={Tables du module Documents}]
+-- Documents des vehicules
+CREATE TABLE IF NOT EXISTS fleet.vehicle_documents (
+    id              UUID PRIMARY KEY,
+    vehicle_id      UUID NOT NULL REFERENCES fleet.vehicles(id)
+                    ON DELETE CASCADE,
+    doc_type        VARCHAR(50) NOT NULL
+                    CHECK (doc_type IN (
+                        'INSURANCE',        -- Assurance
+                        'REGISTRATION',     -- Carte grise
+                        'TECHNICAL_CONTROL',-- Visite technique
+                        'TAX_STICKER',      -- Vignette
+                        'TRANSPORT_PERMIT', -- Autorisation transport
+                        'OTHER'
+                    )),
+    doc_number      VARCHAR(100),
+    issuer          VARCHAR(255),
+    issue_date      DATE,
+    expiry_date     DATE NOT NULL,
+    file_url        VARCHAR(500),
+    status          VARCHAR(20) DEFAULT 'VALID'
+                    CHECK (status IN ('VALID','EXPIRING_SOON',
+                                      'EXPIRED','PENDING_RENEWAL')),
+    notes           TEXT,
+    created_at      TIMESTAMP DEFAULT now(),
+    updated_at      TIMESTAMP DEFAULT now()
+);
+
+-- Documents des conducteurs
+CREATE TABLE IF NOT EXISTS fleet.driver_documents (
+    id              UUID PRIMARY KEY,
+    driver_id       UUID NOT NULL REFERENCES fleet.drivers(user_id)
+                    ON DELETE CASCADE,
+    doc_type        VARCHAR(50) NOT NULL
+                    CHECK (doc_type IN (
+                        'DRIVING_LICENSE',  -- Permis de conduire
+                        'MEDICAL_CERT',     -- Visite medicale
+                        'PROFESSIONAL_CARD',-- Carte professionnelle
+                        'WORK_CONTRACT',    -- Contrat de travail
+                        'ID_CARD',          -- Carte nationale
+                        'OTHER'
+                    )),
+    doc_number      VARCHAR(100),
+    license_categories VARCHAR(50), -- Ex: B,C,D pour le permis
+    issuer          VARCHAR(255),
+    issue_date      DATE,
+    expiry_date     DATE,
+    file_url        VARCHAR(500),
+    status          VARCHAR(20) DEFAULT 'VALID'
+                    CHECK (status IN ('VALID','EXPIRING_SOON',
+                                      'EXPIRED','PENDING_RENEWAL')),
+    notes           TEXT,
+    created_at      TIMESTAMP DEFAULT now()
+);
+
+-- Historique des alertes d'expiration envoyees
+CREATE TABLE IF NOT EXISTS fleet.document_alerts (
+    id              UUID PRIMARY KEY,
+    document_id     UUID NOT NULL,
+    document_type   VARCHAR(20) NOT NULL CHECK (document_type IN
+                    ('VEHICLE','DRIVER')),
+    alert_type      VARCHAR(20) NOT NULL CHECK (alert_type IN
+                    ('J30','J15','J7','EXPIRED')),
+    sent_at         TIMESTAMP DEFAULT now(),
+    recipient_id    UUID NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_vdoc_expiry
+    ON fleet.vehicle_documents(expiry_date, status);
+CREATE INDEX IF NOT EXISTS idx_ddoc_expiry
+    ON fleet.driver_documents(expiry_date, status);
+\end{lstlisting}
+
+\section{Endpoints REST Proposés}
+
+\begin{longtable}{p{1.5cm}p{7cm}p{2.5cm}p{1.5cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle} & \textbf{HTTP} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/vehicles/\{id\}/documents} & MANAGER & 201 \\
+GET & \texttt{/api/v1/vehicles/\{id\}/documents} & MANAGER & 200 \\
+PUT & \texttt{/api/v1/vehicles/\{id\}/documents/\{docId\}} & MANAGER & 200 \\
+DELETE & \texttt{/api/v1/vehicles/\{id\}/documents/\{docId\}} & MANAGER & 204 \\
+POST & \texttt{/api/v1/drivers/\{id\}/documents} & MANAGER & 201 \\
+GET & \texttt{/api/v1/drivers/\{id\}/documents} & MANAGER & 200 \\
+GET & \texttt{/api/v1/documents/expiring} & MANAGER & 200 \\
+GET & \texttt{/api/v1/documents/compliance-report} & MANAGER & 200 \\
+GET & \texttt{/api/v1/documents/expired} & MANAGER & 200 \\
+\bottomrule
+\caption{Endpoints du module Documents}
+\end{longtable}
+
+\begin{notebox}
+Un job planifié (Spring \texttt{@Scheduled} ou Quartz) doit s'exécuter chaque nuit pour scanner les documents dont l'expiration approche et déclencher les notifications via le port \texttt{SendNotificationPort} existant. Ce job met également à jour le champ \texttt{status} des documents.
+\end{notebox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Module 3 — Tableau de Bord KPI et Rapports Avancés}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{tcolorbox}[colback=fleetsuccess!5, colframe=fleetsuccess, title={\bfseries Résumé du Module}, fonttitle=\color{white}]
+\textbf{Priorité :} \prio{1} \quad \textbf{Effort :} \effort{Medium (2 semaines)} \quad \textbf{Impact :} Élevé
+
+Les KPIs sont le cœur de la valeur perçue par le gestionnaire. Ce module calcule et stocke les indicateurs de performance clés de la flotte, permettant le pilotage opérationnel et la prise de décision.
+\end{tcolorbox}
+
+\section{KPIs Métier Identifiés}
+
+Un expert en gestion de flotte suit en permanence les indicateurs suivants :
+
+\begin{longtable}{p{4cm}p{4cm}p{5cm}}
+\toprule
+\textbf{KPI} & \textbf{Formule} & \textbf{Interprétation} \\
+\midrule
+\endhead
+\textbf{Taux de disponibilité} & Véhicules disponibles / Total & $\geq$ 85\% = bonne flotte \\
+\textbf{Taux d'utilisation} & Km parcourus / Km potentiels & Optimisation des ressources \\
+\textbf{Coût par km} & Dépenses totales / Km totaux & Rentabilité opérationnelle \\
+\textbf{Consommation L/100km} & Litres / (Km / 100) & Efficacité énergétique \\
+\textbf{MTBF} & Temps entre pannes & Fiabilité de la flotte \\
+\textbf{Coût maintenance/véhicule} & Coût maintenances / Nb véhicules & Vieillissement du parc \\
+\textbf{Taux d'incidents} & Incidents / 1000 km & Sécurité routière \\
+\textbf{Score moyen conducteurs} & Moyenne des scores & Qualité de conduite \\
+\textbf{Taux de conformité docs} & Docs valides / Total docs & Conformité légale \\
+\textbf{Revenus par véhicule} & CA total / Nb véhicules & Rentabilité du parc \\
+\bottomrule
+\caption{KPIs métier de la gestion de flotte}
+\end{longtable}
+
+\section{Exigences Fonctionnelles}
+
+\begin{reqbox}
+\textbf{EF-KPI01 — Calcul périodique :} Les KPIs doivent être calculés et stockés quotidiennement, hebdomadairement et mensuellement via un job planifié.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-KPI02 — Comparaison temporelle :} Le gestionnaire doit pouvoir comparer les KPIs sur deux périodes (ex : ce mois vs mois précédent, cette année vs année précédente).
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-KPI03 — Granularité :} Les KPIs doivent être disponibles au niveau flotte, véhicule individuel et conducteur individuel.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-KPI04 — Export :} Les rapports doivent être exportables en CSV et PDF avec graphiques.
+\end{reqbox}
+
+\section{Modèle de Données}
+
+\begin{lstlisting}[style=sqlStyle, caption={Table des instantanés KPI}]
+-- Stockage des KPIs calcules periodiquement
+CREATE TABLE IF NOT EXISTS fleet.kpi_snapshots (
+    id              UUID PRIMARY KEY,
+    fleet_id        UUID NOT NULL REFERENCES fleet.fleets(id),
+    entity_type     VARCHAR(20) NOT NULL
+                    CHECK (entity_type IN ('FLEET','VEHICLE','DRIVER')),
+    entity_id       UUID NOT NULL,  -- ID de la flotte, vehicule ou conducteur
+    period_type     VARCHAR(10) NOT NULL
+                    CHECK (period_type IN ('DAILY','WEEKLY','MONTHLY')),
+    period_start    DATE NOT NULL,
+    period_end      DATE NOT NULL,
+
+    -- KPIs operationnels
+    total_km            NUMERIC(12,2) DEFAULT 0,
+    total_trips         INT DEFAULT 0,
+    total_driving_hours NUMERIC(8,2) DEFAULT 0,
+    availability_rate   NUMERIC(5,2),  -- Pourcentage
+
+    -- KPIs financiers
+    total_fuel_cost     NUMERIC(12,2) DEFAULT 0,
+    total_fuel_liters   NUMERIC(10,2) DEFAULT 0,
+    total_maintenance_cost NUMERIC(12,2) DEFAULT 0,
+    total_incident_cost NUMERIC(12,2) DEFAULT 0,
+    total_expenses      NUMERIC(12,2) DEFAULT 0,
+    cost_per_km         NUMERIC(8,4),
+    fuel_per_100km      NUMERIC(6,2),
+
+    -- KPIs securite
+    total_incidents     INT DEFAULT 0,
+    incident_rate       NUMERIC(6,4),  -- Incidents / 1000 km
+    avg_driver_score    NUMERIC(5,2),
+
+    -- KPIs conformite
+    doc_compliance_rate NUMERIC(5,2),
+
+    calculated_at   TIMESTAMP DEFAULT now(),
+
+    UNIQUE (entity_type, entity_id, period_type, period_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_kpi_entity
+    ON fleet.kpi_snapshots(entity_type, entity_id, period_start DESC);
+CREATE INDEX IF NOT EXISTS idx_kpi_fleet
+    ON fleet.kpi_snapshots(fleet_id, period_type, period_start DESC);
+\end{lstlisting}
+
+\section{Endpoints REST Proposés}
+
+\begin{longtable}{p{1.5cm}p{7cm}p{2.5cm}p{1.5cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle} & \textbf{HTTP} \\
+\midrule
+\endhead
+GET & \texttt{/api/v1/kpis/fleet/\{id\}} & MANAGER & 200 \\
+GET & \texttt{/api/v1/kpis/vehicle/\{id\}} & MANAGER & 200 \\
+GET & \texttt{/api/v1/kpis/driver/\{id\}} & MANAGER & 200 \\
+GET & \texttt{/api/v1/kpis/fleet/\{id\}/compare} & MANAGER & 200 \\
+GET & \texttt{/api/v1/kpis/fleet/\{id\}/top-vehicles} & MANAGER & 200 \\
+GET & \texttt{/api/v1/kpis/fleet/\{id\}/top-drivers} & MANAGER & 200 \\
+GET & \texttt{/api/v1/kpis/fleet/\{id\}/export} & MANAGER & 200 \\
+POST & \texttt{/api/v1/kpis/recalculate} & ADMIN & 202 \\
+\bottomrule
+\caption{Endpoints du module KPI}
+\end{longtable}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Module 4 — Gestion des Dépenses et Budget}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{tcolorbox}[colback=fleetwarning!5, colframe=fleetwarning, title={\bfseries Résumé du Module}, fonttitle=\color{white}]
+\textbf{Priorité :} \prio{2} \quad \textbf{Effort :} \effort{Medium (2 semaines)} \quad \textbf{Impact :} Élevé
+
+La maîtrise des coûts est l'enjeu numéro un des gestionnaires de flotte. Ce module centralise toutes les dépenses opérationnelles et permet de les comparer à des budgets prévisionnels.
+\end{tcolorbox}
+
+\section{Exigences Fonctionnelles}
+
+\begin{reqbox}
+\textbf{EF-DEP01 — Catégorisation des dépenses :} Toute dépense doit être catégorisée (carburant, maintenance, assurance, péages, amendes, lavage, pneus, etc.) pour permettre une analyse par poste de coût.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-DEP02 — Saisie multi-acteurs :} Les conducteurs peuvent saisir leurs dépenses terrain (péages, lavage) depuis l'application mobile. Le gestionnaire valide ou rejette ces dépenses.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-DEP03 — Gestion budgétaire :} Le gestionnaire doit pouvoir définir des budgets mensuels ou annuels par flotte et par catégorie. Le système doit alerter lorsque 80\% du budget est consommé.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-DEP04 — Justificatifs :} Chaque dépense doit pouvoir être accompagnée d'un justificatif (photo de reçu, facture PDF).
+\end{reqbox}
+
+\section{Modèle de Données}
+
+\begin{lstlisting}[style=sqlStyle, caption={Tables du module Dépenses et Budget}]
+-- Categories de depenses (configurables par le gestionnaire)
+CREATE TABLE IF NOT EXISTS fleet.expense_categories (
+    id          UUID PRIMARY KEY,
+    fleet_id    UUID REFERENCES fleet.fleets(id) ON DELETE CASCADE,
+    name        VARCHAR(100) NOT NULL,
+    code        VARCHAR(30) NOT NULL,
+    color       VARCHAR(7),  -- Code couleur hex pour l'UI
+    is_system   BOOLEAN DEFAULT false,  -- Categories systeme non supprimables
+    UNIQUE (fleet_id, code)
+);
+
+-- Depenses operationnelles
+CREATE TABLE IF NOT EXISTS fleet.expenses (
+    id              UUID PRIMARY KEY,
+    fleet_id        UUID NOT NULL REFERENCES fleet.fleets(id),
+    vehicle_id      UUID REFERENCES fleet.vehicles(id) ON DELETE SET NULL,
+    driver_id       UUID REFERENCES fleet.drivers(user_id) ON DELETE SET NULL,
+    category_id     UUID NOT NULL REFERENCES fleet.expense_categories(id),
+    amount          NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+    currency        VARCHAR(3) DEFAULT 'XAF',
+    expense_date    DATE NOT NULL,
+    description     VARCHAR(500),
+    receipt_url     VARCHAR(500),
+    status          VARCHAR(20) DEFAULT 'PENDING'
+                    CHECK (status IN ('PENDING','APPROVED',
+                                      'REJECTED','REIMBURSED')),
+    submitted_by    UUID NOT NULL,
+    approved_by     UUID,
+    approved_at     TIMESTAMP,
+    rejection_reason TEXT,
+    created_at      TIMESTAMP DEFAULT now()
+);
+
+-- Budgets previsionnels
+CREATE TABLE IF NOT EXISTS fleet.budgets (
+    id              UUID PRIMARY KEY,
+    fleet_id        UUID NOT NULL REFERENCES fleet.fleets(id),
+    category_id     UUID REFERENCES fleet.expense_categories(id),
+    period_type     VARCHAR(10) NOT NULL
+                    CHECK (period_type IN ('MONTHLY','QUARTERLY','ANNUAL')),
+    period_start    DATE NOT NULL,
+    period_end      DATE NOT NULL,
+    amount          NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+    currency        VARCHAR(3) DEFAULT 'XAF',
+    alert_threshold NUMERIC(5,2) DEFAULT 80.0,  -- % de consommation
+    created_at      TIMESTAMP DEFAULT now(),
+    UNIQUE (fleet_id, category_id, period_type, period_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_expenses_fleet_date
+    ON fleet.expenses(fleet_id, expense_date DESC);
+CREATE INDEX IF NOT EXISTS idx_expenses_vehicle
+    ON fleet.expenses(vehicle_id, expense_date DESC);
+\end{lstlisting}
+
+\section{Endpoints REST Proposés}
+
+\begin{longtable}{p{1.5cm}p{7cm}p{2.5cm}p{1.5cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle} & \textbf{HTTP} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/expenses} & MANAGER/DRIVER & 201 \\
+GET & \texttt{/api/v1/expenses} & MANAGER & 200 \\
+PATCH & \texttt{/api/v1/expenses/\{id\}/approve} & MANAGER & 200 \\
+PATCH & \texttt{/api/v1/expenses/\{id\}/reject} & MANAGER & 200 \\
+GET & \texttt{/api/v1/expenses/summary} & MANAGER & 200 \\
+GET & \texttt{/api/v1/expenses/by-category} & MANAGER & 200 \\
+POST & \texttt{/api/v1/budgets} & MANAGER & 201 \\
+GET & \texttt{/api/v1/budgets} & MANAGER & 200 \\
+GET & \texttt{/api/v1/budgets/consumption} & MANAGER & 200 \\
+GET & \texttt{/api/v1/expense-categories} & MANAGER & 200 \\
+POST & \texttt{/api/v1/expense-categories} & MANAGER & 201 \\
+\bottomrule
+\caption{Endpoints du module Dépenses}
+\end{longtable}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Module 5 — Scoring Conducteur et Éco-conduite}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{tcolorbox}[colback=fleetpurple!5, colframe=fleetpurple, title={\bfseries Résumé du Module}, fonttitle=\color{white}]
+\textbf{Priorité :} \prio{2} \quad \textbf{Effort :} \effort{Large (3 semaines)} \quad \textbf{Impact :} Élevé
+
+Le scoring conducteur est un différenciateur majeur. Il permet de réduire les accidents, la consommation de carburant et l'usure des véhicules en analysant le comportement de conduite en temps réel.
+\end{tcolorbox}
+
+\section{Exigences Fonctionnelles}
+
+\begin{reqbox}
+\textbf{EF-SCO01 — Détection d'événements :} Le système doit détecter et enregistrer les événements de conduite dangereux : excès de vitesse, freinage brusque, accélération brutale, virage serré, conduite de nuit prolongée.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-SCO02 — Calcul du score :} Un score de conduite sur 100 doit être calculé pour chaque conducteur à la fin de chaque trajet et agrégé mensuellement. La formule doit être configurable par le gestionnaire.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-SCO03 — Classement :} Un classement des conducteurs par score doit être disponible pour encourager la compétition positive et identifier les conducteurs nécessitant une formation.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-SCO04 — Feedback conducteur :} Le conducteur doit recevoir son score après chaque trajet avec le détail des événements détectés, pour s'améliorer.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-SCO05 — Corrélation coûts :} Le système doit corréler le score de conduite avec les coûts de maintenance et de carburant pour démontrer le ROI de l'éco-conduite.
+\end{reqbox}
+
+\section{Algorithme de Scoring}
+
+Le score est calculé sur 100 points, avec des pénalités par événement :
+
+\begin{longtable}{p{5cm}p{3cm}p{5cm}}
+\toprule
+\textbf{Événement} & \textbf{Pénalité} & \textbf{Seuil de détection} \\
+\midrule
+\endhead
+Excès de vitesse léger & -2 pts & $>$ limite + 10 km/h \\
+Excès de vitesse grave & -5 pts & $>$ limite + 30 km/h \\
+Freinage brusque & -3 pts & Décélération $>$ 0.4g \\
+Accélération brutale & -2 pts & Accélération $>$ 0.3g \\
+Virage serré & -2 pts & Accélération latérale $>$ 0.3g \\
+Conduite nocturne ($>$ 4h) & -3 pts & Entre 22h et 5h \\
+Téléphone au volant & -10 pts & Détection via accéléromètre \\
+\bottomrule
+\caption{Barème de pénalités du scoring conducteur}
+\end{longtable}
+
+\section{Modèle de Données}
+
+\begin{lstlisting}[style=sqlStyle, caption={Tables du module Scoring Conducteur}]
+-- Evenements de conduite detectes pendant un trajet
+CREATE TABLE IF NOT EXISTS fleet.driving_events (
+    id              UUID PRIMARY KEY,
+    trip_id         UUID NOT NULL REFERENCES fleet.trips(id)
+                    ON DELETE CASCADE,
+    driver_id       UUID NOT NULL REFERENCES fleet.drivers(user_id),
+    vehicle_id      UUID NOT NULL REFERENCES fleet.vehicles(id),
+    event_type      VARCHAR(50) NOT NULL CHECK (event_type IN (
+                        'SPEEDING_MINOR',
+                        'SPEEDING_MAJOR',
+                        'HARSH_BRAKING',
+                        'HARSH_ACCELERATION',
+                        'SHARP_CORNERING',
+                        'NIGHT_DRIVING',
+                        'PHONE_USAGE',
+                        'IDLE_ENGINE'
+                    )),
+    severity        VARCHAR(20) DEFAULT 'MEDIUM'
+                    CHECK (severity IN ('LOW','MEDIUM','HIGH')),
+    detected_at     TIMESTAMP NOT NULL,
+    longitude       NUMERIC(10,7),
+    latitude        NUMERIC(10,7),
+    speed_kmh       NUMERIC(6,2),
+    speed_limit_kmh NUMERIC(6,2),
+    penalty_points  NUMERIC(4,2) NOT NULL DEFAULT 0,
+    details         JSONB  -- Donnees brutes de l'accelerometre
+);
+
+-- Scores de conduite calcules par trajet et par periode
+CREATE TABLE IF NOT EXISTS fleet.driver_scores (
+    id              UUID PRIMARY KEY,
+    driver_id       UUID NOT NULL REFERENCES fleet.drivers(user_id),
+    fleet_id        UUID NOT NULL REFERENCES fleet.fleets(id),
+    score_type      VARCHAR(20) NOT NULL
+                    CHECK (score_type IN ('TRIP','DAILY',
+                                          'WEEKLY','MONTHLY')),
+    reference_id    UUID,  -- trip_id si TRIP, null sinon
+    period_start    DATE NOT NULL,
+    period_end      DATE NOT NULL,
+    base_score      NUMERIC(5,2) DEFAULT 100,
+    total_penalty   NUMERIC(5,2) DEFAULT 0,
+    final_score     NUMERIC(5,2) NOT NULL,  -- base - penalites
+    total_km        NUMERIC(10,2),
+    event_count     INT DEFAULT 0,
+    rank_in_fleet   INT,  -- Classement dans la flotte
+    calculated_at   TIMESTAMP DEFAULT now(),
+    UNIQUE (driver_id, score_type, period_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_driving_events_trip
+    ON fleet.driving_events(trip_id);
+CREATE INDEX IF NOT EXISTS idx_driving_events_driver
+    ON fleet.driving_events(driver_id, detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_driver_scores_fleet
+    ON fleet.driver_scores(fleet_id, score_type, period_start DESC);
+\end{lstlisting}
+
+\section{Endpoints REST Proposés}
+
+\begin{longtable}{p{1.5cm}p{7cm}p{2.5cm}p{1.5cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle} & \textbf{HTTP} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/trips/\{id\}/driving-events} & DRIVER & 201 \\
+GET & \texttt{/api/v1/drivers/\{id\}/score} & MANAGER/DRIVER & 200 \\
+GET & \texttt{/api/v1/drivers/\{id\}/score/history} & MANAGER & 200 \\
+GET & \texttt{/api/v1/drivers/\{id\}/driving-events} & MANAGER & 200 \\
+GET & \texttt{/api/v1/fleets/\{id\}/driver-ranking} & MANAGER & 200 \\
+GET & \texttt{/api/v1/fleets/\{id\}/score-summary} & MANAGER & 200 \\
+\bottomrule
+\caption{Endpoints du module Scoring}
+\end{longtable}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Module 6 — Maintenance Préventive Intelligente}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{tcolorbox}[colback=fleetcyan!5, colframe=fleetcyan, title={\bfseries Résumé du Module}, fonttitle=\color{white}]
+\textbf{Priorité :} \prio{2} \quad \textbf{Effort :} \effort{Medium (2 semaines)} \quad \textbf{Impact :} Élevé
+
+La maintenance préventive réduit les pannes de 40\% et les coûts de maintenance de 25\% selon les études sectorielles. Ce module planifie automatiquement les maintenances selon le kilométrage, le temps ou les données de télémétrie.
+\end{tcolorbox}
+
+\section{Exigences Fonctionnelles}
+
+\begin{reqbox}
+\textbf{EF-MP01 — Plans de maintenance :} Le gestionnaire doit pouvoir définir des plans de maintenance pour chaque type de véhicule, spécifiant les tâches à effectuer selon des déclencheurs (kilométrage, durée, date calendaire).
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-MP02 — Déclenchement automatique :} Le système doit créer automatiquement des tâches de maintenance lorsque les seuils sont atteints (ex : vidange tous les 10 000 km ou 6 mois).
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-MP03 — Alertes préventives :} Des notifications doivent être envoyées au gestionnaire et au conducteur lorsqu'une maintenance approche (à 500 km ou 15 jours du seuil).
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-MP04 — Suivi des tâches :} Chaque tâche de maintenance doit suivre un cycle de vie : Planifiée → En cours → Terminée → Annulée.
+\end{reqbox}
+
+\section{Modèle de Données}
+
+\begin{lstlisting}[style=sqlStyle, caption={Tables du module Maintenance Préventive}]
+-- Plans de maintenance (modeles reutilisables)
+CREATE TABLE IF NOT EXISTS fleet.maintenance_plans (
+    id              UUID PRIMARY KEY,
+    fleet_id        UUID NOT NULL REFERENCES fleet.fleets(id),
+    vehicle_type_id UUID REFERENCES fleet.vehicle_types(id),
+    name            VARCHAR(255) NOT NULL,
+    description     TEXT,
+    is_active       BOOLEAN DEFAULT true,
+    created_at      TIMESTAMP DEFAULT now()
+);
+
+-- Taches dans un plan de maintenance
+CREATE TABLE IF NOT EXISTS fleet.maintenance_tasks (
+    id              UUID PRIMARY KEY,
+    plan_id         UUID NOT NULL REFERENCES fleet.maintenance_plans(id)
+                    ON DELETE CASCADE,
+    vehicle_id      UUID REFERENCES fleet.vehicles(id) ON DELETE CASCADE,
+    task_name       VARCHAR(255) NOT NULL,
+    task_type       VARCHAR(50) NOT NULL CHECK (task_type IN (
+                        'OIL_CHANGE',       -- Vidange
+                        'TIRE_ROTATION',    -- Rotation pneus
+                        'BRAKE_CHECK',      -- Controle freins
+                        'FILTER_CHANGE',    -- Changement filtres
+                        'BELT_CHECK',       -- Controle courroies
+                        'BATTERY_CHECK',    -- Controle batterie
+                        'FULL_SERVICE',     -- Revision complete
+                        'CUSTOM'            -- Personnalise
+                    )),
+    trigger_type    VARCHAR(20) NOT NULL
+                    CHECK (trigger_type IN ('KM','DAYS','DATE')),
+    trigger_value   NUMERIC(10,2) NOT NULL,  -- Km ou jours
+    last_done_km    NUMERIC(12,2),
+    last_done_date  DATE,
+    next_due_km     NUMERIC(12,2),
+    next_due_date   DATE,
+    status          VARCHAR(20) DEFAULT 'SCHEDULED'
+                    CHECK (status IN ('SCHEDULED','OVERDUE',
+                                      'IN_PROGRESS','DONE','CANCELLED')),
+    estimated_cost  NUMERIC(10,2),
+    actual_cost     NUMERIC(10,2),
+    assigned_to     VARCHAR(255),  -- Garage ou technicien
+    completed_at    TIMESTAMP,
+    notes           TEXT,
+    created_at      TIMESTAMP DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_maint_tasks_vehicle
+    ON fleet.maintenance_tasks(vehicle_id, status);
+CREATE INDEX IF NOT EXISTS idx_maint_tasks_due
+    ON fleet.maintenance_tasks(next_due_date, status);
+\end{lstlisting}
+
+\section{Endpoints REST Proposés}
+
+\begin{longtable}{p{1.5cm}p{7cm}p{2.5cm}p{1.5cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle} & \textbf{HTTP} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/maintenance-plans} & MANAGER & 201 \\
+GET & \texttt{/api/v1/maintenance-plans} & MANAGER & 200 \\
+POST & \texttt{/api/v1/maintenance-tasks} & MANAGER & 201 \\
+GET & \texttt{/api/v1/maintenance-tasks} & MANAGER & 200 \\
+GET & \texttt{/api/v1/maintenance-tasks/overdue} & MANAGER & 200 \\
+GET & \texttt{/api/v1/maintenance-tasks/upcoming} & MANAGER & 200 \\
+PATCH & \texttt{/api/v1/maintenance-tasks/\{id\}/complete} & MANAGER & 200 \\
+GET & \texttt{/api/v1/vehicles/\{id\}/maintenance-schedule} & MANAGER & 200 \\
+\bottomrule
+\caption{Endpoints du module Maintenance Préventive}
+\end{longtable}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Module 7 — Gestion des Clients et Missions}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{tcolorbox}[colback=fleetsuccess!5, colframe=fleetsuccess, title={\bfseries Résumé du Module}, fonttitle=\color{white}]
+\textbf{Priorité :} \prio{3} \quad \textbf{Effort :} \effort{Large (3-4 semaines)} \quad \textbf{Impact :} Très élevé (monétisation)
+
+Ce module transforme FleetMan d'un outil de supervision interne en une plateforme de gestion commerciale complète. Il permet de gérer les clients, les missions de transport et la facturation, ouvrant la voie à la monétisation directe de la plateforme.
+\end{tcolorbox}
+
+\section{Exigences Fonctionnelles}
+
+\begin{reqbox}
+\textbf{EF-CLI01 — Gestion du portefeuille clients :} Le gestionnaire doit pouvoir créer et gérer ses clients (entreprises ou particuliers) avec leurs coordonnées, contrats-cadres et historique de prestations.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-CLI02 — Création de missions :} Une mission représente une prestation de transport commandée par un client. Elle doit inclure : client, type de transport, point de départ, point d'arrivée, date/heure, véhicule requis, tarif.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-CLI03 — Affectation automatique :} Lors de la création d'une mission, le système doit proposer les véhicules et conducteurs disponibles correspondant aux critères (type, capacité, zone géographique).
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-CLI04 — Facturation :} À la clôture d'une mission, le système doit générer automatiquement une facture basée sur le tarif convenu, la distance réelle parcourue et les éventuels suppléments.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-CLI05 — Suivi client :} Le client doit pouvoir suivre sa mission en temps réel via un lien de suivi public (sans authentification), affichant la position du véhicule et l'heure d'arrivée estimée.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-CLI06 — Historique et statistiques :} L'historique complet des missions par client doit être disponible avec les KPIs associés (CA généré, nombre de missions, distance totale).
+\end{reqbox}
+
+\section{Modèle de Données}
+
+\begin{lstlisting}[style=sqlStyle, caption={Tables du module Clients et Missions}]
+-- Clients de l'entreprise de transport
+CREATE TABLE IF NOT EXISTS fleet.clients (
+    id              UUID PRIMARY KEY,
+    fleet_id        UUID NOT NULL REFERENCES fleet.fleets(id),
+    client_type     VARCHAR(20) NOT NULL
+                    CHECK (client_type IN ('INDIVIDUAL','COMPANY')),
+    name            VARCHAR(255) NOT NULL,
+    email           VARCHAR(255),
+    phone           VARCHAR(50),
+    address         TEXT,
+    city            VARCHAR(100),
+    tax_number      VARCHAR(100),  -- Numero contribuable
+    contact_person  VARCHAR(255),  -- Pour les entreprises
+    notes           TEXT,
+    is_active       BOOLEAN DEFAULT true,
+    created_at      TIMESTAMP DEFAULT now()
+);
+
+-- Missions de transport
+CREATE TABLE IF NOT EXISTS fleet.missions (
+    id              UUID PRIMARY KEY,
+    fleet_id        UUID NOT NULL REFERENCES fleet.fleets(id),
+    client_id       UUID NOT NULL REFERENCES fleet.clients(id),
+    assignment_id   UUID REFERENCES fleet.assignments(id),
+    mission_ref     VARCHAR(50) UNIQUE NOT NULL,  -- Reference unique
+    mission_type    VARCHAR(50) NOT NULL CHECK (mission_type IN (
+                        'FREIGHT',      -- Transport de marchandises
+                        'PASSENGER',    -- Transport de personnes
+                        'SCHOOL_RUN',   -- Transport scolaire
+                        'MEDICAL',      -- Transport medical
+                        'VIP',          -- Transport VIP
+                        'DELIVERY',     -- Livraison
+                        'OTHER'
+                    )),
+    status          VARCHAR(30) DEFAULT 'PENDING' CHECK (status IN (
+                        'PENDING',          -- En attente de confirmation
+                        'CONFIRMED',        -- Confirmee
+                        'IN_PROGRESS',      -- En cours
+                        'COMPLETED',        -- Terminee
+                        'CANCELLED',        -- Annulee
+                        'DISPUTED'          -- En litige
+                    )),
+    -- Localisation
+    origin_address      VARCHAR(500) NOT NULL,
+    origin_lat          NUMERIC(10,7),
+    origin_lng          NUMERIC(10,7),
+    destination_address VARCHAR(500) NOT NULL,
+    destination_lat     NUMERIC(10,7),
+    destination_lng     NUMERIC(10,7),
+    -- Planification
+    scheduled_start     TIMESTAMP NOT NULL,
+    scheduled_end       TIMESTAMP,
+    actual_start        TIMESTAMP,
+    actual_end          TIMESTAMP,
+    -- Tarification
+    base_rate           NUMERIC(12,2),
+    rate_type           VARCHAR(20) CHECK (rate_type IN
+                        ('FIXED','PER_KM','HOURLY')),
+    estimated_km        NUMERIC(10,2),
+    actual_km           NUMERIC(10,2),
+    estimated_amount    NUMERIC(12,2),
+    actual_amount       NUMERIC(12,2),
+    currency            VARCHAR(3) DEFAULT 'XAF',
+    -- Suivi public
+    tracking_token      VARCHAR(100) UNIQUE,  -- Token pour lien public
+    tracking_expires_at TIMESTAMP,
+    -- Metadata
+    cargo_description   TEXT,
+    cargo_weight_kg     NUMERIC(8,2),
+    passenger_count     INT,
+    special_instructions TEXT,
+    cancellation_reason TEXT,
+    created_at          TIMESTAMP DEFAULT now()
+);
+
+-- Factures
+CREATE TABLE IF NOT EXISTS fleet.invoices (
+    id              UUID PRIMARY KEY,
+    fleet_id        UUID NOT NULL REFERENCES fleet.fleets(id),
+    client_id       UUID NOT NULL REFERENCES fleet.clients(id),
+    mission_id      UUID REFERENCES fleet.missions(id),
+    invoice_number  VARCHAR(50) UNIQUE NOT NULL,
+    invoice_date    DATE NOT NULL DEFAULT CURRENT_DATE,
+    due_date        DATE NOT NULL,
+    status          VARCHAR(20) DEFAULT 'DRAFT' CHECK (status IN (
+                        'DRAFT','SENT','PAID','OVERDUE','CANCELLED'
+                    )),
+    subtotal        NUMERIC(12,2) NOT NULL,
+    tax_rate        NUMERIC(5,2) DEFAULT 19.25,  -- TVA Cameroun
+    tax_amount      NUMERIC(12,2),
+    total_amount    NUMERIC(12,2) NOT NULL,
+    currency        VARCHAR(3) DEFAULT 'XAF',
+    payment_method  VARCHAR(50),
+    paid_at         TIMESTAMP,
+    notes           TEXT,
+    pdf_url         VARCHAR(500),
+    created_at      TIMESTAMP DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_missions_client
+    ON fleet.missions(client_id, scheduled_start DESC);
+CREATE INDEX IF NOT EXISTS idx_missions_fleet_status
+    ON fleet.missions(fleet_id, status, scheduled_start DESC);
+CREATE INDEX IF NOT EXISTS idx_missions_tracking
+    ON fleet.missions(tracking_token) WHERE tracking_token IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_invoices_client
+    ON fleet.invoices(client_id, invoice_date DESC);
+\end{lstlisting}
+
+\section{Endpoints REST Proposés}
+
+\begin{longtable}{p{1.5cm}p{7cm}p{2.5cm}p{1.5cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle} & \textbf{HTTP} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/clients} & MANAGER & 201 \\
+GET & \texttt{/api/v1/clients} & MANAGER & 200 \\
+GET & \texttt{/api/v1/clients/\{id\}} & MANAGER & 200 \\
+PUT & \texttt{/api/v1/clients/\{id\}} & MANAGER & 200 \\
+GET & \texttt{/api/v1/clients/\{id\}/missions} & MANAGER & 200 \\
+GET & \texttt{/api/v1/clients/\{id\}/stats} & MANAGER & 200 \\
+POST & \texttt{/api/v1/missions} & MANAGER & 201 \\
+GET & \texttt{/api/v1/missions} & MANAGER & 200 \\
+GET & \texttt{/api/v1/missions/\{id\}} & MANAGER & 200 \\
+PATCH & \texttt{/api/v1/missions/\{id\}/status} & MANAGER & 200 \\
+GET & \texttt{/api/v1/missions/\{id\}/available-vehicles} & MANAGER & 200 \\
+GET & \texttt{/api/v1/track/\{token\}} & PUBLIC & 200 \\
+POST & \texttt{/api/v1/invoices/generate/\{missionId\}} & MANAGER & 201 \\
+GET & \texttt{/api/v1/invoices} & MANAGER & 200 \\
+PATCH & \texttt{/api/v1/invoices/\{id\}/mark-paid} & MANAGER & 200 \\
+GET & \texttt{/api/v1/invoices/\{id\}/pdf} & MANAGER & 200 \\
+\bottomrule
+\caption{Endpoints du module Clients et Missions}
+\end{longtable}
+
+\begin{notebox}
+L'endpoint \texttt{GET /api/v1/track/\{token\}} est public (sans authentification). Il retourne uniquement la position en temps réel du véhicule et l'heure d'arrivée estimée, sans exposer de données sensibles. Le token expire automatiquement à la fin de la mission.
+\end{notebox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Module 8 — Alertes et Règles Métier Configurables}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{tcolorbox}[colback=fleeterror!5, colframe=fleeterror, title={\bfseries Résumé du Module}, fonttitle=\color{white}]
+\textbf{Priorité :} \prio{3} \quad \textbf{Effort :} \effort{Small (1 semaine)} \quad \textbf{Impact :} Moyen
+
+Ce module permet aux gestionnaires de configurer leurs propres règles d'alerte sans intervention technique. Il automatise la supervision et réduit la charge cognitive du gestionnaire.
+\end{tcolorbox}
+
+\section{Exigences Fonctionnelles}
+
+\begin{reqbox}
+\textbf{EF-ALR01 — Règles configurables :} Le gestionnaire doit pouvoir créer des règles d'alerte personnalisées basées sur des seuils métier : vitesse maximale, kilométrage journalier, niveau carburant minimum, durée de conduite maximale.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-ALR02 — Canaux de notification :} Chaque règle doit permettre de configurer les canaux de notification : push mobile, email, SMS, webhook.
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-ALR03 — Historique des alertes :} Toutes les alertes déclenchées doivent être conservées avec leur contexte (valeur mesurée, seuil configuré, véhicule/conducteur concerné).
+\end{reqbox}
+
+\begin{reqbox}
+\textbf{EF-ALR04 — Acquittement :} Le gestionnaire doit pouvoir acquitter une alerte pour indiquer qu'il en a pris connaissance et l'action entreprise.
+\end{reqbox}
+
+\section{Modèle de Données}
+
+\begin{lstlisting}[style=sqlStyle, caption={Tables du module Alertes et Règles}]
+-- Regles d'alerte configurables par le gestionnaire
+CREATE TABLE IF NOT EXISTS fleet.alert_rules (
+    id              UUID PRIMARY KEY,
+    fleet_id        UUID NOT NULL REFERENCES fleet.fleets(id),
+    name            VARCHAR(255) NOT NULL,
+    description     TEXT,
+    rule_type       VARCHAR(50) NOT NULL CHECK (rule_type IN (
+                        'SPEED_LIMIT',          -- Vitesse max
+                        'DAILY_KM_LIMIT',       -- Km journaliers max
+                        'FUEL_LEVEL_LOW',       -- Carburant bas
+                        'DRIVING_HOURS_MAX',    -- Heures conduite max
+                        'IDLE_TIME_MAX',        -- Temps moteur tourne
+                        'GEOFENCE_VIOLATION',   -- Sortie de zone
+                        'MAINTENANCE_OVERDUE',  -- Maintenance en retard
+                        'DOCUMENT_EXPIRING',    -- Document expirant
+                        'INCIDENT_CRITICAL',    -- Incident critique
+                        'BUDGET_THRESHOLD'      -- Seuil budget
+                    )),
+    threshold_value NUMERIC(12,2) NOT NULL,
+    threshold_unit  VARCHAR(20),  -- km/h, km, %, h, jours
+    applies_to      VARCHAR(20) DEFAULT 'ALL'
+                    CHECK (applies_to IN ('ALL','VEHICLE','DRIVER')),
+    entity_id       UUID,  -- ID specifique si applies_to != ALL
+    channels        VARCHAR(100) DEFAULT 'PUSH',  -- PUSH,EMAIL,SMS
+    is_active       BOOLEAN DEFAULT true,
+    cooldown_minutes INT DEFAULT 60,  -- Delai entre deux alertes identiques
+    created_at      TIMESTAMP DEFAULT now()
+);
+
+-- Historique des alertes declenchees
+CREATE TABLE IF NOT EXISTS fleet.alert_history (
+    id              UUID PRIMARY KEY,
+    rule_id         UUID NOT NULL REFERENCES fleet.alert_rules(id)
+                    ON DELETE CASCADE,
+    fleet_id        UUID NOT NULL REFERENCES fleet.fleets(id),
+    vehicle_id      UUID REFERENCES fleet.vehicles(id),
+    driver_id       UUID REFERENCES fleet.drivers(user_id),
+    triggered_at    TIMESTAMP NOT NULL DEFAULT now(),
+    measured_value  NUMERIC(12,2),
+    threshold_value NUMERIC(12,2),
+    context_data    JSONB,  -- Donnees contextuelles (position, etc.)
+    status          VARCHAR(20) DEFAULT 'OPEN'
+                    CHECK (status IN ('OPEN','ACKNOWLEDGED','RESOLVED')),
+    acknowledged_by UUID,
+    acknowledged_at TIMESTAMP,
+    action_taken    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_rules_fleet
+    ON fleet.alert_rules(fleet_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_alert_history_fleet
+    ON fleet.alert_history(fleet_id, triggered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_alert_history_open
+    ON fleet.alert_history(fleet_id, status)
+    WHERE status = 'OPEN';
+\end{lstlisting}
+
+\section{Endpoints REST Proposés}
+
+\begin{longtable}{p{1.5cm}p{7cm}p{2.5cm}p{1.5cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Rôle} & \textbf{HTTP} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/alert-rules} & MANAGER & 201 \\
+GET & \texttt{/api/v1/alert-rules} & MANAGER & 200 \\
+PUT & \texttt{/api/v1/alert-rules/\{id\}} & MANAGER & 200 \\
+PATCH & \texttt{/api/v1/alert-rules/\{id\}/toggle} & MANAGER & 200 \\
+DELETE & \texttt{/api/v1/alert-rules/\{id\}} & MANAGER & 204 \\
+GET & \texttt{/api/v1/alerts} & MANAGER & 200 \\
+GET & \texttt{/api/v1/alerts/open} & MANAGER & 200 \\
+PATCH & \texttt{/api/v1/alerts/\{id\}/acknowledge} & MANAGER & 200 \\
+GET & \texttt{/api/v1/alerts/stats} & MANAGER & 200 \\
+\bottomrule
+\caption{Endpoints du module Alertes}
+\end{longtable}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Plan d'Implémentation Détaillé}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Principes Directeurs}
+
+Avant de détailler le plan, voici les principes qui guident l'ordre d'implémentation :
+
+\begin{enumerate}[leftmargin=2cm]
+  \item \textbf{Valeur métier d'abord} : Les modules qui débloquent la commercialisation (Documents, KPIs) passent avant les modules d'enrichissement.
+  \item \textbf{Dépendances techniques} : Certains modules dépendent d'autres (Missions dépend de Planification, Scoring dépend des Trajets).
+  \item \textbf{Incrémentalité} : Chaque sprint livre un module fonctionnel et testable de bout en bout.
+  \item \textbf{Architecture hexagonale} : Chaque module suit les 6 phases définies dans le projet existant (Domaine → Ports → Services → Persistance → API → Intégration).
+\end{enumerate}
+
+\section{Roadmap par Sprints}
+
+\subsection{Sprint 1 — Fondations Transversales (Semaine 1-2)}
+
+\begin{tcolorbox}[colback=fleetdark!5, colframe=fleetdark, title={\bfseries Sprint 1 — Prérequis Techniques}]
+\textbf{Objectif :} Mettre en place les fondations techniques nécessaires à tous les modules.
+
+\textbf{Tâches :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Ajouter le support de la \textbf{pagination} sur tous les endpoints existants (\texttt{Pageable} réactif avec \texttt{PageRequest})
+  \item Implémenter le \textbf{Soft Delete} : ajouter \texttt{deleted\_at} aux tables critiques et filtrer dans les repositories
+  \item Créer le \textbf{job planifié} de base (Spring \texttt{@Scheduled} ou Quartz) pour les tâches nocturnes
+  \item Ajouter le support \textbf{multilingue} (FR/EN) pour les messages d'erreur
+  \item Créer l'infrastructure d'\textbf{export CSV} réutilisable
+  \item Migration Liquibase : \texttt{011-add-soft-delete.sql}
+\end{itemize}
+
+\textbf{Livrable :} Infrastructure technique prête pour tous les modules suivants.
+\end{tcolorbox}
+
+\subsection{Sprint 2 — Module Documents Légaux (Semaine 3-4)}
+
+\begin{tcolorbox}[colback=fleeterror!5, colframe=fleeterror, title={\bfseries Sprint 2 — Documents et Conformité}]
+\textbf{Objectif :} Gestion complète des documents légaux avec alertes d'expiration.
+
+\textbf{Phase 1 — Domaine (2 jours) :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Créer \texttt{VehicleDocument} et \texttt{DriverDocument} (classes domaine)
+  \item Créer \texttt{DocumentException} avec codes DOC\_001 à DOC\_010
+  \item Créer \texttt{ManageDocumentUseCase} (port entrant)
+  \item Créer \texttt{DocumentPersistencePort} (port sortant)
+\end{itemize}
+
+\textbf{Phase 2 — Infrastructure (3 jours) :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Migration Liquibase : \texttt{012-document-tables.sql}
+  \item Entités R2DBC : \texttt{VehicleDocumentEntity}, \texttt{DriverDocumentEntity}
+  \item Repositories et adapters de persistance
+  \item \texttt{DocumentController} avec 9 endpoints
+\end{itemize}
+
+\textbf{Phase 3 — Job planifié (1 jour) :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item \texttt{DocumentExpiryCheckJob} : scan nocturne, mise à jour des statuts, envoi notifications J-30/J-15/J-7
+\end{itemize}
+
+\textbf{Livrable :} Conformité documentaire complète avec alertes automatiques.
+\end{tcolorbox}
+
+\subsection{Sprint 3 — Module KPI et Rapports (Semaine 5-6)}
+
+\begin{tcolorbox}[colback=fleetsuccess!5, colframe=fleetsuccess, title={\bfseries Sprint 3 — Tableau de Bord KPI}]
+\textbf{Objectif :} Calcul et exposition des KPIs métier de la flotte.
+
+\textbf{Phase 1 — Domaine (1 jour) :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Créer \texttt{KpiSnapshot} (record domaine)
+  \item Créer \texttt{KpiUseCase} avec méthodes de calcul et de requête
+  \item Créer \texttt{KpiPersistencePort}
+\end{itemize}
+
+\textbf{Phase 2 — Infrastructure (3 jours) :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Migration Liquibase : \texttt{013-kpi-tables.sql}
+  \item \texttt{KpiSnapshotEntity} et \texttt{KpiR2dbcRepository}
+  \item \texttt{KpiCalculationService} : agrégation des données existantes (trajets, maintenances, incidents, carburant)
+  \item \texttt{KpiController} avec 8 endpoints
+\end{itemize}
+
+\textbf{Phase 3 — Job planifié (1 jour) :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item \texttt{KpiCalculationJob} : calcul quotidien, hebdomadaire et mensuel
+\end{itemize}
+
+\textbf{Livrable :} Dashboard KPI complet avec comparaisons temporelles.
+\end{tcolorbox}
+
+\subsection{Sprint 4 — Module Dépenses et Budget (Semaine 7-8)}
+
+\begin{tcolorbox}[colback=fleetwarning!5, colframe=fleetwarning, title={\bfseries Sprint 4 — Gestion Financière}]
+\textbf{Objectif :} Centralisation des dépenses et pilotage budgétaire.
+
+\textbf{Tâches (10 jours) :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Domaine : \texttt{Expense}, \texttt{Budget}, \texttt{ExpenseCategory} + ports
+  \item Migration Liquibase : \texttt{014-expense-tables.sql}
+  \item Service : \texttt{ExpenseService} avec workflow d'approbation (PENDING → APPROVED/REJECTED)
+  \item Service : \texttt{BudgetService} avec calcul de consommation en temps réel
+  \item Job : \texttt{BudgetAlertJob} — alerte à 80\% de consommation
+  \item Controllers : \texttt{ExpenseController}, \texttt{BudgetController}
+  \item Intégration : lier les dépenses carburant et maintenance aux \texttt{expenses} automatiquement
+\end{itemize}
+
+\textbf{Livrable :} Maîtrise complète des coûts d'exploitation.
+\end{tcolorbox}
+
+\subsection{Sprint 5 — Module Planification (Semaine 9-11)}
+
+\begin{tcolorbox}[colback=fleetblue!5, colframe=fleetblue, title={\bfseries Sprint 5 — Planification et Ordonnancement}]
+\textbf{Objectif :} Planification des services et affectations véhicule-conducteur.
+
+\textbf{Tâches (15 jours) :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Domaine : \texttt{Schedule}, \texttt{Assignment} + ports + \texttt{PlanningException}
+  \item Migration Liquibase : \texttt{015-planning-tables.sql}
+  \item Service : \texttt{ScheduleService} avec publication/archivage
+  \item Service : \texttt{AssignmentService} avec détection de conflits (requête de chevauchement temporel)
+  \item Algorithme de suggestion d'affectation (disponibilité véhicule + conducteur)
+  \item Controllers : \texttt{ScheduleController}, \texttt{AssignmentController}
+  \item Intégration : lier les \texttt{assignments} aux \texttt{trips} existants
+\end{itemize}
+
+\textbf{Livrable :} Planification opérationnelle complète avec détection de conflits.
+\end{tcolorbox}
+
+\subsection{Sprint 6 — Module Scoring Conducteur (Semaine 12-14)}
+
+\begin{tcolorbox}[colback=fleetpurple!5, colframe=fleetpurple, title={\bfseries Sprint 6 — Scoring et Éco-conduite}]
+\textbf{Objectif :} Analyse comportementale de la conduite et scoring.
+
+\textbf{Tâches (15 jours) :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Domaine : \texttt{DrivingEvent}, \texttt{DriverScore} + ports
+  \item Migration Liquibase : \texttt{016-scoring-tables.sql}
+  \item Service : \texttt{DrivingEventService} — traitement des événements en temps réel
+  \item Service : \texttt{ScoringService} — calcul du score par trajet et agrégation périodique
+  \item Algorithme de scoring configurable (barème paramétrable)
+  \item Enrichissement de l'endpoint \texttt{POST /trips/\{id\}/telemetry} pour détecter les événements
+  \item Controllers : \texttt{ScoringController}
+  \item Job : \texttt{ScoreAggregationJob} — calcul hebdomadaire et mensuel + classement
+\end{itemize}
+
+\textbf{Livrable :} Scoring conducteur complet avec classement et feedback.
+\end{tcolorbox}
+
+\subsection{Sprint 7 — Module Maintenance Préventive (Semaine 15-16)}
+
+\begin{tcolorbox}[colback=fleetcyan!5, colframe=fleetcyan, title={\bfseries Sprint 7 — Maintenance Préventive}]
+\textbf{Objectif :} Planification automatique des maintenances préventives.
+
+\textbf{Tâches (10 jours) :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Domaine : \texttt{MaintenancePlan}, \texttt{MaintenanceTask} + ports
+  \item Migration Liquibase : \texttt{017-preventive-maintenance.sql}
+  \item Service : \texttt{MaintenancePlanService} + \texttt{MaintenanceTaskService}
+  \item Algorithme de calcul des prochaines échéances (km ou date)
+  \item Job : \texttt{MaintenanceCheckJob} — vérification quotidienne des seuils, création automatique des tâches
+  \item Intégration : mise à jour des \texttt{next\_due\_km} et \texttt{next\_due\_date} après chaque maintenance réelle
+  \item Controllers : \texttt{MaintenancePlanController}, \texttt{MaintenanceTaskController}
+\end{itemize}
+
+\textbf{Livrable :} Zéro panne surprise grâce à la maintenance préventive.
+\end{tcolorbox}
+
+\subsection{Sprint 8 — Module Clients et Missions (Semaine 17-20)}
+
+\begin{tcolorbox}[colback=fleetsuccess!5, colframe=fleetsuccess, title={\bfseries Sprint 8 — Clients, Missions et Facturation}]
+\textbf{Objectif :} Gestion commerciale complète avec facturation.
+
+\textbf{Tâches (20 jours) :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Domaine : \texttt{Client}, \texttt{Mission}, \texttt{Invoice} + ports
+  \item Migration Liquibase : \texttt{018-clients-missions.sql}
+  \item Service : \texttt{ClientService}, \texttt{MissionService}, \texttt{InvoiceService}
+  \item Génération de token de suivi public (UUID + expiration)
+  \item Endpoint public \texttt{/track/\{token\}} sans authentification
+  \item Génération PDF des factures (iText ou JasperReports)
+  \item Intégration avec \texttt{assignments} (Sprint 5) pour l'affectation automatique
+  \item Controllers : \texttt{ClientController}, \texttt{MissionController}, \texttt{InvoiceController}
+\end{itemize}
+
+\textbf{Livrable :} Plateforme commerciale complète avec suivi client en temps réel.
+\end{tcolorbox}
+
+\subsection{Sprint 9 — Module Alertes Configurables (Semaine 21)}
+
+\begin{tcolorbox}[colback=fleeterror!5, colframe=fleeterror, title={\bfseries Sprint 9 — Alertes et Règles Métier}]
+\textbf{Objectif :} Automatisation de la supervision via des règles configurables.
+
+\textbf{Tâches (5 jours) :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Domaine : \texttt{AlertRule}, \texttt{AlertHistory} + ports
+  \item Migration Liquibase : \texttt{019-alert-rules.sql}
+  \item Service : \texttt{AlertRuleService} + \texttt{AlertEvaluationService}
+  \item Moteur d'évaluation des règles : intégration dans les services existants (TripService, IncidentService, etc.)
+  \item Gestion du cooldown (éviter le spam d'alertes)
+  \item Controllers : \texttt{AlertRuleController}, \texttt{AlertHistoryController}
+\end{itemize}
+
+\textbf{Livrable :} Supervision automatisée et personnalisable.
+\end{tcolorbox}
+
+\section{Tableau Récapitulatif du Plan}
+
+\begin{longtable}{p{1cm}p{3.5cm}p{2.5cm}p{2cm}p{2cm}p{2cm}}
+\toprule
+\textbf{Sprint} & \textbf{Module} & \textbf{Semaines} & \textbf{Priorité} & \textbf{Effort} & \textbf{Dépendances} \\
+\midrule
+\endhead
+S1 & Fondations & 1-2 & \prio{1} & \effort{S} & Aucune \\
+S2 & Documents & 3-4 & \prio{1} & \effort{M} & S1 \\
+S3 & KPI & 5-6 & \prio{1} & \effort{M} & S1 \\
+S4 & Dépenses & 7-8 & \prio{2} & \effort{M} & S1, S3 \\
+S5 & Planification & 9-11 & \prio{1} & \effort{L} & S1 \\
+S6 & Scoring & 12-14 & \prio{2} & \effort{L} & S5 \\
+S7 & Maint. Préventive & 15-16 & \prio{2} & \effort{M} & S5 \\
+S8 & Clients/Missions & 17-20 & \prio{3} & \effort{L} & S5, S4 \\
+S9 & Alertes & 21 & \prio{3} & \effort{S} & S2..S8 \\
+\bottomrule
+\caption{Récapitulatif du plan d'implémentation (21 semaines)}
+\end{longtable}
+
+\section{Diagramme de Dépendances}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  node distance=1.2cm and 2cm,
+  sprint/.style={rectangle, rounded corners=6pt, minimum width=2.8cm,
+                 minimum height=0.7cm, draw=fleetblue, fill=fleetblue!10,
+                 font=\small\bfseries},
+  done/.style={rectangle, rounded corners=6pt, minimum width=2.8cm,
+               minimum height=0.7cm, draw=fleetgray, fill=fleetgray!10,
+               font=\small},
+  arrow/.style={->, >=Stealth, thick, color=fleetdark}
+]
+  \node[done] (s1) {S1 Fondations};
+  \node[sprint, right=of s1] (s2) {S2 Documents};
+  \node[sprint, below=of s2] (s3) {S3 KPI};
+  \node[sprint, below=of s3] (s4) {S4 Dépenses};
+  \node[sprint, right=of s2] (s5) {S5 Planning};
+  \node[sprint, right=of s5] (s6) {S6 Scoring};
+  \node[sprint, below=of s6] (s7) {S7 Maint. Prév.};
+  \node[sprint, below=of s7] (s8) {S8 Clients};
+  \node[sprint, below=of s4] (s9) {S9 Alertes};
+
+  \draw[arrow] (s1) -- (s2);
+  \draw[arrow] (s1) -- (s3);
+  \draw[arrow] (s1) -- (s5);
+  \draw[arrow] (s3) -- (s4);
+  \draw[arrow] (s5) -- (s6);
+  \draw[arrow] (s5) -- (s7);
+  \draw[arrow] (s5) -- (s8);
+  \draw[arrow] (s4) -- (s8);
+  \draw[arrow] (s2) to[bend right=20] (s9);
+  \draw[arrow] (s8) -- (s9);
+\end{tikzpicture}
+\caption{Graphe de dépendances entre les sprints}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Architecture Technique des Nouveaux Modules}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Patron d'Implémentation Standard}
+
+Chaque nouveau module suit rigoureusement le même patron hexagonal en 6 phases, identique à celui utilisé pour le module Opérations Terrain existant :
+
+\begin{longtable}{p{1cm}p{3cm}p{9cm}}
+\toprule
+\textbf{Phase} & \textbf{Couche} & \textbf{Livrables} \\
+\midrule
+\endhead
+1 & Domaine & Entités/records, Value Objects, exceptions typées \\
+2 & Ports & Interfaces Use Case (in) + Persistence/Event ports (out) \\
+3 & Application & Services \texttt{@Service} implémentant les Use Cases \\
+4 & Persistance & Entités R2DBC, repositories, adapters, migration Liquibase \\
+5 & API REST & DTOs, controllers WebFlux, documentation Swagger \\
+6 & Intégration & Jobs planifiés, connexions inter-modules, KPIs \\
+\bottomrule
+\caption{Patron d'implémentation hexagonal en 6 phases}
+\end{longtable}
+
+\section{Jobs Planifiés — Architecture}
+
+Les jobs planifiés constituent un composant transversal critique. Voici l'architecture proposée :
+
+\begin{lstlisting}[style=javaStyle, caption={Architecture d'un job planifié réactif}]
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class DocumentExpiryCheckJob {
+
+    private final DocumentPersistencePort documentPort;
+    private final SendNotificationPort notificationPort;
+
+    // Execution chaque nuit a 2h00
+    @Scheduled(cron = "0 0 2 * * *")
+    public void checkExpiringDocuments() {
+        log.info("Demarrage du job de verification des documents");
+
+        // Traitement reactif avec subscribe() pour ne pas bloquer
+        documentPort.findExpiringWithin(30)
+            .flatMap(doc -> updateStatusAndNotify(doc))
+            .doOnError(e -> log.error("Erreur job documents", e))
+            .subscribe(
+                null,
+                e -> log.error("Echec job documents", e),
+                () -> log.info("Job documents termine")
+            );
+    }
+
+    private Mono<Void> updateStatusAndNotify(DocumentDto doc) {
+        return documentPort.updateStatus(doc.id(), "EXPIRING_SOON")
+            .then(notificationPort.send(buildNotification(doc)));
+    }
+}
+\end{lstlisting}
+
+\begin{notebox}
+Les jobs planifiés utilisent \texttt{@Scheduled} de Spring avec des expressions cron. Pour les environnements multi-instances (Kubernetes), il faut ajouter ShedLock ou Spring Batch pour éviter l'exécution parallèle sur plusieurs pods.
+\end{notebox}
+
+\section{Nouvelles Migrations Liquibase}
+
+Le tableau suivant liste les 9 nouveaux changesets Liquibase à créer :
+
+\begin{longtable}{p{4.5cm}p{2cm}p{6.5cm}}
+\toprule
+\textbf{Fichier} & \textbf{Sprint} & \textbf{Contenu} \\
+\midrule
+\endhead
+\texttt{011-add-soft-delete.sql} & S1 & Ajout \texttt{deleted\_at} aux tables critiques \\
+\texttt{012-document-tables.sql} & S2 & \texttt{vehicle\_documents}, \texttt{driver\_documents}, \texttt{document\_alerts} \\
+\texttt{013-kpi-tables.sql} & S3 & \texttt{kpi\_snapshots} \\
+\texttt{014-expense-tables.sql} & S4 & \texttt{expense\_categories}, \texttt{expenses}, \texttt{budgets} \\
+\texttt{015-planning-tables.sql} & S5 & \texttt{schedules}, \texttt{assignments} \\
+\texttt{016-scoring-tables.sql} & S6 & \texttt{driving\_events}, \texttt{driver\_scores} \\
+\texttt{017-preventive-maintenance.sql} & S7 & \texttt{maintenance\_plans}, \texttt{maintenance\_tasks} \\
+\texttt{018-clients-missions.sql} & S8 & \texttt{clients}, \texttt{missions}, \texttt{invoices} \\
+\texttt{019-alert-rules.sql} & S9 & \texttt{alert\_rules}, \texttt{alert\_history} \\
+\bottomrule
+\caption{Nouveaux changesets Liquibase}
+\end{longtable}
+
+\section{Nouveaux Tags Swagger}
+
+Pour maintenir la cohérence de la documentation API, les nouveaux modules s'intègrent dans la numérotation existante (01-14) :
+
+\begin{longtable}{p{2cm}p{5cm}p{6cm}}
+\toprule
+\textbf{Tag} & \textbf{Nom} & \textbf{Module} \\
+\midrule
+\endhead
+TAG\_15 & Documents Véhicules & Module 2 — Documents \\
+TAG\_16 & Documents Conducteurs & Module 2 — Documents \\
+TAG\_17 & KPIs \& Rapports & Module 3 — KPI \\
+TAG\_18 & Dépenses & Module 4 — Dépenses \\
+TAG\_19 & Budgets & Module 4 — Dépenses \\
+TAG\_20 & Plannings & Module 1 — Planification \\
+TAG\_21 & Affectations & Module 1 — Planification \\
+TAG\_22 & Scoring Conducteur & Module 5 — Scoring \\
+TAG\_23 & Maintenance Préventive & Module 6 — Maintenance \\
+TAG\_24 & Clients & Module 7 — Clients \\
+TAG\_25 & Missions & Module 7 — Missions \\
+TAG\_26 & Factures & Module 7 — Facturation \\
+TAG\_27 & Règles d'Alerte & Module 8 — Alertes \\
+\bottomrule
+\caption{Nouveaux tags Swagger}
+\end{longtable}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Analyse de Valeur et Priorisation}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Matrice Valeur / Effort}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=1.1]
+  % Axes
+  \draw[thick, ->] (0,0) -- (8.5,0) node[right] {\small Effort};
+  \draw[thick, ->] (0,0) -- (0,6.5) node[above] {\small Valeur Métier};
+
+  % Quadrants
+  \fill[fleetsuccess!10] (0,3) rectangle (4,6.5);
+  \fill[fleetblue!10] (4,3) rectangle (8.5,6.5);
+  \fill[fleetwarning!10] (0,0) rectangle (4,3);
+  \fill[fleeterror!10] (4,0) rectangle (8.5,3);
+
+  % Labels quadrants
+  \node[font=\small\bfseries, color=fleetsuccess] at (2,6.2) {Quick Wins};
+  \node[font=\small\bfseries, color=fleetblue] at (6.2,6.2) {Investissements};
+  \node[font=\small\bfseries, color=fleetwarning] at (2,0.3) {Remplissage};
+  \node[font=\small\bfseries, color=fleeterror] at (6.2,0.3) {A éviter};
+
+  % Ligne de séparation
+  \draw[dashed, fleetgray] (4,0) -- (4,6.5);
+  \draw[dashed, fleetgray] (0,3) -- (8.5,3);
+
+  % Modules
+  \node[circle, fill=fleeterror, text=white, minimum size=0.7cm,
+        font=\tiny\bfseries] at (2.5,5.5) {DOC};
+  \node[circle, fill=fleeterror, text=white, minimum size=0.7cm,
+        font=\tiny\bfseries] at (1.5,5.0) {KPI};
+  \node[circle, fill=fleetblue, text=white, minimum size=0.7cm,
+        font=\tiny\bfseries] at (5.5,5.8) {PLAN};
+  \node[circle, fill=fleetblue, text=white, minimum size=0.7cm,
+        font=\tiny\bfseries] at (7.0,5.2) {CLI};
+  \node[circle, fill=fleetblue, text=white, minimum size=0.7cm,
+        font=\tiny\bfseries] at (5.0,4.5) {SCO};
+  \node[circle, fill=fleetwarning, text=white, minimum size=0.7cm,
+        font=\tiny\bfseries] at (2.5,3.8) {DEP};
+  \node[circle, fill=fleetwarning, text=white, minimum size=0.7cm,
+        font=\tiny\bfseries] at (1.5,2.5) {ALR};
+  \node[circle, fill=fleetblue, text=white, minimum size=0.7cm,
+        font=\tiny\bfseries] at (5.5,3.8) {MP};
+
+  % Legende
+  \node[font=\tiny] at (2.5,5.0) {};
+\end{tikzpicture}
+\caption{Matrice Valeur/Effort des 8 modules (DOC=Documents, KPI=KPIs, PLAN=Planification, CLI=Clients, SCO=Scoring, DEP=Dépenses, ALR=Alertes, MP=Maint. Préventive)}
+\end{figure}
+
+\section{Retour sur Investissement Estimé}
+
+\begin{longtable}{p{3.5cm}p{3.5cm}p{6cm}}
+\toprule
+\textbf{Module} & \textbf{ROI Estimé} & \textbf{Justification} \\
+\midrule
+\endhead
+Documents & Immédiat & Évite les amendes légales (assurance expirée = immobilisation) \\
+KPI & 1-3 mois & Réduction des coûts par optimisation basée sur les données \\
+Scoring & 3-6 mois & Réduction carburant 10-15\%, réduction accidents 20-30\% \\
+Maint. Préventive & 3-6 mois & Réduction pannes 40\%, coûts maintenance -25\% \\
+Dépenses & 1-3 mois & Visibilité sur les coûts cachés, détection des fraudes \\
+Planification & 1-3 mois & Optimisation utilisation flotte, réduction temps mort \\
+Clients/Missions & 6-12 mois & Nouveau flux de revenus, facturation automatisée \\
+Alertes & Immédiat & Réduction du temps de réaction aux incidents \\
+\bottomrule
+\caption{Estimation du retour sur investissement par module}
+\end{longtable}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter*{Conclusion}
+\addcontentsline{toc}{chapter}{Conclusion}
+\thispagestyle{fancy}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Ce cahier d'analyse et de conception a identifié \textbf{8 modules fonctionnels} à fort impact métier pour enrichir la plateforme FleetMan. Ces modules couvrent l'ensemble du cycle de vie de la gestion de flotte professionnelle :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Conformité légale} (Documents) — non-négociable pour opérer légalement
+  \item \textbf{Pilotage de la performance} (KPI, Scoring) — différenciateur concurrentiel
+  \item \textbf{Maîtrise des coûts} (Dépenses, Maintenance Préventive) — ROI direct et mesurable
+  \item \textbf{Efficacité opérationnelle} (Planification, Alertes) — réduction de la charge cognitive
+  \item \textbf{Monétisation} (Clients, Missions, Facturation) — nouveau modèle de revenus
+\end{itemize}
+
+Le plan d'implémentation proposé sur \textbf{21 semaines} (9 sprints) est conçu pour livrer de la valeur à chaque itération, en respectant scrupuleusement l'architecture hexagonale réactive existante. Les 18 nouvelles tables SQL, les 9 migrations Liquibase et les 80+ nouveaux endpoints REST s'intègrent naturellement dans le projet sans rupture architecturale.
+
+\begin{tcolorbox}[colback=fleetblue!8, colframe=fleetblue, title={\bfseries Recommandation Finale}]
+\textbf{Ordre de priorité recommandé pour une mise en production rapide :}
+
+\begin{enumerate}[leftmargin=1.5cm]
+  \item \textbf{Sprint 2 — Documents} : Conformité légale immédiate, risque zéro
+  \item \textbf{Sprint 3 — KPI} : Valeur perçue maximale pour les gestionnaires
+  \item \textbf{Sprint 5 — Planification} : Fonctionnalité la plus demandée sur le terrain
+  \item \textbf{Sprint 6 — Scoring} : Différenciateur fort face à la concurrence
+\end{enumerate}
+
+Ces 4 sprints (10 semaines) suffisent à positionner FleetMan comme une solution premium sur le marché africain du transport.
+\end{tcolorbox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% ANNEXE
+% ─────────────────────────────────────────────────────────────────────────────
+\appendix
+
+\chapter{Récapitulatif des Nouvelles Tables SQL}
+
+\begin{longtable}{p{5cm}p{2.5cm}p{5.5cm}}
+\toprule
+\textbf{Table} & \textbf{Migration} & \textbf{Clés étrangères principales} \\
+\midrule
+\endhead
+\texttt{fleet.schedules} & 015 & \texttt{fleet\_id}, \texttt{manager\_id} \\
+\texttt{fleet.assignments} & 015 & \texttt{schedule\_id}, \texttt{vehicle\_id}, \texttt{driver\_id} \\
+\texttt{fleet.vehicle\_documents} & 012 & \texttt{vehicle\_id} \\
+\texttt{fleet.driver\_documents} & 012 & \texttt{driver\_id} \\
+\texttt{fleet.document\_alerts} & 012 & \texttt{document\_id} \\
+\texttt{fleet.kpi\_snapshots} & 013 & \texttt{fleet\_id}, \texttt{entity\_id} \\
+\texttt{fleet.expense\_categories} & 014 & \texttt{fleet\_id} \\
+\texttt{fleet.expenses} & 014 & \texttt{fleet\_id}, \texttt{vehicle\_id}, \texttt{driver\_id}, \texttt{category\_id} \\
+\texttt{fleet.budgets} & 014 & \texttt{fleet\_id}, \texttt{category\_id} \\
+\texttt{fleet.driver\_scores} & 016 & \texttt{driver\_id}, \texttt{fleet\_id} \\
+\texttt{fleet.driving\_events} & 016 & \texttt{trip\_id}, \texttt{driver\_id}, \texttt{vehicle\_id} \\
+\texttt{fleet.maintenance\_plans} & 017 & \texttt{fleet\_id}, \texttt{vehicle\_type\_id} \\
+\texttt{fleet.maintenance\_tasks} & 017 & \texttt{plan\_id}, \texttt{vehicle\_id} \\
+\texttt{fleet.clients} & 018 & \texttt{fleet\_id} \\
+\texttt{fleet.missions} & 018 & \texttt{fleet\_id}, \texttt{client\_id}, \texttt{assignment\_id} \\
+\texttt{fleet.invoices} & 018 & \texttt{fleet\_id}, \texttt{client\_id}, \texttt{mission\_id} \\
+\texttt{fleet.alert\_rules} & 019 & \texttt{fleet\_id} \\
+\texttt{fleet.alert\_history} & 019 & \texttt{rule\_id}, \texttt{fleet\_id}, \texttt{vehicle\_id} \\
+\bottomrule
+\caption{Récapitulatif des 18 nouvelles tables}
+\end{longtable}
+
+\chapter{Récapitulatif des Nouveaux Endpoints REST}
+
+\begin{longtable}{p{1.5cm}p{7cm}p{2.5cm}p{2cm}}
+\toprule
+\textbf{Méthode} & \textbf{URL} & \textbf{Module} & \textbf{Rôle} \\
+\midrule
+\endhead
+POST & \texttt{/api/v1/schedules} & Planification & MANAGER \\
+GET & \texttt{/api/v1/assignments/conflicts} & Planification & MANAGER \\
+GET & \texttt{/api/v1/assignments/driver/\{id\}/today} & Planification & DRIVER \\
+POST & \texttt{/api/v1/vehicles/\{id\}/documents} & Documents & MANAGER \\
+GET & \texttt{/api/v1/documents/expiring} & Documents & MANAGER \\
+GET & \texttt{/api/v1/documents/compliance-report} & Documents & MANAGER \\
+GET & \texttt{/api/v1/kpis/fleet/\{id\}} & KPI & MANAGER \\
+GET & \texttt{/api/v1/kpis/fleet/\{id\}/compare} & KPI & MANAGER \\
+GET & \texttt{/api/v1/kpis/fleet/\{id\}/top-drivers} & KPI & MANAGER \\
+POST & \texttt{/api/v1/expenses} & Dépenses & MANAGER/DRIVER \\
+PATCH & \texttt{/api/v1/expenses/\{id\}/approve} & Dépenses & MANAGER \\
+GET & \texttt{/api/v1/budgets/consumption} & Dépenses & MANAGER \\
+GET & \texttt{/api/v1/drivers/\{id\}/score} & Scoring & MANAGER \\
+GET & \texttt{/api/v1/fleets/\{id\}/driver-ranking} & Scoring & MANAGER \\
+POST & \texttt{/api/v1/trips/\{id\}/driving-events} & Scoring & DRIVER \\
+GET & \texttt{/api/v1/maintenance-tasks/overdue} & Maint. Prév. & MANAGER \\
+GET & \texttt{/api/v1/vehicles/\{id\}/maintenance-schedule} & Maint. Prév. & MANAGER \\
+POST & \texttt{/api/v1/clients} & Clients & MANAGER \\
+POST & \texttt{/api/v1/missions} & Missions & MANAGER \\
+GET & \texttt{/api/v1/missions/\{id\}/available-vehicles} & Missions & MANAGER \\
+GET & \texttt{/api/v1/track/\{token\}} & Missions & PUBLIC \\
+POST & \texttt{/api/v1/invoices/generate/\{missionId\}} & Facturation & MANAGER \\
+GET & \texttt{/api/v1/invoices/\{id\}/pdf} & Facturation & MANAGER \\
+POST & \texttt{/api/v1/alert-rules} & Alertes & MANAGER \\
+GET & \texttt{/api/v1/alerts/open} & Alertes & MANAGER \\
+PATCH & \texttt{/api/v1/alerts/\{id\}/acknowledge} & Alertes & MANAGER \\
+\bottomrule
+\caption{Sélection des nouveaux endpoints REST (liste non exhaustive)}
+\end{longtable}
+
+\end{document}

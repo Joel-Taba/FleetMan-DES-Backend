@@ -1,0 +1,133 @@
+server:
+  port: 8080
+
+# Config Swagger
+app:
+  swagger:
+    server-url: ${FLEET_SERVER_URL:https://traefikdev.yowyob.com/fleet-management}
+
+spring:
+  application:
+    name: fleet-management
+  
+  profiles:
+    active: local
+
+  # R2DBC (Application Runtime)
+
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5433/yowyob_db
+    username: fleet_admin
+    password: fleet_password
+    pool:
+      enabled: true
+      initial-size: 2
+      max-size: 10
+      validation-query: "SELECT 1"
+      max-idle-time: 10m
+
+  # JDBC (Liquibase Migration)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/yowyob_db
+    username: fleet_admin
+    password: fleet_password
+    driver-class-name: org.postgresql.Driver
+
+  # LIQUIBASE
+  liquibase:
+    url: jdbc:postgresql://localhost:5433/yowyob_db
+    user: fleet_admin
+    password: fleet_password
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+    default-schema: public
+    liquibase-schema: public
+    enabled: true
+    contexts: local 
+  # REDIS
+  data:
+    redis:
+      host: localhost
+      port: 6380
+      password: ""
+
+  # KAFKA
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: fleet-management-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+  docker:
+    compose:
+      enabled: false
+
+# CONFIG METIER
+application:
+  external:
+    vehicle-service-url:  https://traefikdev.yowyob.com/vehicule
+    geofence-service-url: https://traefikdev.yowyob.com/geofence-service
+    payment-service-url:  https://traefikdev.yowyob.com/payment
+  auth:
+    mode: remote
+    url: https://traefikdev.yowyob.com/auth
+  notification:
+    mode: http
+    url: https://traefikdev.yowyob.com/notification
+    service-token: "a77599d3-8de7-4d52-b9d0-2202b2e13a9e" # Token récupéré après enregistrement du service
+    templates:
+      new-offer: 1        # ID template: Nouvelle offre pour les chauffeurs
+      driver-applied: 2   # ID template: Un chauffeur a postulé (pour le client)
+      driver-selected: 3  # ID template: Vous avez été choisi (pour le chauffeur)
+      ride-confirmed: 4   # ID template: Le chauffeur arrive (pour le client)
+      ride-cancelled: 5   # ID template: Course annulée
+      admin-validation: 7 # ID template: admin a validé le profil du driver
+      maintenance-created: 8  # ID template: Nouvelle maintenance déclarée
+      incident-reported: 9    # ID template: Incident signalé
+      incident-critical: 10   # ID template: Incident CRITIQUE signalé
+ 
+  geofence-system-user:
+    username: "yowyob_fleet_internal_admin"
+    password: "system_password_secure_2026" 
+    organization-id: "723e4567-e89b-12d3-a456-426614174000" # UUID de notre application dans
+ 
+  bootstrap:
+    admin:
+      username: "superadmin123"
+      email: "superadmin123@transens.com"
+      password: "password123" 
+      phone: "+23761213141516"
+      firstname: "System"
+      lastname: "Administrator"
+  # Kafka topics
+  kafka:
+    topics:
+      geofence-alerts: geofence-alerts-topic
+      operation-events: operation-events-topic
+
+# MONITORING
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ["health","info","prometheus"]
+  endpoint:
+    health:
+      show-details: "always"
+      probes:
+        enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# Resilience4j
+resilience4j:
+  circuitbreaker:
+    instances: {}

@@ -1,0 +1,42 @@
+\xpginauxfiletrue 
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {1.1}{Stack technologique complète du projet FleetMan}}{13}{table.1.1}%
+\addvspace {10\p@ }
+\setforeignlanguage {french}
+\contentsline {table}{\numberline {2.1}{Ports entrants (Use Cases) du projet FleetMan}}{17}{table.2.1}%
+\contentsline {table}{\numberline {2.2}{Ports sortants du projet FleetMan}}{18}{table.2.2}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {3.1}{Acteurs et rôles du système FleetMan}}{19}{table.3.1}%
+\contentsline {table}{\numberline {3.2}{Groupes de paramètres du véhicule}}{22}{table.3.2}%
+\contentsline {table}{\numberline {3.3}{Endpoints REST du module Véhicule}}{23}{table.3.3}%
+\contentsline {table}{\numberline {3.4}{Endpoints REST du module Conducteur}}{24}{table.3.4}%
+\contentsline {table}{\numberline {3.5}{Endpoints REST du module Trajet}}{26}{table.3.5}%
+\contentsline {table}{\numberline {3.6}{Endpoints REST du module Geofence}}{28}{table.3.6}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {4.1}{Historique des migrations Liquibase}}{30}{table.4.1}%
+\contentsline {table}{\numberline {4.2}{Tables du schéma fleet avant les ajouts}}{31}{table.4.2}%
+\contentsline {table}{\numberline {4.3}{Clients HTTP externes du projet}}{33}{table.4.3}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {6.1}{Agrégats DDD du module Opérations Terrain}}{41}{table.6.1}%
+\contentsline {table}{\numberline {6.2}{Adaptations réalisées lors de l'intégration}}{42}{table.6.2}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {7.1}{Méthodes métier de l'entité Maintenance}}{45}{table.7.1}%
+\setforeignlanguage {french}
+\contentsline {table}{\numberline {7.2}{Codes d'erreur de OperationException}}{48}{table.7.2}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {10.1}{Endpoints REST du module Maintenance}}{64}{table.10.1}%
+\contentsline {table}{\numberline {10.2}{Endpoints REST du module Incident}}{64}{table.10.2}%
+\contentsline {table}{\numberline {10.3}{Endpoints REST du module Recharge Carburant}}{64}{table.10.3}%
+\contentsline {table}{\numberline {10.4}{Récapitulatif des 37 fichiers créés}}{66}{table.10.4}%
+\contentsline {table}{\numberline {10.5}{Fichiers modifiés lors de l'intégration}}{66}{table.10.5}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {11.1}{Vérification du respect des règles architecturales}}{69}{table.11.1}%
+\contentsline {table}{\numberline {11.2}{Bilan quantitatif des apports}}{69}{table.11.2}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {A.1}{Glossaire des termes techniques}}{74}{table.A.1}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {B.1}{Sélection des endpoints REST principaux (les modules en gras sont les apports)}}{76}{table.B.1}%
+\xpginauxfilefalse 

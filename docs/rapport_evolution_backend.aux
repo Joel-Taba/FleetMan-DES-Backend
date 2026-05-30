@@ -1,0 +1,369 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand*\HyPL@Entry[1]{}
+\HyPL@Entry{0<</S/D>>}
+\@writefile{toc}{\xpginauxfiletrue }
+\@writefile{lof}{\xpginauxfiletrue }
+\@writefile{lot}{\xpginauxfiletrue }
+\@writefile{toc}{\selectlanguage *{french}}
+\HyPL@Entry{1<</S/D>>}
+\@writefile{toc}{\contentsline {chapter}{Résumé Exécutif}{1}{chapter*.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{Introduction Générale}{9}{chapter*.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {part}{I\hspace  {1em}L'Architecture Existante du Backend FleetMan}{11}{part.1}\protected@file@percent }
+\gdef \LT@i {\LT@entry 
+    {1}{125.81102pt}\LT@entry 
+    {1}{111.58464pt}\LT@entry 
+    {1}{182.71652pt}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {1}Fondements Technologiques et Choix d'Architecture}{12}{chapter.1}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {1.1}Présentation Générale du Projet}{12}{section.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {1.2}Stack Technologique}{12}{section.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2.1}Technologies Principales}{12}{subsection.1.2.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1.1}{Stack technologique complète du projet FleetMan}}{13}{table.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2.2}Justification des Choix Technologiques}{13}{subsection.1.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Spring WebFlux et la Programmation Réactive}{13}{subsection.1.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{R2DBC vs JPA/Hibernate}{13}{subsection.1.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Liquibase pour les Migrations}{14}{subsection.1.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Redis pour la Télémétrie}{14}{subsection.1.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Apache Kafka pour la Messagerie}{14}{subsection.1.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {2}L'Architecture Hexagonale Réactive}{15}{chapter.2}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {2.1}Présentation du Pattern Hexagonal}{15}{section.2.1}\protected@file@percent }
+\@writefile{lof}{\setforeignlanguage {french}}
+\@writefile{lot}{\setforeignlanguage {french}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.1}{\ignorespaces Architecture hexagonale du projet FleetMan}}{15}{figure.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2.2}Structure des Packages}{15}{section.2.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {2.1}Structure des packages Java}{15}{lstlisting.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2.3}La Règle de Dépendance}{16}{section.2.3}\protected@file@percent }
+\gdef \LT@ii {\LT@entry 
+    {1}{168.49014pt}\LT@entry 
+    {1}{225.39566pt}}
+\gdef \LT@iii {\LT@entry 
+    {1}{168.49014pt}\LT@entry 
+    {1}{225.39566pt}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.4}Les Ports : Contrats du Domaine}{17}{section.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.1}Ports Entrants (Use Cases)}{17}{subsection.2.4.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2.1}{Ports entrants (Use Cases) du projet FleetMan}}{17}{table.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.2}Ports Sortants}{17}{subsection.2.4.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2.2}{Ports sortants du projet FleetMan}}{18}{table.2.2}\protected@file@percent }
+\gdef \LT@iv {\LT@entry 
+    {1}{111.58464pt}\LT@entry 
+    {1}{97.35826pt}\LT@entry 
+    {1}{211.16928pt}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {3}Les Modules Métier Existants}{19}{chapter.3}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {3.1}Les Acteurs du Système}{19}{section.3.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3.1}{Acteurs et rôles du système FleetMan}}{19}{table.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.2}Module d'Authentification}{19}{section.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.1}Architecture du Module Auth}{19}{subsection.3.2.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3.1}Interface AuthUseCase — Port entrant d'authentification}{19}{lstlisting.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.2}Sécurité JWT Réactive}{20}{subsection.3.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.3}Configuration de Sécurité}{20}{subsection.3.2.3}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3.2}Configuration de sécurité WebFlux}{20}{lstlisting.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.4}CORS}{21}{subsection.3.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.3}Module de Gestion des Véhicules}{21}{section.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.1}Modèle de Domaine}{21}{subsection.3.3.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3.3}Modèle de domaine Vehicle}{21}{lstlisting.3.3}\protected@file@percent }
+\gdef \LT@v {\LT@entry 
+    {1}{111.58464pt}\LT@entry 
+    {1}{268.0748pt}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.2}Paramètres du Véhicule}{22}{subsection.3.3.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3.2}{Groupes de paramètres du véhicule}}{22}{table.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.3}Référentiels Véhicule}{22}{subsection.3.3.3}\protected@file@percent }
+\gdef \LT@vi {\LT@entry 
+    {1}{54.67912pt}\LT@entry 
+    {1}{182.71652pt}\LT@entry 
+    {1}{83.13188pt}\LT@entry 
+    {1}{83.13188pt}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.4}Endpoints REST du Module Véhicule}{23}{subsection.3.3.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3.3}{Endpoints REST du module Véhicule}}{23}{table.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.4}Module de Gestion des Conducteurs}{23}{section.3.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4.1}Modèle de Domaine}{23}{subsection.3.4.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3.4}Modèle de domaine Driver}{23}{lstlisting.3.4}\protected@file@percent }
+\gdef \LT@vii {\LT@entry 
+    {1}{54.67912pt}\LT@entry 
+    {1}{211.16928pt}\LT@entry 
+    {1}{83.13188pt}\LT@entry 
+    {1}{68.9055pt}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4.2}Fonctionnalités du Module Conducteur}{24}{subsection.3.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4.3}Endpoints REST du Module Conducteur}{24}{subsection.3.4.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3.4}{Endpoints REST du module Conducteur}}{24}{table.3.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.5}Module de Gestion des Flottes}{25}{section.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.1}Modèle de Domaine}{25}{subsection.3.5.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3.5}Modèle de domaine Fleet}{25}{lstlisting.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.2}Fonctionnalités du Module Flotte}{25}{subsection.3.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.6}Module de Gestion des Trajets}{25}{section.3.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6.1}Modèle de Domaine}{25}{subsection.3.6.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3.6}Modèle de domaine Trip}{25}{lstlisting.3.6}\protected@file@percent }
+\gdef \LT@viii {\LT@entry 
+    {1}{54.67912pt}\LT@entry 
+    {1}{168.49014pt}\LT@entry 
+    {1}{83.13188pt}\LT@entry 
+    {1}{97.35826pt}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6.2}Cycle de Vie d'un Trajet}{26}{subsection.3.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6.3}Télémétrie GPS}{26}{subsection.3.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6.4}Endpoints REST du Module Trajet}{26}{subsection.3.6.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3.5}{Endpoints REST du module Trajet}}{26}{table.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.7}Module de Géorepérage (Geofencing)}{26}{section.3.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7.1}Présentation}{26}{subsection.3.7.1}\protected@file@percent }
+\gdef \LT@ix {\LT@entry 
+    {1}{54.67912pt}\LT@entry 
+    {1}{182.71652pt}\LT@entry 
+    {1}{83.13188pt}\LT@entry 
+    {1}{83.13188pt}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7.2}Architecture du Module Geofence}{27}{subsection.3.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7.3}Modèles de Domaine}{27}{subsection.3.7.3}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3.7}Modèles GeofenceZone et GeofencePoint}{27}{lstlisting.3.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7.4}Endpoints REST du Module Geofence}{27}{subsection.3.7.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3.6}{Endpoints REST du module Geofence}}{28}{table.3.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.8}Module de Notifications}{28}{section.3.8}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3.8}Configuration des templates de notification}{28}{lstlisting.3.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.9}Module d'Administration}{29}{section.3.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.9.1}Administrateur}{29}{subsection.3.9.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.9.2}Super Administrateur}{29}{subsection.3.9.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.9.3}Initialisation Automatique}{29}{subsection.3.9.3}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3.9}Configuration du super-administrateur initial}{29}{lstlisting.3.9}\protected@file@percent }
+\gdef \LT@x {\LT@entry 
+    {1}{125.81102pt}\LT@entry 
+    {1}{268.0748pt}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {4}La Couche Infrastructure Existante}{30}{chapter.4}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {4.1}La Base de Données PostgreSQL}{30}{section.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.1}Organisation en Schémas}{30}{subsection.4.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.2}Migrations Liquibase}{30}{subsection.4.1.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4.1}{Historique des migrations Liquibase}}{30}{table.4.1}\protected@file@percent }
+\gdef \LT@xi {\LT@entry 
+    {1}{140.0374pt}\LT@entry 
+    {1}{253.84842pt}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.3}Schéma de la Base de Données Principale}{31}{subsection.4.1.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4.2}{Tables du schéma fleet avant les ajouts}}{31}{table.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.2}Les Adapters de Persistance R2DBC}{31}{section.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.1}Pattern Adapter de Persistance}{31}{subsection.4.2.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {4.1}Pattern d'un adapter de persistance R2DBC}{31}{lstlisting.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.2}Repositories Spring Data R2DBC}{32}{subsection.4.2.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {4.2}Exemple de repository R2DBC avec requêtes personnalisées}{32}{lstlisting.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.3}Les Adapters Externes (HTTP Clients)}{32}{section.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.1}Architecture des Clients HTTP}{32}{subsection.4.3.1}\protected@file@percent }
+\gdef \LT@xii {\LT@entry 
+    {1}{140.0374pt}\LT@entry 
+    {1}{111.58464pt}\LT@entry 
+    {1}{154.26378pt}}
+\@writefile{lot}{\contentsline {table}{\numberline {4.3}{Clients HTTP externes du projet}}{33}{table.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.2}Adapters Externes}{33}{subsection.4.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.4}Les Adapters Kafka}{33}{section.4.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.1}Configuration Kafka}{33}{subsection.4.4.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {4.3}Configuration Kafka dans application.yml}{33}{lstlisting.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.2}Producteurs et Consommateurs}{34}{subsection.4.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.5}Les Mappers MapStruct}{34}{section.4.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.6}Configuration du Monitoring}{34}{section.4.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.6.1}Spring Actuator}{34}{subsection.4.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.6.2}Métriques Prometheus}{35}{subsection.4.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.6.3}Circuit Breaker Resilience4j}{35}{subsection.4.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {5}Configuration Système et Déploiement}{36}{chapter.5}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {5.1}Configuration de l'Application}{36}{section.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.1}Profils Spring}{36}{subsection.5.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.2}Configuration des Services Externes}{36}{subsection.5.1.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {5.1}Configuration des services externes}{36}{lstlisting.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5.2}Containerisation Docker}{36}{section.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.1}Dockerfile}{37}{subsection.5.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.2}Docker Compose}{37}{subsection.5.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5.3}CI/CD}{37}{section.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5.4}Documentation API}{37}{section.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {part}{II\hspace  {1em}Les Apports : Module Opérations Terrain}{38}{part.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {6}Analyse des Besoins et Conception du Module Opérations}{39}{chapter.6}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {6.1}Contexte et Motivation}{39}{section.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6.2}Analyse des Besoins Fonctionnels}{39}{section.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.1}Besoins liés aux Maintenances}{39}{subsection.6.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.2}Besoins liés aux Incidents}{40}{subsection.6.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.3}Besoins liés aux Recharges Carburant}{40}{subsection.6.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6.3}Analyse des Besoins Non-Fonctionnels}{40}{section.6.3}\protected@file@percent }
+\gdef \LT@xiii {\LT@entry 
+    {1}{97.35826pt}\LT@entry 
+    {1}{97.35826pt}\LT@entry 
+    {1}{211.16928pt}}
+\gdef \LT@xiv {\LT@entry 
+    {1}{154.26378pt}\LT@entry 
+    {1}{239.62204pt}}
+\@writefile{toc}{\contentsline {section}{\numberline {6.4}Identification des Agrégats DDD}{41}{section.6.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6.1}{Agrégats DDD du module Opérations Terrain}}{41}{table.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6.5}Stratégie d'Intégration}{41}{section.6.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6.2}{Adaptations réalisées lors de l'intégration}}{42}{table.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {7}Implémentation — Couche Domaine}{43}{chapter.7}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {7.1}Le Value Object \texttt  {Coordinates}}{43}{section.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1.1}Conception}{43}{subsection.7.1.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {7.1}Value Object Coordinates — domaine pur}{43}{lstlisting.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1.2}Caractéristiques Techniques}{43}{subsection.7.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7.2}L'Entité \texttt  {Maintenance}}{44}{section.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2.1}Conception}{44}{subsection.7.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2.2}Invariants Métier}{44}{subsection.7.2.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {7.2}Invariants métier de Maintenance}{44}{lstlisting.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2.3}Méthodes Métier}{44}{subsection.7.2.3}\protected@file@percent }
+\gdef \LT@xv {\LT@entry 
+    {1}{154.26378pt}\LT@entry 
+    {1}{239.62204pt}}
+\@writefile{lot}{\contentsline {table}{\numberline {7.1}{Méthodes métier de l'entité Maintenance}}{45}{table.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2.4}Données Dénormalisées}{45}{subsection.7.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7.3}L'Entité \texttt  {Incident} — Machine à États}{45}{section.7.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.1}Conception}{45}{subsection.7.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.2}Enums du Domaine}{45}{subsection.7.3.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {7.3}Enums imbriqués de l'entité Incident}{45}{lstlisting.7.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.3}Machine à États}{46}{subsection.7.3.3}\protected@file@percent }
+\@writefile{lof}{\setforeignlanguage {french}}
+\@writefile{lot}{\setforeignlanguage {french}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7.1}{\ignorespaces Machine à états de l'entité Incident}}{46}{figure.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.4}Méthodes Métier}{46}{subsection.7.3.4}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {7.4}Méthodes métier de la machine à états Incident}{46}{lstlisting.7.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7.4}L'Entité \texttt  {FuelRecharge}}{46}{section.7.4}\protected@file@percent }
+\gdef \LT@xvi {\LT@entry 
+    {1}{68.9055pt}\LT@entry 
+    {1}{83.13188pt}\LT@entry 
+    {1}{239.62204pt}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4.1}Conception}{47}{subsection.7.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4.2}Méthode Métier \texttt  {unitCost()}}{47}{subsection.7.4.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {7.5}Calcul du coût unitaire}{47}{lstlisting.7.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4.3}Enum \texttt  {StationName}}{47}{subsection.7.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7.5}L'Exception Métier \texttt  {OperationException}}{47}{section.7.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.5.1}Conception}{47}{subsection.7.5.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {7.2}{Codes d'erreur de OperationException}}{48}{table.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {8}Implémentation — Ports et Services Applicatifs}{49}{chapter.8}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {8.1}Les Ports Entrants (Use Cases)}{49}{section.8.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.1.1}\texttt  {ManageMaintenanceUseCase}}{49}{subsection.8.1.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {8.1}Interface ManageMaintenanceUseCase}{49}{lstlisting.8.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.1.2}\texttt  {ManageIncidentUseCase}}{50}{subsection.8.1.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {8.2}Méthodes KPI de ManageIncidentUseCase}{50}{lstlisting.8.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.1.3}\texttt  {ManageFuelRechargeUseCase}}{50}{subsection.8.1.3}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {8.3}Méthodes KPI de ManageFuelRechargeUseCase}{50}{lstlisting.8.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8.2}Les Ports Sortants}{50}{section.8.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.2.1}\texttt  {OperationEventPort} — Port Événementiel}{50}{subsection.8.2.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {8.4}Port événementiel OperationEventPort}{50}{lstlisting.8.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8.3}Les Services Applicatifs}{51}{section.8.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.3.1}\texttt  {MaintenanceService}}{51}{subsection.8.3.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {8.5}Logique de création d'une maintenance}{51}{lstlisting.8.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.3.2}Synchronisation Inter-Modules}{52}{subsection.8.3.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {8.6}Synchronisation des paramètres de maintenance}{52}{lstlisting.8.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.3.3}\texttt  {IncidentService} — Gestion du Cycle de Vie}{52}{subsection.8.3.3}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {8.7}Délégation à la machine à états}{52}{lstlisting.8.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.3.4}\texttt  {FuelRechargeService} — Synchronisation du Niveau Carburant}{53}{subsection.8.3.4}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {8.8}Mise à jour du niveau carburant}{53}{lstlisting.8.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {9}Implémentation — Couche Infrastructure}{54}{chapter.9}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {9.1}Migration Liquibase — Changeset 010}{54}{section.9.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.1.1}Table \texttt  {fleet.maintenances}}{54}{subsection.9.1.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {9.1}Création de la table fleet.maintenances}{54}{lstlisting.9.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.1.2}Table \texttt  {fleet.incidents}}{55}{subsection.9.1.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {9.2}Création de la table fleet.incidents}{55}{lstlisting.9.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.1.3}Table \texttt  {fleet.fuel\_recharges}}{55}{subsection.9.1.3}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {9.3}Création de la table fleet.fuel\_recharges}{55}{lstlisting.9.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.1.4}Décisions de Conception des Tables}{56}{subsection.9.1.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9.2}Les Entités R2DBC}{56}{section.9.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.2.1}Pattern des Entités}{56}{subsection.9.2.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {9.4}Pattern d'entité R2DBC avec Persistable}{56}{lstlisting.9.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9.3}Les Repositories R2DBC}{57}{section.9.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.3.1}\texttt  {IncidentR2dbcRepository} — Le Plus Riche}{57}{subsection.9.3.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {9.5}Requêtes avancées du repository Incident}{57}{lstlisting.9.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9.4}Les Adapters de Persistance}{58}{section.9.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.4.1}Conversion Entity $\leftrightarrow $ Domain}{58}{subsection.9.4.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {9.6}Conversion Entity vers Domain pour Incident}{58}{lstlisting.9.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9.5}L'Adapter Kafka — \texttt  {KafkaOperationEventAdapter}}{59}{section.9.5}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {9.7}Publication d'événements via Kafka réactif}{59}{lstlisting.9.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {10}Implémentation — API REST et Résultats}{61}{chapter.10}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {10.1}Les DTOs de Requête et Réponse}{61}{section.10.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.1.1}DTOs de Requête}{61}{subsection.10.1.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {10.1}DTO de requête MaintenanceRequest}{61}{lstlisting.10.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.1.2}DTOs de Réponse}{62}{subsection.10.1.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {10.2}DTO de réponse MaintenanceResponse avec fabrique}{62}{lstlisting.10.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {10.2}Les Controllers WebFlux}{62}{section.10.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.2.1}\texttt  {MaintenanceController}}{62}{subsection.10.2.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {10.3}Controller WebFlux MaintenanceController}{62}{lstlisting.10.3}\protected@file@percent }
+\gdef \LT@xvii {\LT@entry 
+    {1}{54.67912pt}\LT@entry 
+    {1}{196.9429pt}\LT@entry 
+    {1}{83.13188pt}\LT@entry 
+    {1}{68.9055pt}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.2.2}Récapitulatif des Endpoints du Module Opérations}{63}{subsection.10.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Endpoints Maintenance}{63}{subsection.10.2.2}\protected@file@percent }
+\gdef \LT@xviii {\LT@entry 
+    {1}{54.67912pt}\LT@entry 
+    {1}{196.9429pt}\LT@entry 
+    {1}{83.13188pt}\LT@entry 
+    {1}{68.9055pt}}
+\gdef \LT@xix {\LT@entry 
+    {1}{54.67912pt}\LT@entry 
+    {1}{196.9429pt}\LT@entry 
+    {1}{83.13188pt}\LT@entry 
+    {1}{68.9055pt}}
+\@writefile{lot}{\contentsline {table}{\numberline {10.1}{Endpoints REST du module Maintenance}}{64}{table.10.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Endpoints Incident}{64}{table.10.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {10.2}{Endpoints REST du module Incident}}{64}{table.10.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Endpoints Recharge Carburant}{64}{table.10.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {10.3}{Endpoints REST du module Recharge Carburant}}{64}{table.10.3}\protected@file@percent }
+\gdef \LT@xx {\LT@entry 
+    {1}{211.16928pt}\LT@entry 
+    {1}{68.9055pt}\LT@entry 
+    {1}{125.81102pt}}
+\@writefile{toc}{\contentsline {section}{\numberline {10.3}Bilan des Fichiers Créés}{65}{section.10.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.3.1}Récapitulatif Global}{65}{subsection.10.3.1}\protected@file@percent }
+\gdef \LT@xxi {\LT@entry 
+    {1}{211.16928pt}\LT@entry 
+    {1}{182.71652pt}}
+\@writefile{lot}{\contentsline {table}{\numberline {10.4}{Récapitulatif des 37 fichiers créés}}{66}{table.10.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.3.2}Fichiers Modifiés}{66}{subsection.10.3.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {10.5}{Fichiers modifiés lors de l'intégration}}{66}{table.10.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {11}Décisions Techniques et Bilan}{67}{chapter.11}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {11.1}Décisions Techniques Majeures}{67}{section.11.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.1.1}Pas de Records pour les Entités Mutables}{67}{subsection.11.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.1.2}Fire \& Forget pour les Événements}{67}{subsection.11.1.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {11.1}Pattern fire and forget pour les événements}{67}{lstlisting.11.1}\protected@file@percent }
+\gdef \LT@xxii {\LT@entry 
+    {1}{211.16928pt}\LT@entry 
+    {1}{68.9055pt}\LT@entry 
+    {1}{125.81102pt}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.1.3}Synchronisation Inter-Modules via Repositories Directs}{68}{subsection.11.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.1.4}Enums en VARCHAR}{68}{subsection.11.1.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.1.5}Coordonnées en Deux Colonnes}{68}{subsection.11.1.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.2}Respect des Règles Architecturales}{68}{section.11.2}\protected@file@percent }
+\gdef \LT@xxiii {\LT@entry 
+    {1}{211.16928pt}\LT@entry 
+    {1}{182.71652pt}}
+\@writefile{lot}{\contentsline {table}{\numberline {11.1}{Vérification du respect des règles architecturales}}{69}{table.11.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.3}Bilan Quantitatif}{69}{section.11.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {11.2}{Bilan quantitatif des apports}}{69}{table.11.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.4}Intégration avec les Modules Existants}{69}{section.11.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{Conclusion Générale}{70}{chapter*.6}\protected@file@percent }
+\gdef \LT@xxiv {\LT@entry 
+    {1}{125.81102pt}\LT@entry 
+    {1}{268.0748pt}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {A}Glossaire Technique}{73}{appendix.A}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{lot}{\contentsline {table}{\numberline {A.1}{Glossaire des termes techniques}}{74}{table.A.1}\protected@file@percent }
+\gdef \LT@xxv {\LT@entry 
+    {1}{54.67912pt}\LT@entry 
+    {1}{211.16928pt}\LT@entry 
+    {1}{83.13188pt}\LT@entry 
+    {1}{54.67912pt}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {B}Récapitulatif des Endpoints REST}{75}{appendix.B}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{lot}{\contentsline {table}{\numberline {B.1}{Sélection des endpoints REST principaux (les modules en gras sont les apports)}}{76}{table.B.1}\protected@file@percent }
+\@writefile{toc}{\xpginauxfilefalse }
+\@writefile{lof}{\xpginauxfilefalse }
+\@writefile{lot}{\xpginauxfilefalse }
+\gdef \@abspage@last{77}

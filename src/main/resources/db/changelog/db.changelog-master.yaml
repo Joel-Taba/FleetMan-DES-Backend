@@ -1,0 +1,40 @@
+databaseChangeLog:
+  - changeSet:
+      id: 000-initial-setup
+      author: gabriel
+      #changes:
+      #  - sql: CREATE SCHEMA IF NOT EXISTS fleet;
+
+  # 1. Création des schémas de base
+  - include:
+      file: db/changelog/changes/001-init-schemas.sql
+
+  # 2. Création des tables maîtresses (Fleets, Managers, etc.)
+  - include:
+      file: db/changelog/changes/002-fleet-tables.sql
+
+  # 3. Paramétrages et notifications
+  - include:
+      file: db/changelog/changes/003-create-notification-settings.sql
+
+  # 4. Mise à jour Geofence (Dépend de 002 car référence la table fleets)
+  - include:
+      file: db/changelog/changes/004-update_geofence_tables.sql
+
+  # 5. Migration des utilisateurs et photos
+  - include:
+      file: db/changelog/changes/005-move-users-to-fleet.sql
+  - include:
+      file: db/changelog/changes/006-add-photo-url-to-users.sql
+
+  # 6. Extensions véhicules et ressources (Dépend de 002)
+  - include:
+      file: db/changelog/changes/007-add-geofence-remote-id.sql
+  - include:
+      file: db/changelog/changes/008-add-vehicle-resources.sql
+  - include:
+      file: db/changelog/changes/009-add-geofence-details.sql
+
+  # 10. Module Opérations Terrain (Maintenance, Incidents, Recharges carburant)
+  - include:
+      file: db/changelog/changes/010-operations-tables.sql

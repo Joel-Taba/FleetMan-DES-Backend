@@ -1,0 +1,12 @@
+name: Spring Boot CI/CD
+
+on:
+  push:
+    branches:
+      - "**"
+jobs:
+  pipeline:
+    uses: projet-synthese-gi26/workflows/.github/workflows/spring-boot-ci-cd.yml@main
+    with:
+      app_name: fleet-management
+    secrets: inherit          # passe TOUS les secrets automatiquement

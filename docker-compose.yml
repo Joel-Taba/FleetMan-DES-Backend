@@ -1,0 +1,72 @@
+services:
+  # 1. Base de données
+  fleet-db:
+    image: postgis/postgis:16-3.4-alpine
+    # image: postgres:16-alpine
+    container_name: fleet-management-db
+    environment:
+      POSTGRES_DB: yowyob_db
+      POSTGRES_USER: fleet_admin
+      POSTGRES_PASSWORD: fleet_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - fleet-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fleet_admin -d yowyob_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis
+  fleet-redis:
+    image: redis:alpine
+    container_name: fleet-management-redis
+    ports:
+      - "6380:6379"
+    networks:
+      - fleet-network
+
+  # 3. Kafka (Image Officielle Apache - Mode KRaft)
+  fleet-kafka:
+    image: apache/kafka:3.7.0
+    container_name: fleet-management-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      # Configuration du Node
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      
+      # Configuration Réseau
+      # CONTROLLER: port interne pour le cluster (9093)
+      # PLAINTEXT: port pour les clients (9092)
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      
+      # C'est ici qu'on dit à Kafka "Si quelqu'un te cherche, dis-lui que tu es sur localhost:9092"
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      
+      # Sécurité et Mapping
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      
+      # Quorum KRaft (pointe vers lui-même car nœud unique)
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@fleet-management-kafka:9093
+      
+      # Optimisations pour environnement local (évite la création de centaines de partitions)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      
+    networks:
+      - fleet-network
+
+volumes:
+  postgres_data:
+
+networks:
+  fleet-network:
+    driver: bridge

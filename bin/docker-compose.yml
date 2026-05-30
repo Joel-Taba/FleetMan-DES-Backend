@@ -1,0 +1,15 @@
+services:
+  fleet-db:
+    image: postgres:16
+    container_name: fleet-management-db
+    environment:
+      POSTGRES_DB: yowyob_db
+      POSTGRES_USER: fleet_admin
+      POSTGRES_PASSWORD: fleet_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

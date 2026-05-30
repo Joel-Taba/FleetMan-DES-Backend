@@ -1,0 +1,64 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: reactive-hexagonal
+    
+  docker:
+    compose:
+      enabled: false
+
+  # POSTGRESQL (R2DBC)
+  r2dbc:
+    url: r2dbc:postgresql://168.119.122.86:5432/yowyob
+    username: master
+    password: Azerty1234*
+
+  sql:
+    init:
+      mode: always
+
+  # REDIS CLUSTER 
+  data:
+    redis:
+      password: Azerty1234*
+      cluster:
+        nodes:
+          - 168.119.122.86:7001
+          - 168.119.122.86:7002
+          - 168.119.122.86:7003
+          - 168.119.122.86:7004
+          - 168.119.122.86:7005
+          - 168.119.122.86:7006
+
+  # KAFKA 
+  kafka:
+    bootstrap-servers: 168.119.122.86:9092
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+# CUSTOM CONFIG 
+application:
+  external:
+    stock-service-url: http://168.119.122.86:8081
+
+  kafka:
+    topics:
+      product-events: test-topic
+
+# RESILIENCE4J 
+resilience4j:
+  circuitbreaker:
+    instances:
+      stock-service:
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+        slidingWindowSize: 5

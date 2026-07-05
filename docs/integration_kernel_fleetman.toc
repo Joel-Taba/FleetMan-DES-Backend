@@ -1,0 +1,102 @@
+\xpginauxfiletrue 
+\selectlanguage *{french}
+\contentsline {chapter}{Introduction Générale}{2}{chapter*.2}%
+\contentsline {chapter}{\numberline {1}Analyse Détaillée des 20 Cores du Kernel}{4}{chapter.1}%
+\contentsline {section}{\numberline {1.1}kernel-core — La Colonne Vertébrale Technique}{4}{section.1.1}%
+\contentsline {subsection}{\numberline {1.1.1}Description et Rôle Principal}{4}{subsection.1.1.1}%
+\contentsline {subsection}{\numberline {1.1.2}Contrat d'Appel Minimal}{4}{subsection.1.1.2}%
+\contentsline {subsection}{\numberline {1.1.3}Catalogue des Services Autorisés}{5}{subsection.1.1.3}%
+\contentsline {section}{\numberline {1.2}common-core — Socle de Types Partagés}{5}{section.1.2}%
+\contentsline {subsection}{\numberline {1.2.1}Description}{5}{subsection.1.2.1}%
+\contentsline {subsection}{\numberline {1.2.2}Invariants Clés}{6}{subsection.1.2.2}%
+\contentsline {section}{\numberline {1.3}actor-core — Gestion des Acteurs}{6}{section.1.3}%
+\contentsline {subsection}{\numberline {1.3.1}Description}{6}{subsection.1.3.1}%
+\contentsline {section}{\numberline {1.4}auth-core — Authentification et Identité}{6}{section.1.4}%
+\contentsline {subsection}{\numberline {1.4.1}Description}{6}{subsection.1.4.1}%
+\contentsline {subsection}{\numberline {1.4.2}Flow JWT RS256}{7}{subsection.1.4.2}%
+\contentsline {section}{\numberline {1.5}roles-core — Rôles et Permissions RBAC}{7}{section.1.5}%
+\contentsline {subsection}{\numberline {1.5.1}Description}{7}{subsection.1.5.1}%
+\contentsline {section}{\numberline {1.6}organization-core — Organisations et Agences}{7}{section.1.6}%
+\contentsline {subsection}{\numberline {1.6.1}Description}{7}{subsection.1.6.1}%
+\contentsline {section}{\numberline {1.7}tp-core — Gestion des Tiers}{8}{section.1.7}%
+\contentsline {subsection}{\numberline {1.7.1}Description}{8}{subsection.1.7.1}%
+\contentsline {section}{\numberline {1.8}settings-core — Paramètres Métier}{8}{section.1.8}%
+\contentsline {subsection}{\numberline {1.8.1}Description}{8}{subsection.1.8.1}%
+\contentsline {section}{\numberline {1.9}resource-core — Ressources Matérielles}{8}{section.1.9}%
+\contentsline {subsection}{\numberline {1.9.1}Description}{8}{subsection.1.9.1}%
+\contentsline {section}{\numberline {1.10}file-core — Gestion des Fichiers}{9}{section.1.10}%
+\contentsline {subsection}{\numberline {1.10.1}Description}{9}{subsection.1.10.1}%
+\contentsline {section}{\numberline {1.11}accounting-core, billing-core, treasury-core — Finance}{9}{section.1.11}%
+\contentsline {section}{\numberline {1.12}hrm-core — Ressources Humaines}{9}{section.1.12}%
+\contentsline {section}{\numberline {1.13}blockchain-core — Ancrage et Wallets}{9}{section.1.13}%
+\contentsline {section}{\numberline {1.14}administration-core — Gouvernance}{10}{section.1.14}%
+\contentsline {chapter}{\numberline {2}Identification des Modules Kernel Applicables à FleetMan}{11}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Méthodologie de Sélection}{11}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Tableau de Sélection des Modules}{11}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Les 9 Modules Retenus}{13}{section.2.3}%
+\contentsline {chapter}{\numberline {3}Analyse Détaillée de Chaque Intégration}{14}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Intégration 1 — kernel-core : Fondation Multi-Tenant}{14}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}Situation Actuelle dans FleetMan}{14}{subsection.3.1.1}%
+\contentsline {subsection}{\numberline {3.1.2}Ce que le kernel-core Apporte}{14}{subsection.3.1.2}%
+\contentsline {subsection}{\numberline {3.1.3}Mapping Conceptuel}{15}{subsection.3.1.3}%
+\contentsline {subsection}{\numberline {3.1.4}Implémentation Technique}{15}{subsection.3.1.4}%
+\contentsline {section}{\numberline {3.2}Intégration 2 — common-core : Types Partagés}{16}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Situation Actuelle}{16}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}Ce que le common-core Apporte}{16}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3}Mapping Conceptuel}{16}{subsection.3.2.3}%
+\contentsline {section}{\numberline {3.3}Intégration 3 — auth-core : Authentification Centralisée}{17}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Situation Actuelle}{17}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}Ce que l'auth-core Apporte}{17}{subsection.3.3.2}%
+\contentsline {subsection}{\numberline {3.3.3}Mapping des Rôles}{17}{subsection.3.3.3}%
+\contentsline {subsection}{\numberline {3.3.4}Adaptation du SecurityConfig}{18}{subsection.3.3.4}%
+\contentsline {section}{\numberline {3.4}Intégration 4 — roles-core : RBAC Centralisé}{18}{section.3.4}%
+\contentsline {subsection}{\numberline {3.4.1}Situation Actuelle}{18}{subsection.3.4.1}%
+\contentsline {subsection}{\numberline {3.4.2}Ce que le roles-core Apporte}{19}{subsection.3.4.2}%
+\contentsline {subsection}{\numberline {3.4.3}Définition des Rôles FleetMan dans le Kernel}{19}{subsection.3.4.3}%
+\contentsline {section}{\numberline {3.5}Intégration 5 — organization-core : Flotte = Organisation}{20}{section.3.5}%
+\contentsline {subsection}{\numberline {3.5.1}Mapping Conceptuel Clé}{20}{subsection.3.5.1}%
+\contentsline {subsection}{\numberline {3.5.2}Conséquences Architecturales}{20}{subsection.3.5.2}%
+\contentsline {subsection}{\numberline {3.5.3}Synchronisation via Outbox}{20}{subsection.3.5.3}%
+\contentsline {section}{\numberline {3.6}Intégration 6 — tp-core : Clients des Missions}{21}{section.3.6}%
+\contentsline {subsection}{\numberline {3.6.1}Situation Actuelle}{21}{subsection.3.6.1}%
+\contentsline {subsection}{\numberline {3.6.2}Ce que le tp-core Apporte}{21}{subsection.3.6.2}%
+\contentsline {subsection}{\numberline {3.6.3}Adaptation du Module 7}{21}{subsection.3.6.3}%
+\contentsline {section}{\numberline {3.7}Intégration 7 — settings-core : Paramètres et Numérotation}{22}{section.3.7}%
+\contentsline {subsection}{\numberline {3.7.1}Ce que le settings-core Apporte à FleetMan}{22}{subsection.3.7.1}%
+\contentsline {subsection}{\numberline {3.7.2}Utilisation dans FleetMan}{22}{subsection.3.7.2}%
+\contentsline {section}{\numberline {3.8}Intégration 8 — resource-core : Véhicules comme Ressources}{23}{section.3.8}%
+\contentsline {subsection}{\numberline {3.8.1}Situation Actuelle}{23}{subsection.3.8.1}%
+\contentsline {subsection}{\numberline {3.8.2}Ce que le resource-core Apporte}{23}{subsection.3.8.2}%
+\contentsline {subsection}{\numberline {3.8.3}Mapping Technique}{23}{subsection.3.8.3}%
+\contentsline {subsection}{\numberline {3.8.4}Adaptation du VehicleService}{24}{subsection.3.8.4}%
+\contentsline {section}{\numberline {3.9}Intégration 9 — file-core : Documents Légaux}{24}{section.3.9}%
+\contentsline {subsection}{\numberline {3.9.1}Situation Actuelle}{25}{subsection.3.9.1}%
+\contentsline {subsection}{\numberline {3.9.2}Ce que le file-core Apporte}{25}{subsection.3.9.2}%
+\contentsline {subsection}{\numberline {3.9.3}Adaptation du DocumentService}{25}{subsection.3.9.3}%
+\contentsline {chapter}{\numberline {4}Architecture d'Intégration FleetMan — Kernel}{26}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Vue d'Ensemble de l'Architecture Cible}{26}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Couche d'Intégration : ksm-kernel-client}{27}{section.4.2}%
+\contentsline {section}{\numberline {4.3}Gestion des Erreurs Kernel dans FleetMan}{27}{section.4.3}%
+\contentsline {chapter}{\numberline {5}Patterns d'Intégration Détaillés}{36}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Pattern 1 — Anti-Corruption Layer (ACL)}{36}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Pattern 2 — Synchronisation par Événements Kafka}{37}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Pattern 3 — Données Dénormalisées pour la Performance}{39}{section.5.3}%
+\contentsline {section}{\numberline {5.4}Pattern 4 — Fallback Gracieux}{39}{section.5.4}%
+\contentsline {chapter}{\numberline {6}Bénéfices et Risques de l'Intégration}{43}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Bénéfices Attendus}{43}{section.6.1}%
+\contentsline {subsection}{\numberline {6.1.1}Bénéfices Fonctionnels}{43}{subsection.6.1.1}%
+\contentsline {subsection}{\numberline {6.1.2}Bénéfices Techniques}{43}{subsection.6.1.2}%
+\contentsline {section}{\numberline {6.2}Risques et Mitigations}{44}{section.6.2}%
+\contentsline {section}{\numberline {6.3}Métriques de Succès}{44}{section.6.3}%
+\contentsline {chapter}{\numberline {7}Spécifications Techniques des Adapters}{45}{chapter.7}%
+\contentsline {section}{\numberline {7.1}Structure du Package d'Intégration}{45}{section.7.1}%
+\contentsline {section}{\numberline {7.2}Interface Commune des Adapters Kernel}{46}{section.7.2}%
+\contentsline {section}{\numberline {7.3}Configuration application.yml Enrichie}{46}{section.7.3}%
+\contentsline {chapter}{\numberline {8}Synthèse et Recommandations}{48}{chapter.8}%
+\contentsline {section}{\numberline {8.1}Synthèse des Modules Kernel Retenus}{48}{section.8.1}%
+\contentsline {section}{\numberline {8.2}Recommandations Finales}{48}{section.8.2}%
+\contentsline {section}{\numberline {8.3}Roadmap Recommandée}{49}{section.8.3}%
+\contentsline {chapter}{Conclusion}{50}{chapter*.3}%
+\contentsline {chapter}{\numberline {A}Glossaire des Termes Kernel}{51}{appendix.A}%
+\contentsline {chapter}{\numberline {B}Checklist d'Intégration}{52}{appendix.B}%
+\xpginauxfilefalse 

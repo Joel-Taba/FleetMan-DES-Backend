@@ -7,7 +7,8 @@ import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.NotificationTyp
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SendNotificationRequest;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.NotificationApiClient;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -26,14 +27,12 @@ import java.util.UUID;
  *
  * Actif uniquement si Kafka est configuré (désactivable via propriété).
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    name  = "spring.kafka.bootstrap-servers",
-    matchIfMissing = false
-)
+@ConditionalOnProperty(name = "spring.kafka.bootstrap-servers", matchIfMissing = false)
 public class OperationEventConsumer {
+
+    private static final Logger log = LoggerFactory.getLogger(OperationEventConsumer.class);
 
     private final NotificationHistoryRepositoryPort notificationHistory;
     private final NotificationApiClient notificationApiClient;

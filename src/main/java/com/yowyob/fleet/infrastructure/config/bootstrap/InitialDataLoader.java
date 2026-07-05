@@ -42,6 +42,7 @@ public class InitialDataLoader implements CommandLineRunner {
     @Value("${application.bootstrap.admin.phone}") private String adminPhone;
     @Value("${application.bootstrap.admin.firstname}") private String adminFirstName;
     @Value("${application.bootstrap.admin.lastname}") private String adminLastName;
+    @Value("${application.bootstrap.demo-data.enabled:false}") private boolean demoDataEnabled;
 
     @Override
     public void run(String... args) {
@@ -206,6 +207,10 @@ public class InitialDataLoader implements CommandLineRunner {
     }
 
     private Mono<Void> seedSuperAdmin() {
+        if (demoDataEnabled) {
+            log.info("ℹ️ [SEEDER] Profil demo actif — bootstrap super-admin distant ignoré.");
+            return Mono.empty();
+        }
         return authPort.login(adminEmail, adminPassword)
             .doOnSuccess(resp -> log.info("ℹ️ Super Admin déjà présent."))
             .onErrorResume(e -> {

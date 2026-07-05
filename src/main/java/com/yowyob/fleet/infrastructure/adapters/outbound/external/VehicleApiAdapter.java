@@ -8,6 +8,7 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.Vehicle
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.dto.VehicleExternalResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -21,8 +22,8 @@ import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
-@Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "application.external.vehicle-mode", havingValue = "remote", matchIfMissing = true)
 public class VehicleApiAdapter implements ExternalVehiclePort {
 
     private final VehicleApiClient apiClient;

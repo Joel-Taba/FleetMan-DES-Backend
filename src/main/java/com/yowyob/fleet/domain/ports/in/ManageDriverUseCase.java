@@ -13,6 +13,8 @@ public interface ManageDriverUseCase {
     // --- AJOUTS TACHE 8 ---
     Mono<Driver> registerDriverWithPhoto(UUID fleetId, DriverRegistrationRequest request, UUID managerId, AuthUseCase.FileContent photo);
     Flux<Driver> getDriversWithFilters(UUID fleetId, Boolean isAssigned, UUID requesterId);
+    Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> getDriversEnriched(UUID fleetId, Boolean isAssigned, UUID requesterId);
+    Mono<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> getDriverEnriched(UUID userId);
     Mono<Driver> searchDriver(String identifier);
     // ----------------------
 

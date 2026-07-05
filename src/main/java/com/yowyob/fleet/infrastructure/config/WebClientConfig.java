@@ -2,13 +2,14 @@ package com.yowyob.fleet.infrastructure.config;
 
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.*;
 import io.netty.resolver.DefaultAddressResolverGroup;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-import org.springframework.http.HttpHeaders; // Import ajouté
-import org.springframework.http.MediaType;   // Import ajouté
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -20,9 +21,10 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import reactor.netty.http.client.HttpClient;
 
-@Slf4j
 @Configuration
 public class WebClientConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(WebClientConfig.class);
 
     /**
      * Filtre pour logger toutes les requêtes sortantes vers les microservices tiers.
@@ -34,7 +36,7 @@ public class WebClientConfig {
         });
     }
 
-    // --- BUILDER DE BASE AVEC LOGGING ---    
+    // --- BUILDER DE BASE AVEC LOGGING ---
     @Bean
     @Primary // Pour que ce builder soit celui utilisé par défaut partout
     public WebClient.Builder webClientBuilder() {
@@ -43,6 +45,40 @@ public class WebClientConfig {
         return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .filter(logRequest()); // On lui injecte le filtre de log
+    }
+
+    // --- KERNEL RT-COMOPS ---
+
+    @Bean("kernelWebClient")
+    public WebClient kernelWebClient(
+            WebClient.Builder builder,
+            @Value("${application.kernel.url:http://kernel-core.yowyob.com}") String kernelUrl,
+            @Value("${application.kernel.client-id:fleet-management-backend}") String clientId,
+            @Value("${application.kernel.api-key:fleet-api-key-2026}") String apiKey) {
+        return builder
+                .baseUrl(kernelUrl)
+                .defaultHeader("X-Client-Id", clientId)
+                .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .filter(logRequest())
+                .build();
+    }
+
+    @Bean
+    public KernelAuthApiClient kernelAuthApiClient(
+            @Value("${application.kernel.url:http://kernel-core.yowyob.com}") String kernelUrl,
+            @Value("${application.kernel.client-id:fleet-management-backend}") String clientId,
+            @Value("${application.kernel.api-key:fleet-api-key-2026}") String apiKey) {
+        WebClient webClient = WebClient.builder()
+                .baseUrl(kernelUrl)
+                .defaultHeader("X-Client-Id", clientId)
+                .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .filter(logRequest())
+                .build();
+        return createProxy(webClient, KernelAuthApiClient.class);
     }
 
     // --- CLIENTS STANDARDS ---
@@ -68,7 +104,7 @@ public class WebClientConfig {
     }
 
     @Bean
-    public NotificationApiClient notificationApiClient(WebClient.Builder builder, 
+    public NotificationApiClient notificationApiClient(WebClient.Builder builder,
                                                       @Value("${application.notification.url}") String url) {
         WebClient webClient = builder.baseUrl(url).filter(logRequest()).build();
         return createProxy(webClient, NotificationApiClient.class);
@@ -113,7 +149,7 @@ public class WebClientConfig {
                     .trustManager(InsecureTrustManagerFactory.INSTANCE).build();
             HttpClient httpClient = HttpClient.create()
                 .secure(t -> t.sslContext(sslContext))
-                .resolver(DefaultAddressResolverGroup.INSTANCE); 
+                .resolver(DefaultAddressResolverGroup.INSTANCE);
 
             return WebClient.builder()
                     .baseUrl(baseUrl)
@@ -121,8 +157,8 @@ public class WebClientConfig {
                     .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                     .filter(logRequest())
                     .clientConnector(new ReactorClientHttpConnector(httpClient));
-        } catch (Exception e) { 
-            throw new RuntimeException("Erreur configuration WebClient Insecure", e); 
+        } catch (Exception e) {
+            throw new RuntimeException("Erreur configuration WebClient Insecure", e);
         }
     }
 }

@@ -1,0 +1,2065 @@
+\documentclass[12pt,a4paper]{report}
+
+% --- Encodage et langue (XeLaTeX natif UTF-8) --------------------------------
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setmainlanguage{french}
+
+% --- Mise en page ------------------------------------------------------------
+\usepackage[top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% --- Typographie -------------------------------------------------------------
+\usepackage{microtype}
+\usepackage{parskip}
+
+% --- Couleurs et graphiques --------------------------------------------------
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds, calc}
+
+% --- Tableaux ----------------------------------------------------------------
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{array}
+
+% --- Code source -------------------------------------------------------------
+\usepackage{listings}
+\usepackage{lstautogobble}
+
+% --- Liens -------------------------------------------------------------------
+\usepackage[hidelinks]{hyperref}
+\usepackage{amsmath}
+\usepackage{cleveref}
+
+% --- En-têtes ----------------------------------------------------------------
+\usepackage{fancyhdr}
+\usepackage{emptypage}
+
+% --- Boîtes ------------------------------------------------------------------
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable, listings}
+
+% --- Listes ------------------------------------------------------------------
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{pifont}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% COULEURS
+% ─────────────────────────────────────────────────────────────────────────────
+\definecolor{fleetblue}{RGB}{19, 109, 236}
+\definecolor{fleetdark}{RGB}{11, 17, 32}
+\definecolor{fleetgray}{RGB}{107, 114, 128}
+\definecolor{fleetsuccess}{RGB}{16, 185, 129}
+\definecolor{fleetwarning}{RGB}{245, 158, 11}
+\definecolor{fleeterror}{RGB}{239, 68, 68}
+\definecolor{fleetpurple}{RGB}{139, 92, 246}
+\definecolor{kernelcolor}{RGB}{6, 95, 70}
+\definecolor{kernellight}{RGB}{209, 250, 229}
+\definecolor{codebg}{RGB}{248, 249, 250}
+\definecolor{codefg}{RGB}{36, 41, 47}
+\definecolor{commentcolor}{RGB}{106, 153, 85}
+\definecolor{keywordcolor}{RGB}{86, 156, 214}
+\definecolor{stringcolor}{RGB}{206, 145, 120}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% LISTINGS
+% ─────────────────────────────────────────────────────────────────────────────
+\lstdefinestyle{javaStyle}{
+  language=Java,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize\color{codefg},
+  keywordstyle=\color{keywordcolor}\bfseries,
+  stringstyle=\color{stringcolor},
+  commentstyle=\color{commentcolor}\itshape,
+  numberstyle=\tiny\color{fleetgray},
+  numbers=left, numbersep=8pt,
+  breaklines=true, frame=single,
+  rulecolor=\color{fleetgray!40},
+  xleftmargin=15pt, autogobble=true,
+  morekeywords={UUID, Mono, Flux, record, var, WebClient}
+}
+
+\lstdefinestyle{yamlStyle}{
+  language=bash,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize\color{codefg},
+  keywordstyle=\color{keywordcolor},
+  stringstyle=\color{stringcolor},
+  commentstyle=\color{commentcolor}\itshape,
+  breaklines=true, frame=single,
+  rulecolor=\color{fleetgray!40},
+  xleftmargin=15pt, autogobble=true
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% BOITES
+% ─────────────────────────────────────────────────────────────────────────────
+\newtcolorbox{kernelbox}[2][]{
+  colback=kernellight, colframe=kernelcolor,
+  fonttitle=\bfseries\color{white},
+  coltitle=white,
+  attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=kernelcolor},
+  title={#2}, breakable, #1
+}
+
+\newtcolorbox{fleetbox}[2][]{
+  colback=fleetblue!6, colframe=fleetblue,
+  fonttitle=\bfseries\color{white},
+  coltitle=white,
+  attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=fleetblue},
+  title={#2}, breakable, #1
+}
+
+\newtcolorbox{warningbox}[1][]{
+  colback=fleetwarning!8, colframe=fleetwarning,
+  fonttitle=\bfseries\small,
+  title={Attention}, breakable, #1
+}
+
+\newtcolorbox{infobox}[1][]{
+  colback=fleetblue!5, colframe=fleetblue!60,
+  fonttitle=\bfseries\small,
+  title={Information}, breakable, #1
+}
+
+\newtcolorbox{contractbox}[1][]{
+  colback=fleetdark!4, colframe=fleetdark,
+  fonttitle=\bfseries\color{white},
+  coltitle=white,
+  title={Contrat d'intégration}, breakable, #1
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% TITRES
+% ─────────────────────────────────────────────────────────────────────────────
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\color{fleetdark}}
+  {\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-10pt}{30pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{fleetblue}}
+  {\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{fleetdark}}
+  {\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries\color{fleetgray}}
+  {\thesubsubsection}{1em}{}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% EN-TETES
+% ─────────────────────────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{fleetgray}{\leftmark}}
+\fancyhead[R]{\small\textcolor{fleetblue}{\textbf{FleetMan — Intégration Kernel RT-Comops}}}
+\fancyfoot[C]{\small\textcolor{fleetgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+\setlength{\headheight}{15pt}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% DEBUT DU DOCUMENT
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% PAGE DE TITRE
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \pagecolor{fleetdark}
+  \color{white}
+  \centering
+  \vspace*{1.5cm}
+
+  {\fontsize{50}{60}\selectfont\bfseries\textcolor{fleetblue}{FleetMan}}\\[0.3cm]
+  {\Large\textcolor{white!70}{Plateforme de Gestion de Flotte Intelligente}}\\[2cm]
+
+  \textcolor{fleetblue}{\rule{0.85\textwidth}{2pt}}\\[0.8cm]
+
+  {\LARGE\bfseries Intégration du Kernel RT-Comops}\\[0.4cm]
+  {\large Analyse, Identification des Modules Applicables et Plan d'Implémentation}\\[0.8cm]
+
+  \textcolor{fleetblue}{\rule{0.85\textwidth}{1pt}}\\[1.5cm]
+
+  \begin{tabular}{rl}
+    \textcolor{white!60}{Projet :}       & \textbf{FleetMan — Module Fleet Management} \\[0.3cm]
+    \textcolor{white!60}{Kernel :}       & \textbf{RT-Comops Backend — Architecture Multi-Tenant V3} \\[0.3cm]
+    \textcolor{white!60}{Type :}         & \textbf{Document d'Intégration Technique} \\[0.3cm]
+    \textcolor{white!60}{Modules Kernel :} & \textbf{20 cores analysés, 9 applicables à FleetMan} \\[0.3cm]
+    \textcolor{white!60}{Version :}      & \textbf{1.0 — Juin 2026} \\[0.3cm]
+    \textcolor{white!60}{Niveau :}       & \textbf{5\textsuperscript{ème} année Génie Informatique} \\
+  \end{tabular}
+
+  \vfill
+
+  {\small\textcolor{white!50}{École Polytechnique — Département Informatique}}\\
+  {\small\textcolor{white!50}{Document de Spécification d'Intégration}}
+\end{titlepage}
+\nopagecolor
+
+\tableofcontents
+\newpage
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter*{Introduction Générale}
+\addcontentsline{toc}{chapter}{Introduction Générale}
+\thispagestyle{fancy}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section*{Contexte du Projet}
+
+FleetMan est une plateforme de gestion de flotte de véhicules développée dans le cadre d'un projet de fin d'études de 5\textsuperscript{ème} année Génie Informatique. Elle constitue l'un des modules métier d'un écosystème applicatif plus vaste : la plateforme \textbf{RT-Comops}, un monolithe modulaire hexagonal multi-tenant développé par l'équipe de recherche et développement.
+
+La plateforme RT-Comops est organisée autour d'un \textbf{Kernel} — le cœur technique transverse — qui concentre tous les mécanismes partagés entre les différents modules métier : authentification, gestion des identités, multi-tenancy, audit, événements, fichiers, organisations, rôles et permissions. Ce Kernel constitue la \textbf{base fondatrice} sur laquelle chaque module métier doit s'appuyer.
+
+\section*{Objectif du Document}
+
+Ce document a pour objectif de :
+
+\begin{enumerate}[leftmargin=2cm]
+  \item \textbf{Analyser} en profondeur les 20 cores du Kernel RT-Comops et comprendre leur rôle fonctionnel et technique.
+  \item \textbf{Identifier} les modules du Kernel directement applicables et utiles au projet FleetMan.
+  \item \textbf{Expliquer} comment chaque module Kernel sélectionné sera utilisé dans FleetMan, avec les patterns d'intégration concrets.
+  \item \textbf{Planifier} l'implémentation de cette intégration de façon détaillée et progressive.
+\end{enumerate}
+
+\section*{Architecture Générale du Kernel}
+
+Le Kernel RT-Comops est un monolithe modulaire hexagonal organisé en \textbf{20 cores fonctionnels}. Il repose sur la même stack technologique que FleetMan : Spring Boot WebFlux, Java 21, R2DBC, PostgreSQL, Redis, Kafka. Cette cohérence technologique facilite considérablement l'intégration.
+
+\begin{kernelbox}{Les 20 Cores du Kernel RT-Comops}
+\begin{enumerate}[leftmargin=1.5cm, itemsep=2pt]
+  \item \textbf{kernel-core} — Multi-tenancy, JWT RS256, audit, outbox, ClientApplications
+  \item \textbf{common-core} — Types partagés, BaseEntity, Address, Contact, PartyRef
+  \item \textbf{actor-core} — Acteurs, BusinessActors, profils
+  \item \textbf{auth-core} — Authentification, OIDC, OTP, MFA, JWT
+  \item \textbf{roles-core} — Rôles, permissions, scopes RBAC
+  \item \textbf{organization-core} — Organisations, agences, points d'intérêt
+  \item \textbf{tp-core} — Tiers (clients, prospects, fournisseurs)
+  \item \textbf{settings-core} — Paramètres métier, séquences documentaires
+  \item \textbf{product-core} — Catalogue produits, variantes, prix
+  \item \textbf{inventory-core} — Stocks, mouvements, inventaires
+  \item \textbf{resource-core} — Ressources matérielles, véhicules, affectations
+  \item \textbf{sales-core} — Commandes de vente
+  \item \textbf{accounting-core} — Comptabilité générale
+  \item \textbf{billing-core} — Facturation commerciale
+  \item \textbf{treasury-core} — Trésorerie, comptes bancaires
+  \item \textbf{cashier-core} — Caisse opérationnelle
+  \item \textbf{administration-core} — Gouvernance, administration plateforme
+  \item \textbf{file-core} — Gestion des fichiers et documents
+  \item \textbf{hrm-core} — Ressources humaines
+  \item \textbf{blockchain-core} — Wallets, signatures, ancrage documentaire
+\end{enumerate}
+\end{kernelbox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Analyse Détaillée des 20 Cores du Kernel}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{kernel-core — La Colonne Vertébrale Technique}
+
+\subsection{Description et Rôle Principal}
+
+Le \texttt{kernel-core} est le composant le plus fondamental de toute la plateforme. Il garantit l'exécution sûre de toutes les APIs en combinant :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Isolation multi-tenant logique} : chaque requête porte un \texttt{tenantId} injecté par le \texttt{TenantWebFilter} dans la chaîne réactive
+  \item \textbf{Authentification des ClientApplications} : via les headers \texttt{X-Client-Id} et \texttt{X-Api-Key}
+  \item \textbf{Validation JWT RS256} : extraction des claims \texttt{sub}, \texttt{tid}, \texttt{oid}, \texttt{aid}, \texttt{actor}
+  \item \textbf{Outbox transactionnel} : écriture atomique des événements dans \texttt{kernel.outbox\_event}
+  \item \textbf{Piste d'audit immuable} : \texttt{AuditTrail} en insertion seule
+  \item \textbf{Quotas Redis} : limitation par \texttt{tenantId + clientId + serviceCode}
+\end{itemize}
+
+\subsection{Contrat d'Appel Minimal}
+
+Tout backend qui se connecte au Kernel doit envoyer les headers suivants :
+
+\begin{lstlisting}[style=yamlStyle, caption={Headers obligatoires vers le Kernel}]
+X-Client-Id: <identifiant stable de la ClientApplication>
+X-Api-Key: <secret serveur de l'application>
+X-Tenant-Id: <tenant cible de l'appel>
+Authorization: Bearer <accessToken>  # requis pour actions utilisateur
+X-Organization-Id: <requis pour services metier scopes organisation>
+\end{lstlisting}
+
+\subsection{Catalogue des Services Autorisés}
+
+Le Kernel contrôle l'accès aux services via le catalogue \texttt{PlatformServiceCode} :
+
+\begin{longtable}{p{4cm}p{9cm}}
+\toprule
+\textbf{Code Service} & \textbf{Description} \\
+\midrule
+\endhead
+\texttt{ORGANIZATION} & Gestion des organisations et agences \\
+\texttt{SETTINGS} & Paramètres métier et séquences \\
+\texttt{COMMERCIAL} & Tiers, prospects, clients \\
+\texttt{PRODUCT} & Catalogue produits \\
+\texttt{INVENTORY} & Gestion des stocks \\
+\texttt{SALES} & Commandes de vente \\
+\texttt{BILLING} & Facturation commerciale \\
+\texttt{ACCOUNTING} & Comptabilité générale \\
+\texttt{BANKING} & Comptes bancaires \\
+\texttt{TREASURY} & Trésorerie \\
+\texttt{CASHIER} & Caisse opérationnelle \\
+\texttt{RESOURCE} & Ressources matérielles \\
+\texttt{HRM} & Ressources humaines \\
+\texttt{BLOCKCHAIN} & Wallets et ancrage \\
+\bottomrule
+\caption{Catalogue PlatformServiceCode du Kernel}
+\end{longtable}
+
+\section{common-core — Socle de Types Partagés}
+
+\subsection{Description}
+
+Le \texttt{common-core} fournit les abstractions réutilisées par tous les autres cores :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{BaseEntity} : classe abstraite avec \texttt{UUID id}, \texttt{tenantId}, \texttt{createdAt}, \texttt{updatedAt}
+  \item \textbf{Address} : adresse polymorphique attachable à toute entité (lignes, ville, pays, GPS)
+  \item \textbf{Contact} : contact polymorphique avec vérification email/téléphone
+  \item \textbf{PartyRef} : référence légère inter-cores (\texttt{partyType} + \texttt{partyId})
+  \item \textbf{ApiResponse<T>} et \textbf{PageResult<T>} : enveloppes de réponse JSON uniformes
+  \item \textbf{PlatformServiceCode} : énumération partagée des services
+\end{itemize}
+
+\subsection{Invariants Clés}
+
+\begin{itemize}[leftmargin=2cm]
+  \item Une seule adresse par défaut par combinaison (\texttt{addressableId}, \texttt{addressableType}, \texttt{addressType})
+  \item \texttt{PartyRef.partyType} limité à \texttt{ACTOR} et \texttt{ORGANIZATION}
+  \item \texttt{tenantId} obligatoire sur toutes les structures polymorphiques
+\end{itemize}
+
+\section{actor-core — Gestion des Acteurs}
+
+\subsection{Description}
+
+L'\texttt{actor-core} gère les acteurs de la plateforme : personnes physiques (\texttt{Actor}), entités commerciales (\texttt{BusinessActor}), et leurs profils détaillés. Il couvre :
+
+\begin{itemize}[leftmargin=2cm]
+  \item Création, mise à jour et suppression douce des acteurs
+  \item Rattachement d'un acteur à une organisation
+  \item Cycle de vie : \texttt{PENDING} → \texttt{ACTIVE} → \texttt{SUSPENDED} → \texttt{DELETED}
+  \item Réactivation par auto-service ou approbation administrative
+\end{itemize}
+
+\section{auth-core — Authentification et Identité}
+
+\subsection{Description}
+
+L'\texttt{auth-core} gère l'ensemble du cycle d'authentification :
+
+\begin{itemize}[leftmargin=2cm]
+  \item Création de comptes utilisateurs par un administrateur IAM
+  \item Authentification locale tenant-scoped avec émission de JWT RS256
+  \item Découverte globale des contextes de login (multi-tenant)
+  \item Sélection explicite d'un contexte tenant/organisation
+  \item Identification email-first et inscription contextuelle
+  \item Réinitialisation de mot de passe (SMTP ou PREVIEW\_ONLY)
+  \item Vérification d'email post-authentification
+  \item Gestion du profil utilisateur (\texttt{/users/me})
+\end{itemize}
+
+\subsection{Flow JWT RS256}
+
+Le Kernel émet des JWT RS256 signés avec une clé privée. Les backends consommateurs vérifient la signature via le document \texttt{/.well-known/jwks.json}. Les claims transportés sont : \texttt{sub} (userId), \texttt{tid} (tenantId), \texttt{oid} (organizationId), \texttt{aid} (agencyId), \texttt{actor} (actorId).
+
+\section{roles-core — Rôles et Permissions RBAC}
+
+\subsection{Description}
+
+Le \texttt{roles-core} implémente un système RBAC (Role-Based Access Control) complet :
+
+\begin{itemize}[leftmargin=2cm]
+  \item Création de rôles avec codes de permission granulaires
+  \item Affectation de rôles à des utilisateurs avec portée (TENANT, ORGANIZATION, AGENCY)
+  \item Résolution des permissions avec cache Redis optionnel
+  \item Construction des autorités scopées à partir d'une affectation
+  \item Invalidation du cache après modification d'affectation
+  \item Provisionnement de templates de rôles (réservé à \texttt{administration-core})
+\end{itemize}
+
+\section{organization-core — Organisations et Agences}
+
+\subsection{Description}
+
+L'\texttt{organization-core} gère la structure organisationnelle :
+
+\begin{itemize}[leftmargin=2cm]
+  \item Création d'une organisation avec agence siège automatique
+  \item Création d'agences opérationnelles
+  \item Gestion des horaires d'ouverture
+  \item Lien fonctionnel acteur-organisation
+  \item Suspension d'une organisation et de ses agences
+  \item Ajout de points d'intérêt géographiques (GPS)
+\end{itemize}
+
+\section{tp-core — Gestion des Tiers}
+
+\subsection{Description}
+
+Le \texttt{tp-core} gère les tiers commerciaux (clients, prospects, fournisseurs) :
+
+\begin{itemize}[leftmargin=2cm]
+  \item Création d'un tiers avec rôle client
+  \item Qualification commerciale d'un prospect
+  \item Conversion prospect → client
+  \item Enregistrement d'interactions commerciales
+  \item Ajout de comptes bancaires
+  \item Recherche plein-texte (Elasticsearch / fallback PostgreSQL)
+\end{itemize}
+
+\section{settings-core — Paramètres Métier}
+
+\subsection{Description}
+
+Le \texttt{settings-core} gère la configuration métier de la plateforme :
+
+\begin{itemize}[leftmargin=2cm]
+  \item Génération de numéros documentaires avec fallback agence → organisation
+  \item Lecture des paramètres métier effectifs
+  \item Mise à jour des options générales d'une organisation
+  \item Gestion des séquences documentaires par agence
+  \item Politique opérationnelle d'agence avec repli organisation
+\end{itemize}
+
+\section{resource-core — Ressources Matérielles}
+
+\subsection{Description}
+
+Le \texttt{resource-core} est le module le plus directement lié à FleetMan. Il gère les ressources matérielles de l'organisation :
+
+\begin{itemize}[leftmargin=2cm]
+  \item Enregistrement d'une ressource matérielle (véhicule, équipement)
+  \item Affectation d'une ressource à un acteur (conducteur)
+  \item Envoi en maintenance et retour à l'état opérationnel
+  \item Mise à jour de la localisation GPS en temps réel
+  \item Mise au rebut irréversible
+\end{itemize}
+
+\section{file-core — Gestion des Fichiers}
+
+\subsection{Description}
+
+Le \texttt{file-core} gère le cycle de vie des fichiers et documents :
+
+\begin{itemize}[leftmargin=2cm]
+  \item Téléversement avec audit système
+  \item Téléchargement sécurisé
+  \item Rattachement d'un document à une cible métier (polymorphique)
+  \item Consultation des documents d'une cible
+  \item Politique de gouvernance documentaire (expiration, révision)
+\end{itemize}
+
+\section{accounting-core, billing-core, treasury-core — Finance}
+
+Ces trois cores couvrent le cycle financier complet :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{accounting-core} : Comptabilité générale, factures canoniques, règlements, postings
+  \item \textbf{billing-core} : Facturation commerciale legacy, bons de livraison, paiements
+  \item \textbf{treasury-core} : Comptes bancaires, relevés, rapprochements, chèques
+\end{itemize}
+
+\section{hrm-core — Ressources Humaines}
+
+Le \texttt{hrm-core} couvre l'ensemble du cycle RH : employés, contrats, congés, paie, recrutement, onboarding, formation, frais, missions, médical et KPI RH. Il s'intègre avec \texttt{actor-core} et \texttt{organization-core}.
+
+\section{blockchain-core — Ancrage et Wallets}
+
+Le \texttt{blockchain-core} fournit une blockchain interne pour : wallets, signatures numériques, blocs, ancrage documentaire et ancrage d'événements métier. Il garantit l'immuabilité et la traçabilité des opérations critiques.
+
+\section{administration-core — Gouvernance}
+
+L'\texttt{administration-core} gère la gouvernance de la plateforme : approbation des BusinessActors, mise à jour des options de plateforme avec audit, consultation de la piste d'audit, supervision de l'état du système.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Identification des Modules Kernel Applicables à FleetMan}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Méthodologie de Sélection}
+
+Pour identifier les modules Kernel applicables à FleetMan, nous avons appliqué trois critères de sélection :
+
+\begin{enumerate}[leftmargin=2cm]
+  \item \textbf{Pertinence fonctionnelle} : le module couvre un besoin déjà présent ou planifié dans FleetMan
+  \item \textbf{Évitement de la duplication} : FleetMan ne doit pas réimplémenter ce que le Kernel fournit déjà
+  \item \textbf{Cohérence architecturale} : l'intégration respecte le contrat backend-to-kernel
+\end{enumerate}
+
+\section{Tableau de Sélection des Modules}
+
+\begin{longtable}{p{3.5cm}p{2cm}p{7.5cm}}
+\toprule
+\textbf{Module Kernel} & \textbf{Applicable} & \textbf{Justification} \\
+\midrule
+\endhead
+\texttt{kernel-core} & \textcolor{fleetsuccess}{\textbf{OUI}} & Fondation obligatoire : multi-tenancy, JWT, audit, outbox \\
+\texttt{common-core} & \textcolor{fleetsuccess}{\textbf{OUI}} & BaseEntity, Address, Contact, PageResult réutilisables \\
+\texttt{actor-core} & \textcolor{fleetsuccess}{\textbf{OUI}} & Gestionnaires et conducteurs sont des acteurs \\
+\texttt{auth-core} & \textcolor{fleetsuccess}{\textbf{OUI}} & Remplace l'authentification locale actuelle de FleetMan \\
+\texttt{roles-core} & \textcolor{fleetsuccess}{\textbf{OUI}} & Remplace le RBAC local (FLEET\_MANAGER, FLEET\_DRIVER) \\
+\texttt{organization-core} & \textcolor{fleetsuccess}{\textbf{OUI}} & Une flotte = une organisation, un dépôt = une agence \\
+\texttt{tp-core} & \textcolor{fleetsuccess}{\textbf{OUI}} & Les clients des missions sont des tiers \\
+\texttt{settings-core} & \textcolor{fleetsuccess}{\textbf{OUI}} & Numéros de missions, paramètres métier \\
+\texttt{resource-core} & \textcolor{fleetsuccess}{\textbf{OUI}} & Les véhicules sont des ressources matérielles \\
+\texttt{file-core} & \textcolor{fleetsuccess}{\textbf{OUI}} & Documents légaux véhicules/conducteurs \\
+\texttt{billing-core} & \textcolor{fleetwarning}{\textbf{PARTIEL}} & Facturation des missions (Module 7 du cahier) \\
+\texttt{accounting-core} & \textcolor{fleetwarning}{\textbf{PARTIEL}} & Comptabilisation des dépenses opérationnelles \\
+\texttt{product-core} & \textcolor{fleeterror}{\textbf{NON}} & Pas de catalogue produits dans FleetMan \\
+\texttt{inventory-core} & \textcolor{fleeterror}{\textbf{NON}} & Pas de gestion de stocks dans FleetMan \\
+\texttt{sales-core} & \textcolor{fleeterror}{\textbf{NON}} & Pas de commandes de vente au sens strict \\
+\texttt{treasury-core} & \textcolor{fleeterror}{\textbf{NON}} & Hors périmètre FleetMan \\
+\texttt{cashier-core} & \textcolor{fleeterror}{\textbf{NON}} & Hors périmètre FleetMan \\
+\texttt{administration-core} & \textcolor{fleetwarning}{\textbf{PARTIEL}} & Gouvernance du super-admin FleetMan \\
+\texttt{hrm-core} & \textcolor{fleeterror}{\textbf{NON}} & Hors périmètre FleetMan (RH complète) \\
+\texttt{blockchain-core} & \textcolor{fleetwarning}{\textbf{FUTUR}} & Ancrage des incidents critiques (phase future) \\
+\bottomrule
+\caption{Sélection des modules Kernel applicables à FleetMan}
+\end{longtable}
+
+\section{Les 9 Modules Retenus}
+
+\begin{tcolorbox}[colback=kernellight, colframe=kernelcolor, title={\bfseries\color{white} Modules Kernel retenus pour FleetMan}]
+\begin{enumerate}[leftmargin=1.5cm]
+  \item \textbf{kernel-core} — Fondation obligatoire (multi-tenancy, JWT, audit, outbox)
+  \item \textbf{common-core} — Types partagés (BaseEntity, Address, Contact, PageResult)
+  \item \textbf{actor-core} — Gestion des acteurs (gestionnaires, conducteurs)
+  \item \textbf{auth-core} — Authentification centralisée (remplace l'auth locale)
+  \item \textbf{roles-core} — RBAC centralisé (remplace les rôles locaux)
+  \item \textbf{organization-core} — Structure organisationnelle (flotte = organisation)
+  \item \textbf{tp-core} — Gestion des tiers (clients des missions)
+  \item \textbf{settings-core} — Paramètres métier et numérotation
+  \item \textbf{resource-core} — Ressources matérielles (véhicules)
+  \item \textbf{file-core} — Documents légaux (assurance, permis, carte grise)
+\end{enumerate}
+\end{tcolorbox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Analyse Détaillée de Chaque Intégration}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Intégration 1 — kernel-core : Fondation Multi-Tenant}
+
+\subsection{Situation Actuelle dans FleetMan}
+
+Actuellement, FleetMan gère son propre contexte de sécurité via \texttt{SecurityConfig}, \texttt{JwtAuthenticationManager} et \texttt{BearerTokenServerAuthenticationConverter}. L'authentification est déléguée à un service Auth externe via \texttt{RemoteAuthAdapter}, mais sans le contrat formel du Kernel.
+
+\subsection{Ce que le kernel-core Apporte}
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Multi-tenancy logique} : FleetMan devient un tenant du Kernel. Chaque entreprise de transport est un tenant distinct, avec isolation complète des données.
+  \item \textbf{ClientApplication} : FleetMan s'enregistre comme \texttt{fleet-management-backend} avec ses \texttt{allowedServiceCodes} : \texttt{ORGANIZATION}, \texttt{RESOURCE}, \texttt{COMMERCIAL}, \texttt{SETTINGS}, \texttt{FILE}.
+  \item \textbf{JWT RS256 centralisé} : FleetMan vérifie les tokens via le JWKS du Kernel au lieu de son propre mécanisme.
+  \item \textbf{Audit immuable} : toutes les opérations critiques (création véhicule, incident, maintenance) sont tracées dans \texttt{kernel.outbox\_event}.
+  \item \textbf{Outbox transactionnel} : les événements FleetMan (incident critique, maintenance créée) sont publiés via l'outbox du Kernel vers Kafka.
+\end{itemize}
+
+\subsection{Mapping Conceptuel}
+
+\begin{longtable}{p{5cm}p{5cm}p{3cm}}
+\toprule
+\textbf{Concept FleetMan} & \textbf{Concept Kernel} & \textbf{Mapping} \\
+\midrule
+\endhead
+Entreprise de transport & Tenant & 1:1 \\
+Application FleetMan & ClientApplication & 1:1 \\
+Token JWT actuel & JWT RS256 Kernel & Remplacement \\
+Audit local & AuditTrail Kernel & Remplacement \\
+Événements Kafka locaux & Outbox Kernel & Enrichissement \\
+\bottomrule
+\caption{Mapping kernel-core vers FleetMan}
+\end{longtable}
+
+\subsection{Implémentation Technique}
+
+\begin{lstlisting}[style=javaStyle, caption={Configuration de la ClientApplication FleetMan}]
+// Dans application.yml
+application:
+  kernel:
+    url: https://kernel.rt-comops.com
+    client-id: fleet-management-backend
+    api-key: ${FLEET_KERNEL_API_KEY}
+    tenant-id: ${FLEET_TENANT_ID}
+    allowed-services:
+      - ORGANIZATION
+      - RESOURCE
+      - COMMERCIAL
+      - SETTINGS
+      - FILE
+\end{lstlisting}
+
+\begin{lstlisting}[style=javaStyle, caption={Adapter WebClient vers le Kernel}]
+@Component
+@RequiredArgsConstructor
+public class KernelWebClientAdapter {
+
+    private final WebClient kernelWebClient;
+
+    @Value("${application.kernel.client-id}")
+    private String clientId;
+
+    @Value("${application.kernel.api-key}")
+    private String apiKey;
+
+    @Value("${application.kernel.tenant-id}")
+    private String tenantId;
+
+    public WebClient.RequestHeadersSpec<?> withKernelHeaders(
+            WebClient.RequestHeadersSpec<?> spec,
+            String organizationId,
+            String bearerToken) {
+        return spec
+            .header("X-Client-Id", clientId)
+            .header("X-Api-Key", apiKey)
+            .header("X-Tenant-Id", tenantId)
+            .header("X-Organization-Id", organizationId)
+            .header("Authorization", "Bearer " + bearerToken);
+    }
+}
+\end{lstlisting}
+
+\section{Intégration 2 — common-core : Types Partagés}
+
+\subsection{Situation Actuelle}
+
+FleetMan utilise ses propres records Java immuables (\texttt{Vehicle}, \texttt{Driver}, \texttt{Fleet}) sans base commune. La pagination est gérée par le \texttt{PageResponse<T>} créé dans le Chapitre 1 de notre implémentation.
+
+\subsection{Ce que le common-core Apporte}
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{BaseEntity} : FleetMan adopte la classe abstraite \texttt{BaseEntity} du Kernel comme base de toutes ses entités, garantissant la présence de \texttt{tenantId}, \texttt{createdAt}, \texttt{updatedAt}.
+  \item \textbf{Address polymorphique} : les adresses des flottes, dépôts et conducteurs utilisent le modèle \texttt{Address} du Kernel au lieu de champs texte dispersés.
+  \item \textbf{Contact polymorphique} : les contacts des gestionnaires et conducteurs utilisent \texttt{Contact} du Kernel.
+  \item \textbf{PageResult<T>} : notre \texttt{PageResponse<T>} est aligné sur le format \texttt{PageResult<T>} du Kernel pour une cohérence API globale.
+  \item \textbf{ApiResponse<T>} : toutes les réponses FleetMan adoptent l'enveloppe standard du Kernel.
+\end{itemize}
+
+\subsection{Mapping Conceptuel}
+
+\begin{longtable}{p{5cm}p{5cm}p{3cm}}
+\toprule
+\textbf{Concept FleetMan} & \textbf{Concept Kernel} & \textbf{Action} \\
+\midrule
+\endhead
+Champs \texttt{createdAt/updatedAt} & \texttt{BaseEntity} & Héritage \\
+Adresse de la flotte & \texttt{Address} polymorphique & Remplacement \\
+Contact du gestionnaire & \texttt{Contact} polymorphique & Remplacement \\
+\texttt{PageResponse<T>} & \texttt{PageResult<T>} & Alignement \\
+Réponses REST & \texttt{ApiResponse<T>} & Adoption \\
+\bottomrule
+\caption{Mapping common-core vers FleetMan}
+\end{longtable}
+
+\section{Intégration 3 — auth-core : Authentification Centralisée}
+
+\subsection{Situation Actuelle}
+
+FleetMan délègue déjà l'authentification à un service Auth externe via \texttt{RemoteAuthAdapter} et \texttt{AuthApiClient}. Le \texttt{JwtAuthenticationManager} valide les tokens en interrogeant ce service.
+
+\subsection{Ce que l'auth-core Apporte}
+
+L'\texttt{auth-core} du Kernel \textbf{remplace complètement} le service Auth externe actuel. Les bénéfices sont :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Login multi-contexte} : un utilisateur peut avoir des comptes dans plusieurs tenants (plusieurs entreprises de transport)
+  \item \textbf{Découverte des contextes} : l'endpoint \texttt{/auth/contexts} liste les tenants disponibles pour un email donné
+  \item \textbf{JWT RS256 standardisé} : les claims \texttt{tid}, \texttt{oid}, \texttt{aid} sont automatiquement présents
+  \item \textbf{OTP et MFA} : sécurité renforcée pour les gestionnaires de flotte
+  \item \textbf{Réinitialisation de mot de passe} : flux complet avec SMTP
+  \item \textbf{Vérification d'email} : obligatoire pour les nouveaux comptes
+\end{itemize}
+
+\subsection{Mapping des Rôles}
+
+\begin{longtable}{p{5cm}p{5cm}p{3cm}}
+\toprule
+\textbf{Rôle FleetMan Actuel} & \textbf{Rôle Kernel} & \textbf{Scope} \\
+\midrule
+\endhead
+\texttt{SUPER\_ADMIN} & \texttt{SYSTEM\_ADMIN} & SYSTEM \\
+\texttt{FLEET\_ADMIN} & \texttt{TENANT\_ADMIN} & TENANT \\
+\texttt{FLEET\_MANAGER} & \texttt{ORG\_MANAGER} & ORGANIZATION \\
+\texttt{FLEET\_DRIVER} & \texttt{ORG\_OPERATOR} & ORGANIZATION \\
+\bottomrule
+\caption{Mapping des rôles FleetMan vers le Kernel}
+\end{longtable}
+
+\subsection{Adaptation du SecurityConfig}
+
+\begin{lstlisting}[style=javaStyle, caption={Nouveau SecurityConfig avec JWT Kernel RS256}]
+@Configuration
+@EnableWebFluxSecurity
+@EnableReactiveMethodSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityWebFilterChain filterChain(ServerHttpSecurity http,
+            KernelJwtAuthenticationManager authManager) {
+        return http
+            .cors(cors -> cors.configurationSource(corsSource()))
+            .csrf(ServerHttpSecurity.CsrfSpec::disable)
+            .authorizeExchange(ex -> ex
+                .pathMatchers("/v3/api-docs/**", "/swagger-ui/**",
+                              "/actuator/**", "/api/v1/auth/**").permitAll()
+                .anyExchange().authenticated()
+            )
+            // Validation JWT via JWKS du Kernel
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt.authenticationManager(authManager))
+            )
+            .build();
+    }
+}
+\end{lstlisting}
+
+\section{Intégration 4 — roles-core : RBAC Centralisé}
+
+\subsection{Situation Actuelle}
+
+FleetMan utilise \texttt{@PreAuthorize("hasRole('FLEET\_MANAGER')")} avec des rôles définis localement dans le JWT. Le \texttt{JwtAuthenticationManager} extrait les rôles du token.
+
+\subsection{Ce que le roles-core Apporte}
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Rôles avec portée} : un rôle peut être limité à une organisation ou une agence spécifique
+  \item \textbf{Permissions granulaires} : au lieu de rôles grossiers, des codes de permission précis (\texttt{VEHICLE\_CREATE}, \texttt{DRIVER\_MANAGE}, \texttt{INCIDENT\_REPORT})
+  \item \textbf{Cache Redis} : les permissions sont mises en cache pour des performances optimales
+  \item \textbf{Templates de rôles} : des rôles prédéfinis pour les cas d'usage FleetMan
+\end{itemize}
+
+\subsection{Définition des Rôles FleetMan dans le Kernel}
+
+\begin{lstlisting}[style=yamlStyle, caption={Templates de rôles FleetMan à provisionner dans le Kernel}]
+roles:
+  - code: FLEET_MANAGER
+    name: "Gestionnaire de Flotte"
+    permissions:
+      - VEHICLE_CREATE
+      - VEHICLE_READ
+      - VEHICLE_UPDATE
+      - VEHICLE_DELETE
+      - DRIVER_CREATE
+      - DRIVER_READ
+      - DRIVER_MANAGE
+      - FLEET_MANAGE
+      - INCIDENT_READ
+      - MAINTENANCE_MANAGE
+      - ASSIGNMENT_MANAGE
+      - DOCUMENT_MANAGE
+      - KPI_READ
+      - EXPENSE_APPROVE
+
+  - code: FLEET_DRIVER
+    name: "Conducteur"
+    permissions:
+      - VEHICLE_READ
+      - TRIP_START
+      - TRIP_END
+      - TELEMETRY_SEND
+      - INCIDENT_REPORT
+      - MAINTENANCE_DECLARE
+      - FUEL_RECHARGE_CREATE
+      - ASSIGNMENT_VIEW
+      - DOCUMENT_VIEW
+\end{lstlisting}
+
+\section{Intégration 5 — organization-core : Flotte = Organisation}
+
+\subsection{Mapping Conceptuel Clé}
+
+C'est l'une des intégrations les plus structurantes. Le mapping est le suivant :
+
+\begin{longtable}{p{5cm}p{5cm}p{3cm}}
+\toprule
+\textbf{Concept FleetMan} & \textbf{Concept Kernel} & \textbf{Cardinalité} \\
+\midrule
+\endhead
+Entreprise de transport & Tenant & 1:1 \\
+Flotte de véhicules & Organisation & 1:1 \\
+Dépôt / Garage & Agence & N:1 \\
+Gestionnaire de flotte & Acteur lié à l'organisation & N:1 \\
+Zone géographique & Point d'intérêt d'agence & N:1 \\
+\bottomrule
+\caption{Mapping organization-core vers FleetMan}
+\end{longtable}
+
+\subsection{Conséquences Architecturales}
+
+\begin{itemize}[leftmargin=2cm]
+  \item La table \texttt{fleet.fleets} devient une \textbf{projection locale} de l'organisation Kernel, enrichie des données spécifiques à FleetMan (nombre de véhicules, etc.)
+  \item L'\texttt{organizationId} du Kernel est propagé dans tous les appels FleetMan via le header \texttt{X-Organization-Id}
+  \item La création d'une flotte dans FleetMan déclenche la création d'une organisation dans le Kernel (via l'outbox)
+  \item La suspension d'une organisation dans le Kernel suspend automatiquement la flotte correspondante
+\end{itemize}
+
+\subsection{Synchronisation via Outbox}
+
+\begin{lstlisting}[style=javaStyle, caption={Synchronisation flotte-organisation via événements Kafka}]
+// Consommateur Kafka dans FleetMan
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class OrganizationEventConsumer {
+
+    private final FleetRepositoryPort fleetPort;
+
+    @KafkaListener(topics = "iwm.events.business",
+                   groupId = "fleet-management-group")
+    public void onOrganizationEvent(OrganizationEvent event) {
+        if ("ORGANIZATION_SUSPENDED".equals(event.type())) {
+            // Suspendre la flotte correspondante
+            fleetPort.findByOrganizationId(event.organizationId())
+                .flatMap(fleet -> fleetPort.suspend(fleet.id()))
+                .subscribe();
+        }
+    }
+}
+\end{lstlisting}
+
+\section{Intégration 6 — tp-core : Clients des Missions}
+
+\subsection{Situation Actuelle}
+
+Le Module 7 (Clients et Missions) de notre cahier d'analyse prévoit une table \texttt{fleet.clients} locale. Avec le Kernel, ces clients deviennent des \textbf{tiers} gérés par \texttt{tp-core}.
+
+\subsection{Ce que le tp-core Apporte}
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Cycle de vie complet} : prospect → client avec qualification commerciale
+  \item \textbf{Recherche plein-texte} : via Elasticsearch pour retrouver rapidement un client
+  \item \textbf{Comptes bancaires} : pour la facturation des missions
+  \item \textbf{Historique des interactions} : toutes les missions sont des interactions commerciales
+  \item \textbf{Déduplication} : un client peut être partagé entre plusieurs flottes du même tenant
+\end{itemize}
+
+\subsection{Adaptation du Module 7}
+
+La table \texttt{fleet.clients} locale est remplacée par une \textbf{référence légère} vers le tiers Kernel :
+
+\begin{lstlisting}[style=javaStyle, caption={Adaptation de la table missions avec référence tiers Kernel}]
+-- Adaptation de fleet.missions
+ALTER TABLE fleet.missions
+    ADD COLUMN IF NOT EXISTS third_party_id UUID,  -- ID du tiers dans le Kernel
+    ADD COLUMN IF NOT EXISTS third_party_name VARCHAR(255); -- Dénormalisé
+-- La colonne client_id locale devient optionnelle (migration progressive)
+\end{lstlisting}
+
+\section{Intégration 7 — settings-core : Paramètres et Numérotation}
+
+\subsection{Ce que le settings-core Apporte à FleetMan}
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Numéros de missions} : génération automatique de références uniques (\texttt{MSN-2026-001234}) avec fallback agence → organisation
+  \item \textbf{Numéros de factures} : séquences documentaires pour les factures de missions
+  \item \textbf{Paramètres métier} : taux de TVA, devise par défaut (XAF), limites opérationnelles
+  \item \textbf{Politique opérationnelle} : horaires de service, zones autorisées par agence
+\end{itemize}
+
+\subsection{Utilisation dans FleetMan}
+
+\begin{lstlisting}[style=javaStyle, caption={Appel au settings-core pour générer un numéro de mission}]
+@Component
+@RequiredArgsConstructor
+public class MissionNumberGenerator {
+
+    private final KernelWebClientAdapter kernelClient;
+
+    public Mono<String> generateMissionNumber(String organizationId,
+                                               String agencyId,
+                                               String bearerToken) {
+        return kernelClient.withKernelHeaders(
+            kernelWebClient.post()
+                .uri("/api/v1/settings/sequences/next")
+                .bodyValue(Map.of(
+                    "sequenceCode", "MISSION",
+                    "agencyId", agencyId
+                )),
+            organizationId, bearerToken
+        ).retrieve()
+         .bodyToMono(String.class);
+    }
+}
+\end{lstlisting}
+
+\section{Intégration 8 — resource-core : Véhicules comme Ressources}
+
+\subsection{Situation Actuelle}
+
+FleetMan gère ses véhicules localement via \texttt{VehicleService} et \texttt{VehiclePersistenceAdapter}. Il existe déjà un \texttt{ExternalVehiclePort} et un \texttt{VehicleApiAdapter} qui communiquent avec un service véhicule externe.
+
+\subsection{Ce que le resource-core Apporte}
+
+Le \texttt{resource-core} du Kernel \textbf{remplace} le service véhicule externe actuel. Les véhicules deviennent des \textbf{ressources matérielles} du Kernel :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Enregistrement centralisé} : un véhicule est enregistré une fois dans le Kernel et référencé dans FleetMan
+  \item \textbf{Affectation standardisée} : l'affectation conducteur-véhicule utilise le mécanisme d'affectation acteur-ressource du Kernel
+  \item \textbf{Cycle de vie unifié} : AVAILABLE → ON\_TRIP → MAINTENANCE → DECOMMISSIONED
+  \item \textbf{Localisation GPS} : mise à jour de la position via le port dédié du Kernel
+  \item \textbf{Maintenance intégrée} : le passage en maintenance est synchronisé avec le Kernel
+\end{itemize}
+
+\subsection{Mapping Technique}
+
+\begin{longtable}{p{5cm}p{5cm}p{3cm}}
+\toprule
+\textbf{Concept FleetMan} & \textbf{Concept Kernel} & \textbf{Action} \\
+\midrule
+\endhead
+\texttt{Vehicle} & \texttt{Resource} (type VEHICLE) & Synchronisation \\
+\texttt{VehicleService.create()} & \texttt{resource-core.register()} & Délégation \\
+\texttt{VehicleService.assignDriver()} & \texttt{resource-core.assign()} & Délégation \\
+\texttt{TripService.startTrip()} & \texttt{resource-core.updateGps()} & Enrichissement \\
+\texttt{MaintenanceService.create()} & \texttt{resource-core.sendToMaintenance()} & Synchronisation \\
+\bottomrule
+\caption{Mapping resource-core vers FleetMan}
+\end{longtable}
+
+\subsection{Adaptation du VehicleService}
+
+\begin{lstlisting}[style=javaStyle, caption={VehicleService enrichi avec resource-core}]
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class VehicleService implements ManageVehicleUseCase {
+
+    private final VehiclePersistencePort vehiclePort;
+    private final KernelResourceAdapter kernelResourceAdapter;
+
+    @Override
+    public Mono<Vehicle> createIndependentVehicle(VehicleRequest request,
+                                                   UUID managerId,
+                                                   String token) {
+        // 1. Enregistrer dans le Kernel resource-core
+        return kernelResourceAdapter.registerResource(
+                ResourceRegistrationRequest.builder()
+                    .resourceType("VEHICLE")
+                    .name(request.brand() + " " + request.model())
+                    .serialNumber(request.vehicleSerialNumber())
+                    .organizationId(managerId.toString())
+                    .build(), token
+        )
+        // 2. Sauvegarder localement avec l'ID Kernel
+        .flatMap(kernelResource -> {
+            Vehicle vehicle = buildVehicle(request, managerId,
+                                           kernelResource.id());
+            return vehiclePort.saveLocalData(vehicle);
+        });
+    }
+}
+\end{lstlisting}
+
+\section{Intégration 9 — file-core : Documents Légaux}
+
+\subsection{Situation Actuelle}
+
+Le Module 2 (Documents Légaux) de notre implémentation stocke les URLs des fichiers dans les tables \texttt{fleet.vehicle\_documents} et \texttt{fleet.driver\_documents}. Les fichiers eux-mêmes sont stockés localement ou sur un service externe non standardisé.
+
+\subsection{Ce que le file-core Apporte}
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Stockage centralisé} : tous les fichiers (assurance, permis, carte grise) sont gérés par le Kernel
+  \item \textbf{Rattachement polymorphique} : un document est attaché à une cible métier (véhicule ou conducteur) via \texttt{targetType} + \texttt{targetId}
+  \item \textbf{Politique de gouvernance} : expiration automatique, révision périodique
+  \item \textbf{Audit de téléversement} : chaque upload est tracé dans l'audit Kernel
+  \item \textbf{Téléchargement sécurisé} : accès contrôlé par les permissions RBAC
+\end{itemize}
+
+\subsection{Adaptation du DocumentService}
+
+\begin{lstlisting}[style=javaStyle, caption={DocumentService enrichi avec file-core}]
+@Override
+public Mono<VehicleDocument> addVehicleDocument(
+        AddVehicleDocumentCommand cmd) {
+
+    // 1. Téléverser le fichier dans le Kernel file-core
+    return kernelFileAdapter.uploadFile(
+            cmd.fileContent(), cmd.fileName(),
+            "VEHICLE_DOCUMENT", cmd.vehicleId().toString()
+    )
+    // 2. Récupérer l'URL sécurisée du Kernel
+    .flatMap(kernelFile -> {
+        VehicleDocument doc = new VehicleDocument(
+            null, cmd.vehicleId(),
+            VehicleDocument.DocType.valueOf(cmd.docType()),
+            cmd.docNumber(), cmd.issuer(),
+            cmd.issueDate(), cmd.expiryDate(),
+            kernelFile.secureUrl(),  // URL du Kernel
+            null, cmd.notes(), null, null
+        );
+        return documentPort.saveVehicleDoc(doc);
+    });
+}
+\end{lstlisting}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Architecture d'Intégration FleetMan — Kernel}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Vue d'Ensemble de l'Architecture Cible}
+
+L'architecture cible positionne FleetMan comme un \textbf{backend consommateur} du Kernel RT-Comops. FleetMan conserve sa logique métier propre (gestion de flotte, trajets, géorepérage, opérations terrain) tout en déléguant les fonctions transversales au Kernel.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  kernel/.style={rectangle, rounded corners=8pt, minimum width=3.5cm,
+                 minimum height=1cm, draw=kernelcolor, fill=kernellight,
+                 font=\small\bfseries, text=kernelcolor},
+  fleet/.style={rectangle, rounded corners=8pt, minimum width=3.5cm,
+                minimum height=1cm, draw=fleetblue, fill=fleetblue!10,
+                font=\small\bfseries, text=fleetblue},
+  arrow/.style={->, >=Stealth, thick},
+  node distance=1.2cm and 2.5cm
+]
+  % Kernel
+  \node[kernel] (kcore) at (0,6) {kernel-core};
+  \node[kernel] (auth) at (0,4.5) {auth-core};
+  \node[kernel] (roles) at (0,3) {roles-core};
+  \node[kernel] (org) at (0,1.5) {organization-core};
+  \node[kernel] (res) at (0,0) {resource-core};
+  \node[kernel] (file) at (0,-1.5) {file-core};
+  \node[kernel] (tp) at (0,-3) {tp-core};
+  \node[kernel] (settings) at (0,-4.5) {settings-core};
+
+  % FleetMan
+  \node[fleet] (vehicles) at (7,4.5) {VehicleService};
+  \node[fleet] (drivers) at (7,3) {DriverService};
+  \node[fleet] (fleets) at (7,1.5) {FleetService};
+  \node[fleet] (docs) at (7,0) {DocumentService};
+  \node[fleet] (missions) at (7,-1.5) {MissionService};
+  \node[fleet] (trips) at (7,-3) {TripService};
+  \node[fleet] (ops) at (7,-4.5) {OperationsService};
+
+  % Arrows
+  \draw[arrow, color=kernelcolor] (kcore) -- node[above, font=\tiny] {JWT/Audit} (7,6);
+  \draw[arrow, color=kernelcolor] (auth) -- (vehicles);
+  \draw[arrow, color=kernelcolor] (roles) -- (drivers);
+  \draw[arrow, color=kernelcolor] (org) -- (fleets);
+  \draw[arrow, color=kernelcolor] (res) -- (docs);
+  \draw[arrow, color=kernelcolor] (file) -- (missions);
+  \draw[arrow, color=kernelcolor] (tp) -- (trips);
+  \draw[arrow, color=kernelcolor] (settings) -- (ops);
+
+  % Labels
+  \node[font=\large\bfseries, color=kernelcolor] at (0,7.2) {Kernel RT-Comops};
+  \node[font=\large\bfseries, color=fleetblue] at (7,7.2) {FleetMan Backend};
+\end{tikzpicture}
+\caption{Architecture d'intégration FleetMan — Kernel RT-Comops}
+\end{figure}
+
+\section{Couche d'Intégration : ksm-kernel-client}
+
+Le Kernel fournit un module client commun \texttt{ksm-kernel-client} qui centralise :
+
+\begin{itemize}[leftmargin=2cm]
+  \item L'appel HTTP vers le Kernel avec injection automatique des headers
+  \item La propagation du contexte (\texttt{X-Tenant-Id}, \texttt{X-Organization-Id})
+  \item Le relais du bearer token utilisateur
+  \item La gestion des erreurs Kernel (\texttt{CLIENT\_APPLICATION\_SERVICE\_NOT\_ALLOWED}, etc.)
+\end{itemize}
+
+\begin{lstlisting}[style=javaStyle, caption={Configuration du ksm-kernel-client dans FleetMan}]
+// pom.xml — Ajout de la dependance
+<dependency>
+    <groupId>com.rt-comops</groupId>
+    <artifactId>ksm-kernel-client</artifactId>
+    <version>3.0.0</version>
+</dependency>
+
+// KernelClientConfig.java
+@Configuration
+public class KernelClientConfig {
+
+    @Bean
+    public KernelClient kernelClient(
+            @Value("${application.kernel.url}") String kernelUrl,
+            @Value("${application.kernel.client-id}") String clientId,
+            @Value("${application.kernel.api-key}") String apiKey) {
+
+        return KernelClient.builder()
+                .baseUrl(kernelUrl)
+                .clientId(clientId)
+                .apiKey(apiKey)
+                .build();
+    }
+}
+\end{lstlisting}
+
+\section{Gestion des Erreurs Kernel dans FleetMan}
+
+FleetMan doit traiter les refus fonctionnels du Kernel comme des signaux de contrat :
+
+\begin{longtable}{p{7cm}p{6cm}}
+\toprule
+\textbf{Code Erreur Kernel} & \textbf{Traitement FleetMan} \\
+\midrule
+\endhead
+\texttt{CLIENT\_APPLICATION\_SERVICE\_NOT\_ALLOWED} & Log critique + alerte admin \\
+\texttt{TENANT\_REQUEST\_QUOTA\_EXCEEDED} & HTTP 429 + message utilisateur \\
+\texttt{ORGANIZATION\_CONTEXT\_REQUIRED} & HTTP 400 + demande contexte \\
+\texttt{ORGANIZATION\_SERVICE\_NOT\_SUBSCRIBED} & HTTP 403 + message abonnement \\
+\texttt{ORGANIZATION\_SERVICE\_QUOTA\_EXCEEDED} & HTTP 429 + message quota \\
+Refus RBAC & HTTP 403 + message permissions \\
+\bottomrule
+\caption{Traitement des erreurs Kernel dans FleetMan}
+\end{longtable}
+
+\begin{lstlisting}[style=javaStyle, caption={Handler d'erreurs Kernel dans GlobalExceptionHandler}]
+@ExceptionHandler(KernelException.class)
+public ProblemDetail handleKernelException(KernelException ex) {
+    log.error("Erreur Kernel [{}]: {}", ex.getKernelCode(), ex.getMessage());
+
+    return switch (ex.getKernelCode()) {
+        case "TENANT_REQUEST_QUOTA_EXCEEDED",
+             "ORGANIZATION_SERVICE_QUOTA_EXCEEDED" ->
+            ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS,
+                "Quota de service atteint. Veuillez reessayer plus tard.");
+
+        case "ORGANIZATION_SERVICE_NOT_SUBSCRIBED" ->
+            ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN,
+                "Votre organisation n'est pas abonnee a ce service.");
+
+        case "CLIENT_APPLICATION_SERVICE_NOT_ALLOWED" ->
+            ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN,
+                "Service non autorise pour cette application.");
+
+        default ->
+            ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY,
+                "Erreur du service central: " + ex.getMessage());
+    };
+}
+\end{lstlisting>
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Plan d'Implémentation de l'Intégration}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Principes Directeurs}
+
+L'intégration du Kernel dans FleetMan suit les principes suivants :
+
+\begin{enumerate}[leftmargin=2cm]
+  \item \textbf{Migration progressive} : FleetMan continue de fonctionner pendant la migration. Les modules locaux sont remplacés un par un.
+  \item \textbf{Anti-Corruption Layer} : des adapters dédiés isolent FleetMan des changements d'API du Kernel.
+  \item \textbf{Données dénormalisées} : FleetMan conserve des copies locales des données Kernel pour les performances (nom du conducteur, immatriculation du véhicule).
+  \item \textbf{Synchronisation par événements} : les changements dans le Kernel sont propagés à FleetMan via Kafka (outbox).
+  \item \textbf{Fallback gracieux} : si le Kernel est indisponible, FleetMan dégrade gracieusement (mode dégradé).
+\end{enumerate}
+
+\section{Phase 0 — Préparation (Semaine 1-2)}
+
+\begin{tcolorbox}[colback=fleetdark!4, colframe=fleetdark, title={\bfseries\color{white} Phase 0 — Enregistrement et Configuration}]
+\textbf{Objectif :} Enregistrer FleetMan comme ClientApplication dans le Kernel et configurer la connexion.
+
+\textbf{Tâches :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Créer le tenant FleetMan dans le Kernel (via l'admin Kernel)
+  \item Créer la ClientApplication \texttt{fleet-management-backend}
+  \item Configurer les \texttt{allowedServiceCodes} : ORGANIZATION, RESOURCE, COMMERCIAL, SETTINGS, FILE
+  \item Stocker le secret dans les variables d'environnement
+  \item Ajouter la dépendance \texttt{ksm-kernel-client} dans \texttt{pom.xml}
+  \item Créer \texttt{KernelClientConfig} et \texttt{KernelWebClientAdapter}
+  \item Tester la connexion via l'endpoint \texttt{/kernel/health}
+\end{itemize}
+
+\textbf{Livrable :} FleetMan connecté au Kernel, headers propagés correctement.
+\end{tcolorbox}
+
+\section{Phase 1 — Intégration auth-core et roles-core (Semaine 3-5)}
+
+\begin{tcolorbox}[colback=fleetblue!5, colframe=fleetblue, title={\bfseries\color{white} Phase 1 — Authentification et RBAC Centralisés}]
+\textbf{Objectif :} Remplacer l'authentification locale par l'auth-core du Kernel.
+
+\textbf{Tâches :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Configurer la validation JWT RS256 via JWKS du Kernel
+  \item Adapter \texttt{SecurityConfig} pour utiliser \texttt{oauth2ResourceServer}
+  \item Migrer \texttt{JwtAuthenticationManager} vers le validateur Kernel
+  \item Provisionner les templates de rôles FleetMan dans le Kernel
+  \item Adapter les \texttt{@PreAuthorize} pour utiliser les permissions granulaires
+  \item Migrer les utilisateurs existants vers le Kernel (script de migration)
+  \item Tester les flows login, refresh, logout
+\end{itemize}
+
+\textbf{Livrable :} Authentification 100\% Kernel, rôles RBAC granulaires.
+\end{tcolorbox}
+
+\section{Phase 2 — Intégration organization-core (Semaine 6-7)}
+
+\begin{tcolorbox}[colback=kernellight, colframe=kernelcolor, title={\bfseries\color{white} Phase 2 — Flottes comme Organisations}]
+\textbf{Objectif :} Synchroniser les flottes FleetMan avec les organisations Kernel.
+
+\textbf{Tâches :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Créer \texttt{KernelOrganizationAdapter} implémentant un port sortant
+  \item Modifier \texttt{FleetService.createFleet()} pour créer une organisation Kernel
+  \item Ajouter le champ \texttt{kernel\_organization\_id} à \texttt{fleet.fleets}
+  \item Créer \texttt{OrganizationEventConsumer} pour synchroniser les suspensions
+  \item Propager \texttt{X-Organization-Id} dans tous les appels FleetMan
+  \item Migrer les flottes existantes vers des organisations Kernel
+\end{itemize}
+
+\textbf{Livrable :} Flottes synchronisées avec le Kernel, multi-tenancy opérationnel.
+\end{tcolorbox}
+
+\section{Phase 3 — Intégration resource-core (Semaine 8-10)}
+
+\begin{tcolorbox}[colback=fleetblue!5, colframe=fleetblue, title={\bfseries\color{white} Phase 3 — Véhicules comme Ressources}]
+\textbf{Objectif :} Remplacer le service véhicule externe par resource-core.
+
+\textbf{Tâches :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Créer \texttt{KernelResourceAdapter} remplaçant \texttt{VehicleApiAdapter}
+  \item Modifier \texttt{VehicleService} pour déléguer la création au Kernel
+  \item Synchroniser les affectations conducteur-véhicule avec resource-core
+  \item Intégrer la mise à jour GPS via le port resource-core
+  \item Synchroniser les passages en maintenance avec resource-core
+  \item Migrer les véhicules existants vers des ressources Kernel
+\end{itemize}
+
+\textbf{Livrable :} Véhicules gérés par resource-core, GPS synchronisé.
+\end{tcolorbox}
+
+\section{Phase 4 — Intégration actor-core et tp-core (Semaine 11-12)}
+
+\begin{tcolorbox}[colback=kernellight, colframe=kernelcolor, title={\bfseries\color{white} Phase 4 — Acteurs et Tiers}]
+\textbf{Objectif :} Synchroniser conducteurs et clients avec le Kernel.
+
+\textbf{Tâches :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Créer \texttt{KernelActorAdapter} pour la synchronisation des conducteurs
+  \item Modifier \texttt{DriverService} pour créer un acteur Kernel à l'enregistrement
+  \item Adapter le Module 7 (Clients) pour utiliser tp-core
+  \item Créer \texttt{KernelThirdPartyAdapter}
+  \item Migrer les conducteurs et clients existants
+\end{itemize}
+
+\textbf{Livrable :} Conducteurs et clients synchronisés avec le Kernel.
+\end{tcolorbox}
+
+\section{Phase 5 — Intégration file-core et settings-core (Semaine 13-14)}
+
+\begin{tcolorbox}[colback=fleetblue!5, colframe=fleetblue, title={\bfseries\color{white} Phase 5 — Fichiers et Paramètres}]
+\textbf{Objectif :} Centraliser les fichiers et paramètres dans le Kernel.
+
+\textbf{Tâches :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Créer \texttt{KernelFileAdapter} pour le téléversement des documents légaux
+  \item Modifier \texttt{DocumentService} pour utiliser file-core
+  \item Créer \texttt{KernelSettingsAdapter} pour la numérotation des missions
+  \item Modifier \texttt{MissionService} pour utiliser settings-core
+  \item Migrer les fichiers existants vers le Kernel
+\end{itemize}
+
+\textbf{Livrable :} Documents légaux et numérotation gérés par le Kernel.
+\end{tcolorbox}
+
+\section{Phase 6 — Intégration common-core et Finalisation (Semaine 15-16)}
+
+\begin{tcolorbox}[colback=kernellight, colframe=kernelcolor, title={\bfseries\color{white} Phase 6 — Types Partagés et Finalisation}]
+\textbf{Objectif :} Aligner les types FleetMan sur le common-core et finaliser l'intégration.
+
+\textbf{Tâches :}
+\begin{itemize}[leftmargin=1.5cm]
+  \item Aligner \texttt{PageResponse<T>} sur \texttt{PageResult<T>} du Kernel
+  \item Adopter \texttt{ApiResponse<T>} pour toutes les réponses REST
+  \item Ajouter \texttt{tenantId} sur toutes les entités FleetMan
+  \item Intégrer les adresses polymorphiques pour les flottes et dépôts
+  \item Tests d'intégration end-to-end
+  \item Documentation de l'API mise à jour
+\end{itemize}
+
+\textbf{Livrable :} Intégration complète, tests validés, documentation à jour.
+\end{tcolorbox}
+
+\section{Tableau Récapitulatif du Plan}
+
+\begin{longtable}{p{1cm}p{4cm}p{3cm}p{2cm}p{3cm}}
+\toprule
+\textbf{Phase} & \textbf{Modules Kernel} & \textbf{Semaines} & \textbf{Effort} & \textbf{Dépendances} \\
+\midrule
+\endhead
+0 & Enregistrement & 1-2 & S & Aucune \\
+1 & auth-core, roles-core & 3-5 & M & Phase 0 \\
+2 & organization-core & 6-7 & M & Phase 1 \\
+3 & resource-core & 8-10 & L & Phase 2 \\
+4 & actor-core, tp-core & 11-12 & M & Phase 2 \\
+5 & file-core, settings-core & 13-14 & M & Phase 3, 4 \\
+6 & common-core, finalisation & 15-16 & S & Phase 1-5 \\
+\bottomrule
+\caption{Plan d'implémentation de l'intégration Kernel (16 semaines)}
+\end{longtable}
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Impact sur l'Architecture Existante de FleetMan}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Composants à Remplacer}
+
+L'intégration du Kernel implique le remplacement de plusieurs composants
+existants de FleetMan par des adapters vers le Kernel :
+
+\begin{longtable}{p{5.5cm}p{5.5cm}p{2cm}}
+\toprule
+\textbf{Composant FleetMan Actuel} & \textbf{Remplacement Kernel} & \textbf{Phase} \\
+\midrule
+\endhead
+\texttt{RemoteAuthAdapter} & \texttt{KernelAuthAdapter} & 1 \\
+\texttt{FakeAuthAdapter} & Supprimé & 1 \\
+\texttt{JwtAuthenticationManager} & Validateur JWKS Kernel & 1 \\
+\texttt{BearerTokenServerAuthenticationConverter} & Convertisseur Kernel & 1 \\
+\texttt{SystemUserInitializer} & Provisionnement Kernel & 1 \\
+\texttt{VehicleApiAdapter} & \texttt{KernelResourceAdapter} & 3 \\
+\texttt{VehicleApiClient} & \texttt{KernelWebClient} & 3 \\
+\texttt{AuthApiClient} & \texttt{KernelAuthClient} & 1 \\
+\bottomrule
+\caption{Composants FleetMan remplacés par des adapters Kernel}
+\end{longtable}
+
+\section{Composants à Enrichir}
+
+Ces composants existants sont conservés mais enrichis avec des appels Kernel :
+
+\begin{longtable}{p{5cm}p{8cm}}
+\toprule
+\textbf{Composant} & \textbf{Enrichissement} \\
+\midrule
+\endhead
+\texttt{FleetService} & Création d'organisation Kernel à la création de flotte \\
+\texttt{DriverService} & Création d'acteur Kernel à l'enregistrement du conducteur \\
+\texttt{VehicleService} & Enregistrement ressource Kernel + synchronisation GPS \\
+\texttt{MaintenanceService} & Synchronisation état ressource Kernel \\
+\texttt{DocumentService} & Téléversement fichiers via file-core Kernel \\
+\texttt{MissionService} & Numérotation via settings-core + tiers via tp-core \\
+\texttt{GlobalExceptionHandler} & Gestion des erreurs Kernel \\
+\texttt{SecurityConfig} & Validation JWT RS256 via JWKS Kernel \\
+\bottomrule
+\caption{Composants FleetMan enrichis avec des appels Kernel}
+\end{longtable}
+
+\section{Nouveaux Composants à Créer}
+
+\begin{longtable}{p{6cm}p{7cm}}
+\toprule
+\textbf{Nouveau Composant} & \textbf{Rôle} \\
+\midrule
+\endhead
+\texttt{KernelClientConfig} & Configuration du client Kernel \\
+\texttt{KernelWebClientAdapter} & Injection des headers Kernel \\
+\texttt{KernelAuthAdapter} & Authentification via auth-core \\
+\texttt{KernelResourceAdapter} & Gestion ressources via resource-core \\
+\texttt{KernelOrganizationAdapter} & Synchronisation organisations \\
+\texttt{KernelActorAdapter} & Synchronisation acteurs \\
+\texttt{KernelThirdPartyAdapter} & Gestion tiers via tp-core \\
+\texttt{KernelFileAdapter} & Téléversement fichiers via file-core \\
+\texttt{KernelSettingsAdapter} & Paramètres et numérotation \\
+\texttt{OrganizationEventConsumer} & Consommateur événements Kafka Kernel \\
+\texttt{ResourceEventConsumer} & Consommateur événements ressources \\
+\texttt{KernelException} & Exception typée pour les erreurs Kernel \\
+\bottomrule
+\caption{Nouveaux composants à créer pour l'intégration Kernel}
+\end{longtable}
+
+\section{Impact sur la Base de Données}
+
+L'intégration nécessite l'ajout de colonnes de référence vers le Kernel :
+
+\begin{lstlisting}[style=yamlStyle, caption={Migration SQL pour les références Kernel}]
+-- Migration 020-add-kernel-references.sql
+
+-- Flottes : reference vers l'organisation Kernel
+ALTER TABLE fleet.fleets
+    ADD COLUMN IF NOT EXISTS kernel_organization_id UUID,
+    ADD COLUMN IF NOT EXISTS kernel_tenant_id UUID;
+
+-- Vehicules : reference vers la ressource Kernel
+ALTER TABLE fleet.vehicles
+    ADD COLUMN IF NOT EXISTS kernel_resource_id UUID;
+
+-- Conducteurs : reference vers l'acteur Kernel
+ALTER TABLE fleet.drivers
+    ADD COLUMN IF NOT EXISTS kernel_actor_id UUID;
+
+-- Missions : reference vers le tiers Kernel
+ALTER TABLE fleet.missions
+    ADD COLUMN IF NOT EXISTS kernel_third_party_id UUID;
+
+-- Documents : reference vers le fichier Kernel
+ALTER TABLE fleet.vehicle_documents
+    ADD COLUMN IF NOT EXISTS kernel_file_id UUID;
+ALTER TABLE fleet.driver_documents
+    ADD COLUMN IF NOT EXISTS kernel_file_id UUID;
+
+-- Index pour les jointures
+CREATE INDEX IF NOT EXISTS idx_fleets_kernel_org
+    ON fleet.fleets(kernel_organization_id);
+CREATE INDEX IF NOT EXISTS idx_vehicles_kernel_res
+    ON fleet.vehicles(kernel_resource_id);
+CREATE INDEX IF NOT EXISTS idx_drivers_kernel_actor
+    ON fleet.drivers(kernel_actor_id);
+\end{lstlisting}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Patterns d'Intégration Détaillés}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Pattern 1 — Anti-Corruption Layer (ACL)}
+
+Chaque module Kernel est encapsulé dans un adapter dédié qui isole FleetMan
+des changements d'API du Kernel. Ce pattern garantit que si l'API Kernel évolue,
+seul l'adapter doit être modifié.
+
+\begin{lstlisting}[style=javaStyle, caption={Pattern ACL — KernelResourceAdapter}]
+/**
+ * Anti-Corruption Layer vers resource-core du Kernel.
+ * Isole FleetMan des changements d'API du Kernel.
+ * Implémente ExternalVehiclePort (port sortant existant).
+ */
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class KernelResourceAdapter implements ExternalVehiclePort {
+
+    private final KernelWebClientAdapter kernelClient;
+    private final WebClient webClient;
+
+    @Override
+    public Mono<String> registerVehicle(VehicleRequest request,
+                                         String organizationId,
+                                         String token) {
+        // Traduction du modele FleetMan vers le modele Kernel
+        Map<String, Object> kernelRequest = Map.of(
+            "resourceType", "VEHICLE",
+            "name", request.brand() + " " + request.model(),
+            "serialNumber", request.vehicleSerialNumber(),
+            "attributes", Map.of(
+                "licensePlate", request.licensePlate(),
+                "color", request.color(),
+                "year", request.manufacturingYear()
+            )
+        );
+
+        return kernelClient.withKernelHeaders(
+            webClient.post().uri("/api/v1/resources")
+                     .bodyValue(kernelRequest),
+            organizationId, token
+        )
+        .retrieve()
+        .onStatus(status -> status.is4xxClientError(),
+            resp -> resp.bodyToMono(String.class)
+                .flatMap(body -> Mono.error(
+                    new KernelException("RESOURCE_CREATION_FAILED", body))))
+        .bodyToMono(KernelResourceResponse.class)
+        .map(KernelResourceResponse::id)
+        .doOnSuccess(id -> log.info(
+            "Vehicule enregistre dans Kernel resource-core: {}", id));
+    }
+
+    // DTO interne de reponse Kernel (isole du domaine FleetMan)
+    private record KernelResourceResponse(String id, String status) {}
+}
+\end{lstlisting}
+
+\section{Pattern 2 — Synchronisation par Événements Kafka}
+
+Les changements dans le Kernel sont propagés à FleetMan via Kafka.
+FleetMan consomme les événements du topic \texttt{iwm.events.business}
+et met à jour ses projections locales.
+
+\begin{lstlisting}[style=javaStyle, caption={Consommateur d'événements Kernel}]
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class KernelEventConsumer {
+
+    private final FleetRepositoryPort fleetPort;
+    private final VehiclePersistencePort vehiclePort;
+    private final DriverPersistencePort driverPort;
+
+    @KafkaListener(
+        topics = "iwm.events.business",
+        groupId = "fleet-management-group",
+        containerFactory = "kernelEventListenerFactory"
+    )
+    public void onKernelEvent(KernelBusinessEvent event) {
+        log.debug("Evenement Kernel recu: type={}, entityId={}",
+                  event.type(), event.entityId());
+
+        switch (event.type()) {
+            case "ORGANIZATION_SUSPENDED" ->
+                handleOrganizationSuspended(event.entityId());
+            case "RESOURCE_STATUS_CHANGED" ->
+                handleResourceStatusChanged(event.entityId(),
+                                            event.payload());
+            case "ACTOR_DEACTIVATED" ->
+                handleActorDeactivated(event.entityId());
+            default ->
+                log.debug("Evenement Kernel ignore: {}", event.type());
+        }
+    }
+
+    private void handleOrganizationSuspended(String orgId) {
+        fleetPort.findByKernelOrganizationId(UUID.fromString(orgId))
+            .flatMap(fleet -> fleetPort.suspend(fleet.id()))
+            .doOnSuccess(f -> log.info(
+                "Flotte suspendue suite a suspension organisation Kernel: {}",
+                orgId))
+            .subscribe();
+    }
+
+    private void handleResourceStatusChanged(String resourceId,
+                                              Map<String, Object> payload) {
+        String newStatus = (String) payload.get("status");
+        vehiclePort.findByKernelResourceId(UUID.fromString(resourceId))
+            .flatMap(v -> vehiclePort.updateStatus(v.id(), newStatus))
+            .subscribe();
+    }
+
+    private void handleActorDeactivated(String actorId) {
+        driverPort.findByKernelActorId(UUID.fromString(actorId))
+            .flatMap(d -> driverPort.deactivate(d.userId()))
+            .subscribe();
+    }
+}
+\end{lstlisting}
+
+\section{Pattern 3 — Données Dénormalisées pour la Performance}
+
+FleetMan conserve des copies locales des données Kernel pour éviter
+des appels HTTP synchrones sur chaque requête. Ces copies sont
+maintenues à jour via les événements Kafka.
+
+\begin{lstlisting}[style=javaStyle, caption={Strategie de denormalisation}]
+// Dans VehicleService.createIndependentVehicle()
+// Apres enregistrement dans le Kernel :
+
+Vehicle vehicle = new Vehicle(
+    null,
+    fleetId,
+    managerId,
+    null,
+    vehicleTypeId,
+    request.licensePlate(),
+    request.vehicleSerialNumber(),
+    request.brand(),
+    request.model(),
+    // ... autres champs locaux ...
+    kernelResourceId  // Reference vers le Kernel
+);
+
+// La donnee est stockee localement ET referencee dans le Kernel.
+// Les lectures utilisent la copie locale (performance).
+// Les ecritures passent par le Kernel (coherence).
+\end{lstlisting}
+
+\section{Pattern 4 — Fallback Gracieux}
+
+Si le Kernel est temporairement indisponible, FleetMan doit dégrader
+gracieusement sans bloquer les opérations critiques.
+
+\begin{lstlisting}[style=javaStyle, caption={Circuit Breaker vers le Kernel}]
+@Component
+@RequiredArgsConstructor
+public class KernelResourceAdapter implements ExternalVehiclePort {
+
+    private final CircuitBreakerFactory circuitBreakerFactory;
+
+    @Override
+    public Mono<String> registerVehicle(VehicleRequest request,
+                                         String orgId, String token) {
+        CircuitBreaker cb = circuitBreakerFactory
+            .create("kernel-resource");
+
+        return cb.run(
+            // Appel normal vers le Kernel
+            doRegisterVehicle(request, orgId, token),
+            // Fallback : enregistrement local sans Kernel
+            throwable -> {
+                log.warn("Kernel indisponible, mode degrade: {}",
+                         throwable.getMessage());
+                // Retourner un ID temporaire local
+                return Mono.just("LOCAL-" + UUID.randomUUID());
+            }
+        );
+    }
+}
+\end{lstlisting>
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Impacts sur la Sécurité et la Conformité}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Modèle de Sécurité Cible}
+
+Avec l'intégration du Kernel, le modèle de sécurité de FleetMan évolue
+vers un modèle à trois couches :
+
+\begin{enumerate}[leftmargin=2cm]
+  \item \textbf{Couche Kernel} : authentification, validation JWT RS256,
+        vérification ClientApplication, quotas
+  \item \textbf{Couche FleetMan} : autorisation RBAC via permissions Kernel,
+        cloisonnement par flotte (organizationId)
+  \item \textbf{Couche Données} : filtrage systématique par \texttt{tenantId}
+        et \texttt{managerId} dans toutes les requêtes
+\end{enumerate}
+
+\section{Cloisonnement Multi-Tenant}
+
+Chaque entreprise de transport devient un tenant distinct dans le Kernel.
+Le cloisonnement est garanti par :
+
+\begin{itemize}[leftmargin=2cm]
+  \item Le \texttt{tenantId} présent dans le JWT et propagé dans toute la
+        chaîne réactive
+  \item Le filtre \texttt{TenantWebFilter} du Kernel qui injecte le contexte
+  \item Les requêtes SQL de FleetMan qui filtrent systématiquement par
+        \texttt{manager\_id} (lié à l'\texttt{organizationId} Kernel)
+  \item L'impossibilité pour un gestionnaire d'une flotte d'accéder aux
+        données d'une autre flotte (même tenant, organisations différentes)
+\end{itemize}
+
+\section{Audit et Traçabilité}
+
+L'intégration du Kernel enrichit considérablement la traçabilité de FleetMan :
+
+\begin{longtable}{p{5cm}p{8cm}}
+\toprule
+\textbf{Opération FleetMan} & \textbf{Trace dans le Kernel} \\
+\midrule
+\endhead
+Création d'un véhicule & \texttt{AuditTrail} Kernel + événement outbox \\
+Enregistrement d'un conducteur & \texttt{AuditTrail} Kernel (acteur créé) \\
+Déclaration d'un incident & Événement Kafka \texttt{INCIDENT\_REPORTED} \\
+Téléversement d'un document & \texttt{AuditTrail} Kernel (file-core) \\
+Connexion d'un utilisateur & \texttt{AuditTrail} Kernel (auth-core) \\
+Modification d'un rôle & \texttt{AuditTrail} Kernel (roles-core) \\
+\bottomrule
+\caption{Traçabilité enrichie par le Kernel}
+\end{longtable}
+
+\section{Gestion des Secrets}
+
+Les secrets de la ClientApplication FleetMan doivent être gérés
+selon les bonnes pratiques :
+
+\begin{lstlisting}[style=yamlStyle, caption={Gestion des secrets en production}]
+# Variables d'environnement (jamais en dur dans le code)
+FLEET_KERNEL_API_KEY=<secret-genere-par-le-kernel>
+FLEET_KERNEL_CLIENT_ID=fleet-management-backend
+FLEET_TENANT_ID=<uuid-du-tenant-fleetman>
+
+# En production : utiliser un gestionnaire de secrets
+# (HashiCorp Vault, AWS Secrets Manager, etc.)
+# Le secret doit etre pivote regulierement via l'API Kernel
+\end{lstlisting}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Bénéfices et Risques de l'Intégration}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Bénéfices Attendus}
+
+\subsection{Bénéfices Fonctionnels}
+
+\begin{longtable}{p{4cm}p{9cm}}
+\toprule
+\textbf{Domaine} & \textbf{Bénéfice} \\
+\midrule
+\endhead
+Authentification & Login multi-contexte, OTP, MFA, réinitialisation mot de passe \\
+Gestion des droits & Permissions granulaires, scopes organisationnels \\
+Multi-tenancy & Isolation complète entre entreprises de transport \\
+Traçabilité & Audit immuable sur toutes les opérations critiques \\
+Fichiers & Stockage centralisé, gouvernance documentaire, expiration \\
+Clients & Cycle de vie complet prospect → client, recherche plein-texte \\
+Numérotation & Séquences documentaires standardisées pour missions/factures \\
+Véhicules & Cycle de vie unifié, localisation GPS centralisée \\
+\bottomrule
+\caption{Bénéfices fonctionnels de l'intégration Kernel}
+\end{longtable}
+
+\subsection{Bénéfices Techniques}
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Réduction du code} : suppression de ~2000 lignes de code
+        d'authentification et de gestion des droits locaux
+  \item \textbf{Cohérence} : même modèle de données que les autres modules
+        du projet RT-Comops
+  \item \textbf{Évolutivité} : les améliorations du Kernel bénéficient
+        automatiquement à FleetMan
+  \item \textbf{Observabilité} : métriques Prometheus unifiées sur tout
+        l'écosystème
+  \item \textbf{Sécurité} : JWT RS256 standardisé, rotation des secrets
+        centralisée
+\end{itemize}
+
+\section{Risques et Mitigations}
+
+\begin{longtable}{p{4cm}p{5cm}p{4cm}}
+\toprule
+\textbf{Risque} & \textbf{Impact} & \textbf{Mitigation} \\
+\midrule
+\endhead
+Indisponibilité Kernel & Blocage des opérations & Circuit Breaker + mode dégradé \\
+Latence réseau & Ralentissement des APIs & Cache Redis local + dénormalisation \\
+Rupture d'API Kernel & Régression fonctionnelle & Anti-Corruption Layer (ACL) \\
+Migration des données & Perte de données & Migration progressive + rollback \\
+Quota dépassé & Refus de service & Monitoring + alertes préventives \\
+Secret compromis & Accès non autorisé & Rotation régulière + audit \\
+\bottomrule
+\caption{Risques et mitigations de l'intégration Kernel}
+\end{longtable}
+
+\section{Métriques de Succès}
+
+L'intégration sera considérée réussie si :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Fonctionnel} : 100\% des flows d'authentification passent
+        par le Kernel
+  \item \textbf{Performance} : latence P95 $\leq$ 200ms sur les endpoints
+        FleetMan (incluant les appels Kernel)
+  \item \textbf{Disponibilité} : FleetMan reste opérationnel en mode dégradé
+        si le Kernel est indisponible $\leq$ 30 secondes
+  \item \textbf{Sécurité} : 0 accès cross-tenant détecté en audit
+  \item \textbf{Cohérence} : 100\% des véhicules FleetMan ont un
+        \texttt{kernel\_resource\_id} valide
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Spécifications Techniques des Adapters}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Structure du Package d'Intégration}
+
+Tous les adapters Kernel sont regroupés dans un package dédié :
+
+\begin{lstlisting}[style=yamlStyle, caption={Structure du package d'intégration Kernel}]
+src/main/java/com/yowyob/fleet/
+  infrastructure/
+    adapters/
+      outbound/
+        kernel/                          # Nouveau package
+          auth/
+            KernelAuthAdapter.java       # auth-core
+          resource/
+            KernelResourceAdapter.java   # resource-core
+          organization/
+            KernelOrganizationAdapter.java # organization-core
+          actor/
+            KernelActorAdapter.java      # actor-core
+          thirdparty/
+            KernelThirdPartyAdapter.java # tp-core
+          file/
+            KernelFileAdapter.java       # file-core
+          settings/
+            KernelSettingsAdapter.java   # settings-core
+          client/
+            KernelWebClientAdapter.java  # Client commun
+            KernelClientConfig.java      # Configuration
+          dto/
+            KernelResourceResponse.java  # DTOs internes
+            KernelOrganizationResponse.java
+            KernelActorResponse.java
+            KernelFileResponse.java
+          exception/
+            KernelException.java         # Exception typee
+      inbound/
+        messaging/
+          KernelEventConsumer.java       # Consommateur Kafka
+\end{lstlisting}
+
+\section{Interface Commune des Adapters Kernel}
+
+Tous les adapters Kernel implémentent une interface commune
+pour la gestion du contexte :
+
+\begin{lstlisting}[style=javaStyle, caption={Interface commune KernelAdapter}]
+/**
+ * Interface commune pour tous les adapters Kernel.
+ * Garantit la propagation coherente du contexte.
+ */
+public interface KernelAdapter {
+
+    /**
+     * Construit les headers Kernel pour un appel authentifie.
+     * @param organizationId ID de l'organisation (X-Organization-Id)
+     * @param bearerToken    Token JWT de l'utilisateur
+     */
+    default WebClient.RequestHeadersSpec<?> withContext(
+            WebClient.RequestHeadersSpec<?> spec,
+            String organizationId,
+            String bearerToken) {
+        return spec
+            .header("X-Client-Id", getClientId())
+            .header("X-Api-Key", getApiKey())
+            .header("X-Tenant-Id", getTenantId())
+            .header("X-Organization-Id", organizationId)
+            .header("Authorization", "Bearer " + bearerToken);
+    }
+
+    String getClientId();
+    String getApiKey();
+    String getTenantId();
+}
+\end{lstlisting}
+
+\section{Configuration application.yml Enrichie}
+
+\begin{lstlisting}[style=yamlStyle, caption={Configuration complète de l'intégration Kernel}]
+application:
+  # Configuration Kernel RT-Comops
+  kernel:
+    url: ${KERNEL_URL:https://kernel.rt-comops.com}
+    client-id: ${FLEET_KERNEL_CLIENT_ID:fleet-management-backend}
+    api-key: ${FLEET_KERNEL_API_KEY}
+    tenant-id: ${FLEET_TENANT_ID}
+    timeout:
+      connect: 5s
+      read: 10s
+    retry:
+      max-attempts: 3
+      backoff: 1s
+    circuit-breaker:
+      failure-rate-threshold: 50
+      wait-duration: 30s
+    allowed-services:
+      - ORGANIZATION
+      - RESOURCE
+      - COMMERCIAL
+      - SETTINGS
+      - FILE
+
+  # Topics Kafka Kernel
+  kafka:
+    topics:
+      kernel-events: iwm.events.business
+      operation-events: operation-events-topic
+      geofence-alerts: geofence-alerts-topic
+\end{lstlisting}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{Synthèse et Recommandations}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\section{Synthèse des Modules Kernel Retenus}
+
+\begin{longtable}{p{3.5cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Module Kernel} & \textbf{Priorité} & \textbf{Valeur pour FleetMan} \\
+\midrule
+\endhead
+\texttt{kernel-core} & \textcolor{fleeterror}{\textbf{Critique}} &
+  Fondation obligatoire : multi-tenancy, JWT, audit, outbox \\
+\texttt{auth-core} & \textcolor{fleeterror}{\textbf{Critique}} &
+  Remplace l'auth locale, apporte MFA et multi-contexte \\
+\texttt{roles-core} & \textcolor{fleeterror}{\textbf{Critique}} &
+  RBAC granulaire avec cache Redis \\
+\texttt{organization-core} & \textcolor{fleetwarning}{\textbf{Haute}} &
+  Flotte = Organisation, dépôt = Agence \\
+\texttt{resource-core} & \textcolor{fleetwarning}{\textbf{Haute}} &
+  Véhicules comme ressources, GPS centralisé \\
+\texttt{common-core} & \textcolor{fleetwarning}{\textbf{Haute}} &
+  Types partagés, cohérence structurelle \\
+\texttt{file-core} & \textcolor{fleetsuccess}{\textbf{Normale}} &
+  Documents légaux centralisés \\
+\texttt{tp-core} & \textcolor{fleetsuccess}{\textbf{Normale}} &
+  Clients des missions comme tiers \\
+\texttt{settings-core} & \textcolor{fleetsuccess}{\textbf{Normale}} &
+  Numérotation et paramètres métier \\
+\texttt{actor-core} & \textcolor{fleetsuccess}{\textbf{Normale}} &
+  Conducteurs comme acteurs \\
+\bottomrule
+\caption{Synthèse des modules Kernel retenus pour FleetMan}
+\end{longtable}
+
+\section{Recommandations Finales}
+
+\begin{enumerate}[leftmargin=2cm]
+  \item \textbf{Commencer par kernel-core + auth-core} : ces deux modules
+        sont les plus structurants et doivent être intégrés en premier.
+        Toute la sécurité de FleetMan en dépend.
+
+  \item \textbf{Adopter le pattern ACL systématiquement} : chaque module
+        Kernel doit avoir son propre adapter isolé. Ne jamais appeler
+        directement les APIs Kernel depuis les services métier.
+
+  \item \textbf{Maintenir les données dénormalisées} : pour les performances,
+        FleetMan doit conserver des copies locales des données Kernel
+        (nom du conducteur, immatriculation, etc.) et les synchroniser
+        via Kafka.
+
+  \item \textbf{Implémenter le Circuit Breaker dès le début} : le Kernel
+        est un service externe. FleetMan doit être résilient à son
+        indisponibilité.
+
+  \item \textbf{Tester la migration des données} : avant chaque phase,
+        tester la migration des données existantes vers le Kernel sur
+        un environnement de staging.
+
+  \item \textbf{Documenter les contrats d'intégration} : maintenir un
+        document vivant des endpoints Kernel utilisés par FleetMan,
+        avec les versions et les changements.
+
+  \item \textbf{Monitorer les quotas} : configurer des alertes Prometheus
+        lorsque les quotas Kernel atteignent 80\% pour éviter les
+        interruptions de service.
+\end{enumerate}
+
+\section{Roadmap Recommandée}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  phase/.style={rectangle, rounded corners=6pt, minimum width=3cm,
+                minimum height=0.8cm, draw=fleetblue, fill=fleetblue!10,
+                font=\small\bfseries},
+  critical/.style={rectangle, rounded corners=6pt, minimum width=3cm,
+                   minimum height=0.8cm, draw=fleeterror, fill=fleeterror!10,
+                   font=\small\bfseries},
+  arrow/.style={->, >=Stealth, thick, color=fleetdark},
+  node distance=0.5cm and 1.5cm
+]
+  \node[critical] (p0) at (0,0) {Phase 0 : Setup};
+  \node[critical] (p1) at (3.5,0) {Phase 1 : Auth};
+  \node[phase] (p2) at (7,0) {Phase 2 : Org};
+  \node[phase] (p3) at (10.5,0) {Phase 3 : Resource};
+  \node[phase] (p4) at (3.5,-2) {Phase 4 : Acteurs};
+  \node[phase] (p5) at (7,-2) {Phase 5 : Files};
+  \node[phase] (p6) at (10.5,-2) {Phase 6 : Final};
+
+  \draw[arrow] (p0) -- (p1);
+  \draw[arrow] (p1) -- (p2);
+  \draw[arrow] (p2) -- (p3);
+  \draw[arrow] (p1) -- (p4);
+  \draw[arrow] (p3) -- (p5);
+  \draw[arrow] (p4) -- (p5);
+  \draw[arrow] (p5) -- (p6);
+
+  \node[font=\tiny, color=fleetgray] at (0,-0.7) {S1-2};
+  \node[font=\tiny, color=fleetgray] at (3.5,-0.7) {S3-5};
+  \node[font=\tiny, color=fleetgray] at (7,-0.7) {S6-7};
+  \node[font=\tiny, color=fleetgray] at (10.5,-0.7) {S8-10};
+  \node[font=\tiny, color=fleetgray] at (3.5,-2.7) {S11-12};
+  \node[font=\tiny, color=fleetgray] at (7,-2.7) {S13-14};
+  \node[font=\tiny, color=fleetgray] at (10.5,-2.7) {S15-16};
+\end{tikzpicture}
+\caption{Roadmap d'intégration Kernel dans FleetMan (16 semaines)}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter*{Conclusion}
+\addcontentsline{toc}{chapter}{Conclusion}
+\thispagestyle{fancy}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Ce document a présenté une analyse complète des 20 cores du Kernel RT-Comops
+et identifié les 9 modules directement applicables au projet FleetMan.
+
+L'intégration du Kernel dans FleetMan représente une évolution architecturale
+majeure qui transforme FleetMan d'une application autonome en un module
+métier cohérent de l'écosystème RT-Comops. Les bénéfices sont considérables :
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Sécurité renforcée} : JWT RS256 standardisé, MFA, audit immuable
+  \item \textbf{Multi-tenancy réel} : isolation complète entre entreprises de transport
+  \item \textbf{Cohérence globale} : même modèle de données que les autres modules
+  \item \textbf{Réduction de la dette technique} : suppression du code d'auth local
+  \item \textbf{Évolutivité} : bénéfice automatique des améliorations du Kernel
+\end{itemize}
+
+Le plan d'implémentation en 6 phases sur 16 semaines garantit une migration
+progressive et sécurisée, sans interruption de service. L'adoption du pattern
+Anti-Corruption Layer protège FleetMan des évolutions futures du Kernel.
+
+\begin{tcolorbox}[colback=kernellight, colframe=kernelcolor,
+                  title={\bfseries\color{white} Message Clé}]
+FleetMan n'est pas un simple client HTTP du Kernel. Il est une
+\textbf{application consommatrice gouvernée} par le Kernel. La connexion
+est valide seulement si l'identité machine, le tenant, l'organisation,
+le service, le quota et le JWT utilisateur sont cohérents. Cette gouvernance
+est la garantie de la symbiose et de la synchronicité globales du projet
+RT-Comops.
+\end{tcolorbox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% ANNEXES
+% ─────────────────────────────────────────────────────────────────────────────
+\appendix
+
+\chapter{Glossaire des Termes Kernel}
+
+\begin{longtable}{p{4cm}p{9cm}}
+\toprule
+\textbf{Terme} & \textbf{Définition} \\
+\midrule
+\endhead
+\textbf{Tenant} & Unité d'isolation logique de la plateforme (une entreprise) \\
+\textbf{ClientApplication} & Identité machine d'un backend consommateur \\
+\textbf{allowedServiceCodes} & Liste des services autorisés pour une ClientApplication \\
+\textbf{JWT RS256} & Token d'accès signé avec clé RSA 256 bits \\
+\textbf{JWKS} & JSON Web Key Set — document exposant les clés publiques \\
+\textbf{Outbox} & Table transactionnelle pour la publication fiable d'événements \\
+\textbf{AuditTrail} & Piste d'audit immuable (insertion seule) \\
+\textbf{PartyRef} & Référence légère inter-cores (partyType + partyId) \\
+\textbf{BaseEntity} & Classe abstraite avec UUID, tenantId, timestamps \\
+\textbf{PlatformServiceCode} & Énumération des services disponibles dans le Kernel \\
+\textbf{ACL} & Anti-Corruption Layer — adapter isolant un domaine externe \\
+\textbf{ksm-kernel-client} & Module client commun pour les backends consommateurs \\
+\textbf{X-Client-Id} & Header identifiant la ClientApplication \\
+\textbf{X-Api-Key} & Header portant le secret de la ClientApplication \\
+\textbf{X-Tenant-Id} & Header identifiant le tenant cible \\
+\textbf{X-Organization-Id} & Header identifiant l'organisation cible \\
+\bottomrule
+\caption{Glossaire des termes Kernel}
+\end{longtable}
+
+\chapter{Checklist d'Intégration}
+
+\begin{longtable}{p{0.5cm}p{12cm}}
+\toprule
+& \textbf{Tâche} \\
+\midrule
+\endhead
+$\square$ & Créer le tenant FleetMan dans le Kernel \\
+$\square$ & Créer la ClientApplication \texttt{fleet-management-backend} \\
+$\square$ & Configurer les \texttt{allowedServiceCodes} \\
+$\square$ & Stocker le secret dans les variables d'environnement \\
+$\square$ & Ajouter la dépendance \texttt{ksm-kernel-client} \\
+$\square$ & Créer \texttt{KernelClientConfig} \\
+$\square$ & Configurer la validation JWT RS256 via JWKS \\
+$\square$ & Adapter \texttt{SecurityConfig} \\
+$\square$ & Provisionner les templates de rôles FleetMan \\
+$\square$ & Migrer les utilisateurs existants \\
+$\square$ & Créer \texttt{KernelOrganizationAdapter} \\
+$\square$ & Modifier \texttt{FleetService} pour créer des organisations Kernel \\
+$\square$ & Créer \texttt{KernelResourceAdapter} \\
+$\square$ & Modifier \texttt{VehicleService} pour enregistrer dans resource-core \\
+$\square$ & Créer \texttt{KernelActorAdapter} \\
+$\square$ & Créer \texttt{KernelThirdPartyAdapter} \\
+$\square$ & Créer \texttt{KernelFileAdapter} \\
+$\square$ & Créer \texttt{KernelSettingsAdapter} \\
+$\square$ & Créer \texttt{KernelEventConsumer} \\
+$\square$ & Ajouter la migration SQL \texttt{020-add-kernel-references.sql} \\
+$\square$ & Configurer le Circuit Breaker \\
+$\square$ & Configurer les alertes de quota \\
+$\square$ & Tests d'intégration end-to-end \\
+$\square$ & Documentation API mise à jour \\
+\bottomrule
+\caption{Checklist complète d'intégration Kernel dans FleetMan}
+\end{longtable}
+
+\end{document}

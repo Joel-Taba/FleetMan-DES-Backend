@@ -45,6 +45,7 @@ public class SecurityConfig {
 
         jwtFilter.setRequiresAuthenticationMatcher(
                 ServerWebExchangeMatchers.pathMatchers("/api/v1/**")
+                        .and(ServerWebExchangeMatchers.pathMatchers("/api/v1/files/**").negate())
         );
 
         return http
@@ -74,6 +75,7 @@ public class SecurityConfig {
                                 "/api/v1/health/**",
                                 "/api/v1/auth/**"
                         ).permitAll()
+                        .pathMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/files/**").permitAll()
                         // B. OPTIONS (Indispensable pour le pre-flight CORS)
                         .pathMatchers(org.springframework.http.HttpMethod.OPTIONS).permitAll()
                         .anyExchange().authenticated()

@@ -1,50 +1,90 @@
 package com.yowyob.fleet.domain.ports.in;
 
 import com.yowyob.fleet.domain.model.Trip;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.List;
+import java.util.UUID;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import java.util.UUID;
 
 /**
- * Port d'entrée pour la gestion des courses (Trips).
+ * Port d'entrée pour la gestion des Trajets.
+ * Nouveau flux : le Fleet Manager crée et pilote les trajets (plus le chauffeur).
  */
 public interface ManageTripUseCase {
+    // ── Commandes imbriquées ─────────────────────────────────────────────────
 
-    // --- 11a. OPÉRATIONS CHAUFFEUR ---
-    /**
-     * Démarre une course. Vérifie l'assignation et la disponibilité.
-     */
-    Mono<Trip> startTrip(UUID driverId, UUID vehicleId);
+    record TripDetailInput(
+        String itemType,
+        String description,
+        int quantity,
+        BigDecimal weight,
+        Integer departureQuantity
+    ) {}
 
-    /**
-     * Enregistre un point GPS et vérifie les zones de Geofencing.
-     */
-    Mono<Void> sendTelemetry(UUID tripId, Double lat, Double lng, Double speed);
+    record CreateTripCommand(
+        UUID vehicleId,
+        UUID driverId,
+        UUID fleetId,
+        UUID managerId,
+        LocalDate startDate,
+        LocalTime startTime,
+        String departureLocation,
+        BigDecimal departureKmIndex,
+        BigDecimal departureFuelIndex,
+        String missionObject,
+        BigDecimal missionCost,
+        String rateType,
+        LocalDateTime scheduledReturnDatetime,
+        List<TripDetailInput> details
+    ) {}
 
-    /**
-     * Termine la course, calcule la distance et libère les ressources.
-     */
-    Mono<Trip> endTrip(UUID tripId);
+    record RegisterReturnCommand(
+        String tripCode,
+        LocalDate returnDate,
+        LocalTime returnTime,
+        String returnLocation,
+        BigDecimal returnKmIndex,
+        BigDecimal returnFuelIndex,
+        List<ReturnDetailInput> detailUpdates
+    ) {}
 
-    /**
-     * Récupère la course active du chauffeur connecté.
-     */
-    Mono<Trip> getMyActiveTrip(UUID driverId);
+    record ReturnDetailInput(UUID detailId, Integer returnQuantity) {}
 
-    /**
-     * Récupère l'historique personnel du chauffeur.
-     */
-    Flux<Trip> getMyTripHistory(UUID driverId);
+    // ── Opérations Manager ───────────────────────────────────────────────────
 
+    /** Crée un trajet (départ). Réservé au Fleet Manager. */
+    Mono<Trip> createTrip(CreateTripCommand command);
 
-    // --- 11b. SUIVI MANAGER ---
-    /**
-     * Liste tous les trajets pour les flottes du manager.
-     */
+    /** Enregistre le retour d'un trajet à partir de son code. */
+    Mono<Trip> registerReturn(RegisterReturnCommand command);
+
+    /** Retrouve un trajet par son code (ex: TRJ-2026-0001). */
+    Mono<Trip> getTripByCode(String tripCode);
+
+    /** Change le conducteur d'un trajet en statut SCHEDULED. */
+    Mono<Trip> updateTripDriver(UUID tripId, UUID newDriverId, UUID managerId);
+
+    /** Annule un trajet avec un motif. */
+    Mono<Trip> cancelTrip(UUID tripId, String reason, UUID managerId);
+
+    /** Liste tous les trajets du manager (filtre optionnel par flotte). */
     Flux<Trip> getManagerTrips(UUID managerId, UUID optionalFleetId);
 
-    /**
-     * Récupère le détail d'un trajet spécifique.
-     */
+    /** Récupère le détail d'un trajet. */
     Mono<Trip> getTripById(UUID tripId);
+
+    // ── Télémétrie (conservée pour usage futur app mobile chauffeur) ─────────
+
+    /** Enregistre un point GPS et vérifie les zones de géofencing. */
+    Mono<Void> sendTelemetry(UUID tripId, Double lat, Double lng, Double speed);
+
+    /** Récupère le trajet actif du chauffeur (lecture seule). */
+    Mono<Trip> getMyActiveTrip(UUID driverId);
+
+    /** Historique personnel du chauffeur. */
+    Flux<Trip> getMyTripHistory(UUID driverId);
 }

@@ -1,0 +1,51 @@
+# Profil « local » — développement local sans Kafka ni Redis.
+# Démarrage : SPRING_PROFILES_ACTIVE=local,demo
+# ─────────────────────────────────────────────────────────────────────────────
+
+spring:
+  # Désactiver l'auto-configuration Kafka
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+
+  # R2DBC — base locale fleetmanBD sur port 5432
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/fleetmanBD
+    username: fleet_admin
+    password: fleet_password
+    pool:
+      enabled: true
+      initial-size: 2
+      max-size: 10
+      validation-query: "SELECT 1"
+
+  # JDBC — uniquement pour Liquibase
+  datasource:
+    url: jdbc:postgresql://localhost:5432/fleetmanBD
+    username: fleet_admin
+    password: fleet_password
+    driver-class-name: org.postgresql.Driver
+
+  # Liquibase — désactivé si le profil demo est actif (tables déjà créées)
+  liquibase:
+    url: jdbc:postgresql://localhost:5432/fleetmanBD
+    user: fleet_admin
+    password: fleet_password
+    enabled: true
+
+  # Redis désactivé en local
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ""
+
+  kafka:
+    bootstrap-servers: ""
+
+management:
+  health:
+    redis:
+      enabled: false
+    kafka:
+      enabled: false

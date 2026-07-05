@@ -5,6 +5,7 @@ import com.yowyob.fleet.domain.ports.in.AuthUseCase;
 import com.yowyob.fleet.domain.ports.in.ManageDriverUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverRegistrationRequest;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.RecruitDriverRequest;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
@@ -61,13 +62,18 @@ public class DriverController {
 
     @GetMapping("/drivers")
     @Operation(summary = "Lister les chauffeurs du service", description = "Filtres optionnels par flotte ou état d'assignation.")
-    public Flux<Driver> list(
+    public Flux<DriverResponse> list(
             @RequestParam(required = false) UUID fleetId,
             @RequestParam(required = false) Boolean isAssigned,
             Authentication auth
     ) {
-        // On délègue le filtrage complexe au service
-        return driverUseCase.getDriversWithFilters(fleetId, isAssigned, getUserId(auth));
+        return driverUseCase.getDriversEnriched(fleetId, isAssigned, getUserId(auth));
+    }
+
+    @GetMapping("/drivers/{userId}")
+    @Operation(summary = "Profil détaillé d'un chauffeur")
+    public Mono<DriverResponse> getById(@PathVariable UUID userId) {
+        return driverUseCase.getDriverEnriched(userId);
     }
 
     @GetMapping("/drivers/search")

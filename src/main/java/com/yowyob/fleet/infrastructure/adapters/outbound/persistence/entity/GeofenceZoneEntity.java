@@ -2,8 +2,10 @@ package com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.domain.Persistable;
@@ -12,14 +14,14 @@ import org.springframework.data.relational.core.mapping.Table;
 
 import java.util.UUID;
 @Table(name = "geofence_zones", schema = "fleet")
-@Data @Builder @NoArgsConstructor @AllArgsConstructor
+@Getter @Setter @ToString @Builder @NoArgsConstructor @AllArgsConstructor
 public class GeofenceZoneEntity implements Persistable<UUID> {
     @Id
     private UUID id;
-    
+
     @Column("manager_id")
     private UUID managerId; // Le propriétaire
-    
+
     @Column("fleet_id")
     private UUID fleetId; // L'affectation (nullable)
 

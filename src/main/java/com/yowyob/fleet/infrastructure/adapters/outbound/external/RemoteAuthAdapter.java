@@ -5,7 +5,8 @@ import com.yowyob.fleet.domain.ports.in.AuthUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.AuthApiClient;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -19,13 +20,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-@Slf4j
 @RequiredArgsConstructor
 public class RemoteAuthAdapter implements AuthPort {
 
+    private static final Logger log = LoggerFactory.getLogger(RemoteAuthAdapter.class);
+
     private final AuthApiClient authApiClient;
     private final WebClient.Builder webClientBuilder;
-    
+
     @Value("${application.auth.url}")
     private String authServiceUrl;
 
@@ -45,7 +47,7 @@ public class RemoteAuthAdapter implements AuthPort {
                 .onErrorResume(this::mapExternalError);
     }
 
-   
+
     @Override
     public Mono<UserDetail> getUserProfile(String token) {
         return authApiClient.getCurrentUser(ensureBearer(token))
@@ -129,10 +131,10 @@ public class RemoteAuthAdapter implements AuthPort {
                 .onErrorResume(this::mapExternalError);
     }
 
-    
+
     @Override
     public Mono<Boolean> roleExists(String roleName) {
-        return Mono.just(true); 
+        return Mono.just(true);
     }
 
     @Override
@@ -167,7 +169,7 @@ public class RemoteAuthAdapter implements AuthPort {
     private <T> Mono<T> mapExternalError(Throwable e) {
         if (e instanceof WebClientResponseException ex) {
             log.error("❌ Erreur Auth Distante [{}]: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
-            
+
             return switch (ex.getStatusCode().value()) {
                 case 401 -> Mono.error(AuthException.tokenExpired());
                 case 409 -> Mono.error(AuthException.userAlreadyExists());
@@ -195,8 +197,8 @@ public class RemoteAuthAdapter implements AuthPort {
     public Mono<AuthResponse> registerInRemote(AuthUseCase.RegisterCommand command) {
         // 1. On prépare le DTO
         AuthApiClient.RegisterRequest registerRequest = new AuthApiClient.RegisterRequest(
-            command.username(), command.password(), command.email(), 
-            command.phone(), command.firstName(), command.lastName(), 
+            command.username(), command.password(), command.email(),
+            command.phone(), command.firstName(), command.lastName(),
             SERVICE_NAME, command.roles()
         );
 

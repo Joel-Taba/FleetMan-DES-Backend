@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 8081
 
 # Config Swagger
 app:
@@ -11,12 +11,12 @@ spring:
     name: fleet-management
   
   profiles:
-    active: local
+    active: local,demo
 
   # R2DBC (Application Runtime)
 
   r2dbc:
-    url: r2dbc:postgresql://localhost:5433/yowyob_db
+    url: r2dbc:postgresql://localhost:5432/fleetmanBD
     username: fleet_admin
     password: fleet_password
     pool:
@@ -28,14 +28,14 @@ spring:
 
   # JDBC (Liquibase Migration)
   datasource:
-    url: jdbc:postgresql://localhost:5432/yowyob_db
+    url: jdbc:postgresql://localhost:5432/fleetmanBD
     username: fleet_admin
     password: fleet_password
     driver-class-name: org.postgresql.Driver
 
   # LIQUIBASE
   liquibase:
-    url: jdbc:postgresql://localhost:5433/yowyob_db
+    url: jdbc:postgresql://localhost:5432/fleetmanBD
     user: fleet_admin
     password: fleet_password
     change-log: classpath:db/changelog/db.changelog-master.yaml
@@ -70,13 +70,22 @@ spring:
 
 # CONFIG METIER
 application:
+  # ── Kernel RT-Comops ────────────────────────────────────────────────────────
+  kernel:
+    url: ${KERNEL_URL:https://kernel-core.yowyob.com}
+    client-id: ${KERNEL_CLIENT_ID:fleet-management-backend}
+    api-key: ${KERNEL_API_KEY:K5mWlNhc6zH2-JcaZJWSs1sLxUzjS902u4MxEnJar5g}
+    tenant-id: ${KERNEL_TENANT_ID:f5b814d9-766e-4c87-91ec-d6c8e32cb56c}
+    organization-id: ${KERNEL_ORG_ID:5e69f5c5-1f03-41cb-a4a3-d59188f73323}
+    service: FLEET_MANAGEMENT
+
   external:
     vehicle-service-url:  https://traefikdev.yowyob.com/vehicule
     geofence-service-url: https://traefikdev.yowyob.com/geofence-service
     payment-service-url:  https://traefikdev.yowyob.com/payment
   auth:
-    mode: remote
-    url: https://traefikdev.yowyob.com/auth
+    mode: kernel
+    url: https://kernel-core.yowyob.com
   notification:
     mode: http
     url: https://traefikdev.yowyob.com/notification
@@ -92,19 +101,23 @@ application:
       incident-reported: 9    # ID template: Incident signalé
       incident-critical: 10   # ID template: Incident CRITIQUE signalé
  
+  geofence:
+    enabled: false
   geofence-system-user:
-    username: "yowyob_fleet_internal_admin"
-    password: "system_password_secure_2026" 
+    username: "system@fleetman.cm"
+    password: "SystemFleetMan2026!" 
     organization-id: "723e4567-e89b-12d3-a456-426614174000" # UUID de notre application dans
  
   bootstrap:
     admin:
-      username: "superadmin123"
-      email: "superadmin123@transens.com"
-      password: "password123" 
-      phone: "+23761213141516"
-      firstname: "System"
-      lastname: "Administrator"
+      username: "joeltaba4"
+      email: "joeltaba4@gmail.com"
+      password: "FleetMan2026!" 
+      phone: "+237600000000"
+      firstname: "Joel"
+      lastname: "Taba"
+  demo-data:
+    enabled: false
   # Kafka topics
   kafka:
     topics:

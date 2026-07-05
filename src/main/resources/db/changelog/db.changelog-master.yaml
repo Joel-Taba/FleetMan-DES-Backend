@@ -38,3 +38,47 @@ databaseChangeLog:
   # 10. Module Opérations Terrain (Maintenance, Incidents, Recharges carburant)
   - include:
       file: db/changelog/changes/010-operations-tables.sql
+
+  # 11. Exigences Globales — Soft Delete + Audit Trail sur tables critiques
+  - include:
+      file: db/changelog/changes/011-add-soft-delete.sql
+
+  # 12. Module 2 — Documents Légaux (vehicle_documents, driver_documents, document_alerts)
+  - include:
+      file: db/changelog/changes/012-document-tables.sql
+
+  # 13. Module 3 — KPI et Rapports Avancés
+  - include:
+      file: db/changelog/changes/013-kpi-tables.sql
+
+  # 15. Module 1 — Planification & Ordonnancement
+  - include:
+      file: db/changelog/changes/015-planning-tables.sql
+
+  # 16. Module 4 — Dépenses & Budget
+  - include:
+      file: db/changelog/changes/016-expense-budget-tables.sql
+
+  # 17. Module 5 — Scoring Conducteur
+  - include:
+      file: db/changelog/changes/017-driver-score-tables.sql
+
+  # 18. Module 6 — Maintenance Préventive
+  - include:
+      file: db/changelog/changes/018-preventive-maintenance-tables.sql
+
+  # 19. Module 8 — Alertes & Règles Métier
+  - include:
+      file: db/changelog/changes/019-alert-rule-tables.sql
+
+  # 20. Module 9 — Gestion des Fichiers & Médias
+  - include:
+      file: db/changelog/changes/020-file-management.sql
+
+  # 21. Refonte Trajets (aller-retour, manager-driven)
+  - include:
+      file: db/changelog/changes/021-trip-refactoring.sql
+
+  # 22. Plans Tarifaires et Workflow Approbation Souscriptions
+  - include:
+      file: db/changelog/changes/022-subscription-plans.sql

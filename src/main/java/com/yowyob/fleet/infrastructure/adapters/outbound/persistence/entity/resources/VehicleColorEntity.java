@@ -13,6 +13,7 @@ import java.util.UUID;
 @Data @NoArgsConstructor @AllArgsConstructor
 public class VehicleColorEntity implements Persistable<UUID> {
     @Id private UUID id;
+    @Override public UUID getId() { return this.id; }
     private String code;
     private String label;
     private String description;

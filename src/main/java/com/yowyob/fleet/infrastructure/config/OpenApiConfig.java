@@ -56,7 +56,22 @@ public class OpenApiConfig {
     public static final String TAG_RES_TRANS   = "06h. Admin | Ressources : Transmissions";
     public static final String TAG_RES_COLORS  = "06i. Admin | Ressources : Couleurs";
 
-      // --- MODULE 10 : FLEETS ---
+      // --- MODULE 17 : BUDGET & DÉPENSES ---
+    public static final String TAG_BUDGET_EXPENSES = "17a. Budget | Dépenses opérationnelles";
+    public static final String TAG_BUDGET_BUDGETS  = "17b. Budget | Budgets mensuels";
+
+    // --- MODULE 18 : SCORING CONDUCTEUR ---
+    public static final String TAG_SCORING = "18. Scoring | Scores Conducteurs";
+
+    // --- MODULE 19 : MAINTENANCE PRÉVENTIVE ---
+    public static final String TAG_PREVENTIVE_PLANS  = "19a. Maintenance Préventive | Plans";
+    public static final String TAG_PREVENTIVE_ALERTS = "19b. Maintenance Préventive | Alertes";
+
+    // --- MODULE 20 : ALERTES & RÈGLES MÉTIER ---
+    public static final String TAG_ALERT_RULES  = "20a. Alertes | Règles Métier";
+    public static final String TAG_ALERT_EVENTS = "20b. Alertes | Notifications";
+
+    // --- MODULE 10 : FLEETS ---
     public static final String TAG_FLEETS_CRUD = "10a. Fleets | Administration (CRUD)";
     public static final String TAG_FLEETS_VHC  = "10b. Fleets | Mes Véhicules";
     public static final String TAG_FLEETS_DRV  = "10c. Fleets | Mes Chauffeurs";
@@ -126,7 +141,14 @@ public class OpenApiConfig {
                     TAG_PAYMENTS,
                     TAG_OPS_MAINTENANCE,
                     TAG_OPS_INCIDENTS,
-                    TAG_OPS_FUEL
+                    TAG_OPS_FUEL,
+                    TAG_BUDGET_EXPENSES,
+                    TAG_BUDGET_BUDGETS,
+                    TAG_SCORING,
+                    TAG_PREVENTIVE_PLANS,
+                    TAG_PREVENTIVE_ALERTS,
+                    TAG_ALERT_RULES,
+                    TAG_ALERT_EVENTS
             );
 
             if (openApi.getTags() != null) {

@@ -16,7 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -25,8 +25,8 @@ import java.time.Duration;
 import java.util.*;
 
 @Slf4j
-@Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "application.external.geofence-mode", havingValue = "remote", matchIfMissing = true)
 public class GeofenceApiAdapter implements ExternalGeofencePort {
 
     private final GeofenceApiClient apiClient;

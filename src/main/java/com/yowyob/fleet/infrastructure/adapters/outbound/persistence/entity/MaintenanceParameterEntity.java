@@ -16,19 +16,22 @@ import java.util.UUID;
 public class MaintenanceParameterEntity implements Persistable<UUID> {
     @Id
     private UUID id;
-    
+
+    @Override
+    public UUID getId() { return this.id; }
+
     @Column("vehicle_id")
     private UUID vehicleId;
-    
+
     @Column("last_maintenance_at")
     private LocalDate lastMaintenanceAt;
-    
+
     @Column("next_maintenance_at")
     private LocalDate nextMaintenanceAt;
-    
+
     @Column("engine_status")
-    private String engineStatus; 
-    
+    private String engineStatus;
+
     @Column("battery_health")
     private Integer batteryHealth; // FIX : Changé de String à Integer
 

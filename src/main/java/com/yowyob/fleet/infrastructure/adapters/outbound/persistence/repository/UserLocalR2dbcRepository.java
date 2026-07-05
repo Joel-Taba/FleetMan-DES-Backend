@@ -15,4 +15,15 @@ public interface UserLocalR2dbcRepository extends ReactiveCrudRepository<UserLoc
      * Utilisé pour la vérification du statut local (is_active) lors du login/register.
      */
     Mono<UserLocalEntity> findByUsername(String username);
+
+    /**
+     * Recherche un utilisateur par email.
+     * Utilisé pour le merge Kernel → local (IDs peuvent différer).
+     */
+    Mono<UserLocalEntity> findByEmail(String email);
+
+    /**
+     * Recherche un utilisateur par son ID Kernel (UUID Kernel ≠ UUID local potentiellement).
+     */
+    Mono<UserLocalEntity> findByKernelId(UUID kernelId);
 }

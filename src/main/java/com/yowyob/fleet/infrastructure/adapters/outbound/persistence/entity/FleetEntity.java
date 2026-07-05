@@ -17,15 +17,18 @@ import java.util.UUID;
 public class FleetEntity implements Persistable<UUID> {
     @Id
     private UUID id;
-    
+
+    @Override
+    public UUID getId() { return this.id; }
+
     @Column("manager_id")
     private UUID managerId;
-    
+
     private String name;
-    
+
     @Column("phone_number")
     private String phoneNumber;
-    
+
     @Column("created_at")
     private Instant createdAt;
 

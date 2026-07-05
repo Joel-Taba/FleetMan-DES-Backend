@@ -2,137 +2,496 @@ package com.yowyob.fleet.application.service;
 
 import com.yowyob.fleet.domain.exception.TripException;
 import com.yowyob.fleet.domain.model.Trip;
+import com.yowyob.fleet.domain.model.TripDetail;
 import com.yowyob.fleet.domain.ports.in.ManageTripUseCase;
 import com.yowyob.fleet.domain.ports.out.*;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.RedisTelemetryAdapter;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.TripDetailEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.TripEntity;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.OperationalParameterR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripDetailR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
-import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.OperationalParameterR2dbcRepository;
+import java.math.BigDecimal;
+import java.time.*;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.math.BigDecimal;
-import java.time.*;
-import java.util.UUID;
-
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TripService implements ManageTripUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(
+        TripService.class
+    );
+
     private final TripR2dbcRepository tripRepository;
+    private final TripDetailR2dbcRepository detailRepository;
     private final VehicleLocalR2dbcRepository vehicleRepository;
     private final DriverPersistencePort driverPersistence;
     private final OperationalParameterR2dbcRepository operationalRepo;
     private final RedisTelemetryAdapter redisTelemetry;
     private final DistanceCalculatorPort distanceCalculator;
     private final ExternalGeofencePort geofenceApi;
+    private final DatabaseClient db;
+
+    // ── Création d'un trajet (Manager) ────────────────────────────────────────
 
     @Override
     @Transactional
-    public Mono<Trip> startTrip(UUID driverId, UUID vehicleId) {
+    public Mono<Trip> createTrip(CreateTripCommand cmd) {
         return Mono.zip(
-            tripRepository.findByDriverIdAndStatus(driverId, "ONGOING").hasElement(),
-            vehicleRepository.findById(vehicleId).switchIfEmpty(Mono.error(TripException.notFound(vehicleId))),
-            driverPersistence.findById(driverId)
+            vehicleRepository
+                .findById(cmd.vehicleId())
+                .switchIfEmpty(
+                    Mono.error(TripException.notFound(cmd.vehicleId()))
+                ),
+            driverPersistence.findById(cmd.driverId())
         ).flatMap(tuple -> {
-            boolean hasActiveTrip = tuple.getT1();
-            var vehicle = tuple.getT2();
-            var driver = tuple.getT3();
+            var vehicle = tuple.getT1();
+            if (!"AVAILABLE".equals(vehicle.getStatus())) {
+                return Mono.error(TripException.vehicleOccupied());
+            }
 
-            if (hasActiveTrip) return Mono.error(TripException.driverOccupied());
-            if (!"AVAILABLE".equals(vehicle.getStatus())) return Mono.error(TripException.vehicleOccupied());
-            if (driver.assignedVehicleId() == null || !driver.assignedVehicleId().equals(vehicleId)) 
-                return Mono.error(TripException.vehicleNotAssigned());
+            return db
+                .sql("SELECT fleet.generate_trip_code() AS code")
+                .map(row -> row.get("code", String.class))
+                .one()
+                .flatMap(tripCode -> {
+                    TripEntity entity = buildTripEntity(tripCode, cmd);
 
-            // Création Trip
-            TripEntity entity = new TripEntity();
-            entity.setId(UUID.randomUUID());
-            entity.setDriverId(driverId);
-            entity.setVehicleId(vehicleId);
-            entity.setStartDate(LocalDate.now(ZoneOffset.UTC));
-            entity.setStartTime(LocalTime.now(ZoneOffset.UTC));
-            entity.setStatus("ONGOING");
-            entity.setNew(true);
+                    vehicle.setStatus("ON_TRIP");
+                    vehicle.setNew(false);
 
-            // Verrouillage véhicule
-            vehicle.setStatus("ON_TRIP");
-            vehicle.setNew(false);
-
-            return vehicleRepository.save(vehicle)
-                    .then(tripRepository.save(entity))
-                    .map(this::mapToDomain);
+                    return vehicleRepository
+                        .save(vehicle)
+                        .then(tripRepository.save(entity))
+                        .flatMap(saved ->
+                            saveDetails(saved.getId(), cmd.details()).then(
+                                loadTripWithDetails(saved.getId())
+                            )
+                        );
+                });
         });
     }
 
+    // ── Enregistrement du retour ──────────────────────────────────────────────
+
     @Override
-    public Mono<Void> sendTelemetry(UUID tripId, Double lat, Double lng, Double speed) {
-        return tripRepository.findById(tripId)
-            .filter(t -> "ONGOING".equals(t.getStatus()))
+    @Transactional
+    public Mono<Trip> registerReturn(RegisterReturnCommand cmd) {
+        return tripRepository
+            .findByTripCode(cmd.tripCode())
+            .switchIfEmpty(
+                Mono.error(TripException.notFoundByCode(cmd.tripCode()))
+            )
+            .flatMap(trip -> {
+                if (
+                    "COMPLETED".equals(trip.getStatus()) ||
+                    "CANCELLED".equals(trip.getStatus())
+                ) {
+                    return Mono.error(TripException.actionOnCompletedTrip());
+                }
+
+                // Calculs automatiques
+                BigDecimal computedDistance = null;
+                if (
+                    cmd.returnKmIndex() != null &&
+                    trip.getDepartureKmIndex() != null
+                ) {
+                    computedDistance = cmd
+                        .returnKmIndex()
+                        .subtract(trip.getDepartureKmIndex());
+                }
+                BigDecimal computedFuel = null;
+                if (
+                    trip.getDepartureFuelIndex() != null &&
+                    cmd.returnFuelIndex() != null
+                ) {
+                    computedFuel = trip
+                        .getDepartureFuelIndex()
+                        .subtract(cmd.returnFuelIndex());
+                }
+                Integer durationMinutes = null;
+                if (
+                    trip.getStartDate() != null && trip.getStartTime() != null
+                ) {
+                    LocalDateTime depart = LocalDateTime.of(
+                        trip.getStartDate(),
+                        trip.getStartTime()
+                    );
+                    LocalDateTime retour = LocalDateTime.of(
+                        cmd.returnDate(),
+                        cmd.returnTime()
+                    );
+                    durationMinutes =
+                        (int) java.time.temporal.ChronoUnit.MINUTES.between(
+                            depart,
+                            retour
+                        );
+                }
+
+                trip.setStatus("COMPLETED");
+                trip.setEndDate(cmd.returnDate());
+                trip.setEndTime(cmd.returnTime());
+                trip.setReturnLocation(cmd.returnLocation());
+                trip.setReturnKmIndex(cmd.returnKmIndex());
+                trip.setReturnFuelIndex(cmd.returnFuelIndex());
+                trip.setReturnRegisteredAt(Instant.now());
+                trip.setComputedDistanceKm(computedDistance);
+                trip.setComputedFuelConsumed(computedFuel);
+                trip.setDistanceKm(
+                    computedDistance != null
+                        ? computedDistance.doubleValue()
+                        : null
+                );
+                trip.setDurationMinutes(durationMinutes);
+                trip.setNew(false);
+
+                // Libérer véhicule
+                Mono<Void> vehicleFree = vehicleRepository
+                    .findById(trip.getVehicleId())
+                    .flatMap(v -> {
+                        v.setStatus("AVAILABLE");
+                        v.setNew(false);
+                        return vehicleRepository.save(v);
+                    })
+                    .then();
+
+                // Mise à jour odomètre
+                final BigDecimal dist = computedDistance;
+                Mono<Void> odometer = (dist != null)
+                    ? operationalRepo
+                          .findByVehicleId(trip.getVehicleId())
+                          .flatMap(op -> {
+                              double cur =
+                                  op.getOdometerReading() != null
+                                      ? op.getOdometerReading().doubleValue()
+                                      : 0;
+                              op.setOdometerReading(
+                                  BigDecimal.valueOf(cur + dist.doubleValue())
+                              );
+                              op.setMileage(
+                                  BigDecimal.valueOf(cur + dist.doubleValue())
+                              );
+                              return operationalRepo.save(op);
+                          })
+                          .then()
+                    : Mono.empty();
+
+                // Mise à jour quantités retour dans les détails
+                Mono<Void> detailsUpdate = (cmd.detailUpdates() != null &&
+                    !cmd.detailUpdates().isEmpty())
+                    ? Flux.fromIterable(cmd.detailUpdates())
+                          .flatMap(du ->
+                              detailRepository
+                                  .findById(du.detailId())
+                                  .flatMap(de -> {
+                                      de.setReturnQuantity(du.returnQuantity());
+                                      de.setNew(false);
+                                      return detailRepository.save(de);
+                                  })
+                          )
+                          .then()
+                    : Mono.empty();
+
+                final TripEntity tripToSave = trip;
+                return Mono.when(vehicleFree, odometer, detailsUpdate)
+                    .then(tripRepository.save(tripToSave))
+                    .flatMap(saved -> loadTripWithDetails(saved.getId()));
+            });
+    }
+
+    // ── Recherche par code ────────────────────────────────────────────────────
+
+    @Override
+    public Mono<Trip> getTripByCode(String tripCode) {
+        return tripRepository
+            .findByTripCode(tripCode)
+            .switchIfEmpty(Mono.error(TripException.notFoundByCode(tripCode)))
+            .flatMap(e -> loadTripWithDetails(e.getId()));
+    }
+
+    // ── Changer de conducteur ─────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public Mono<Trip> updateTripDriver(
+        UUID tripId,
+        UUID newDriverId,
+        UUID managerId
+    ) {
+        return tripRepository
+            .findById(tripId)
+            .switchIfEmpty(Mono.error(TripException.notFound(tripId)))
+            .flatMap(trip -> {
+                if (!"SCHEDULED".equals(trip.getStatus())) {
+                    return Mono.error(
+                        new RuntimeException(
+                            "Changement de conducteur impossible : trajet déjà démarré."
+                        )
+                    );
+                }
+                return driverPersistence
+                    .findById(newDriverId)
+                    .flatMap(driver -> {
+                        trip.setDriverId(newDriverId);
+                        trip.setNew(false);
+                        return tripRepository
+                            .save(trip)
+                            .flatMap(saved ->
+                                loadTripWithDetails(saved.getId())
+                            );
+                    });
+            });
+    }
+
+    // ── Annulation ────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public Mono<Trip> cancelTrip(UUID tripId, String reason, UUID managerId) {
+        return tripRepository
+            .findById(tripId)
+            .switchIfEmpty(Mono.error(TripException.notFound(tripId)))
+            .flatMap(trip -> {
+                if (
+                    "COMPLETED".equals(trip.getStatus()) ||
+                    "CANCELLED".equals(trip.getStatus())
+                ) {
+                    return Mono.error(TripException.actionOnCompletedTrip());
+                }
+
+                boolean wasOnTrip =
+                    "DEPARTED".equals(trip.getStatus()) ||
+                    "SCHEDULED".equals(trip.getStatus());
+                trip.setStatus("CANCELLED");
+                trip.setCancelReason(reason);
+                trip.setCancelledAt(Instant.now());
+                trip.setNew(false);
+
+                Mono<Void> freeVehicle = wasOnTrip
+                    ? vehicleRepository
+                          .findById(trip.getVehicleId())
+                          .flatMap(v -> {
+                              v.setStatus("AVAILABLE");
+                              v.setNew(false);
+                              return vehicleRepository.save(v);
+                          })
+                          .then()
+                    : Mono.empty();
+
+                return freeVehicle
+                    .then(tripRepository.save(trip))
+                    .flatMap(saved -> loadTripWithDetails(saved.getId()));
+            });
+    }
+
+    // ── Listes Manager ────────────────────────────────────────────────────────
+
+    @Override
+    public Flux<Trip> getManagerTrips(UUID managerId, UUID fleetId) {
+        Flux<TripEntity> source = (fleetId != null)
+            ? tripRepository.findAllByCreatedByAndFleetId(managerId, fleetId)
+            : tripRepository.findAllByCreatedBy(managerId);
+        return source.flatMap(e -> loadTripWithDetails(e.getId()));
+    }
+
+    @Override
+    public Mono<Trip> getTripById(UUID id) {
+        return tripRepository
+            .findById(id)
+            .switchIfEmpty(Mono.error(TripException.notFound(id)))
+            .flatMap(e -> loadTripWithDetails(e.getId()));
+    }
+
+    // ── Télémétrie (conservé) ─────────────────────────────────────────────────
+
+    @Override
+    public Mono<Void> sendTelemetry(
+        UUID tripId,
+        Double lat,
+        Double lng,
+        Double speed
+    ) {
+        return tripRepository
+            .findById(tripId)
+            .filter(
+                t ->
+                    "DEPARTED".equals(t.getStatus()) ||
+                    "RETURNING".equals(t.getStatus())
+            )
             .switchIfEmpty(Mono.error(TripException.actionOnCompletedTrip()))
             .flatMap(trip -> {
-                // 1. Redis (chaud)
-                Mono<Void> redisTask = redisTelemetry.addPoint(tripId, lat, lng);
-                
-                // 2. Postgres Operational Params (Position Live)
-                Mono<Void> sqlTask = operationalRepo.findByVehicleId(trip.getVehicleId())
+                Mono<Void> redisTask = redisTelemetry.addPoint(
+                    tripId,
+                    lat,
+                    lng
+                );
+                Mono<Void> sqlTask = operationalRepo
+                    .findByVehicleId(trip.getVehicleId())
                     .flatMap(op -> {
-                        op.setCurrentLocation(lat + "," + lng);
-                        op.setCurrentSpeed(BigDecimal.valueOf(speed != null ? speed : 0.0));
+                        op.setCurrentSpeed(
+                            BigDecimal.valueOf(speed != null ? speed : 0.0)
+                        );
                         op.setTimestamp(Instant.now());
                         return operationalRepo.save(op);
-                    }).then();
-
-                // 3. Geofence Check (Fire & Forget)
-                geofenceApi.checkPointInZone(null, lat, lng).subscribe(); 
-
+                    })
+                    .then();
+                geofenceApi.checkPointInZone(null, lat, lng).subscribe();
                 return Mono.when(redisTask, sqlTask);
             });
     }
 
     @Override
-    @Transactional
-    public Mono<Trip> endTrip(UUID tripId) {
-        return tripRepository.findById(tripId)
-            .filter(t -> "ONGOING".equals(t.getStatus()))
-            .flatMap(trip -> redisTelemetry.getTripPath(tripId).collectList()
-                .flatMap(points -> {
-                    Double distance = distanceCalculator.calculateTotalDistanceKm(points);
-                    
-                    // Mise à jour Trip
-                    trip.setStatus("COMPLETED");
-                    trip.setEndDate(LocalDate.now(ZoneOffset.UTC));
-                    trip.setEndTime(LocalTime.now(ZoneOffset.UTC));
-                    trip.setDistanceKm(distance);
-                    trip.setNew(false);
-
-                    // Libération véhicule + Mise à jour Odomètre
-                    return vehicleRepository.findById(trip.getVehicleId())
-                        .flatMap(v -> { v.setStatus("AVAILABLE"); v.setNew(false); return vehicleRepository.save(v); })
-                        .then(operationalRepo.findByVehicleId(trip.getVehicleId()))
-                        .flatMap(op -> {
-                            double currentOdo = op.getOdometerReading() != null ? op.getOdometerReading().doubleValue() : 0.0;
-                            op.setOdometerReading(BigDecimal.valueOf(currentOdo + distance));
-                            op.setMileage(BigDecimal.valueOf(currentOdo + distance));
-                            return operationalRepo.save(op);
-                        })
-                        .then(tripRepository.save(trip))
-                        .doOnSuccess(t -> redisTelemetry.clearTripPath(tripId).subscribe());
-                }))
-            .map(this::mapToDomain);
+    public Mono<Trip> getMyActiveTrip(UUID driverId) {
+        return tripRepository
+            .findByDriverIdAndStatus(driverId, "DEPARTED")
+            .flatMap(e -> loadTripWithDetails(e.getId()));
     }
 
-    @Override public Mono<Trip> getMyActiveTrip(UUID d) { return tripRepository.findByDriverIdAndStatus(d, "ONGOING").map(this::mapToDomain); }
-    @Override public Flux<Trip> getMyTripHistory(UUID d) { return tripRepository.findAll().filter(t -> d.equals(t.getDriverId())).map(this::mapToDomain); }
-    @Override public Mono<Trip> getTripById(UUID id) { return tripRepository.findById(id).map(this::mapToDomain); }
-    @Override public Flux<Trip> getManagerTrips(UUID m, UUID f) { return tripRepository.findAll().map(this::mapToDomain); } // Simplifié
+    @Override
+    public Flux<Trip> getMyTripHistory(UUID driverId) {
+        return tripRepository
+            .findAllByDriverId(driverId)
+            .flatMap(e -> loadTripWithDetails(e.getId()));
+    }
 
-    private Trip mapToDomain(TripEntity e) {
-        return new Trip(e.getId(), e.getVehicleId(), e.getDriverId(), e.getStatus(), e.getStartDate(), e.getStartTime(), e.getEndDate(), e.getEndTime(), e.getDistanceKm(), e.getDurationMinutes());
+    // ── Helpers privés ────────────────────────────────────────────────────────
+
+    private TripEntity buildTripEntity(String tripCode, CreateTripCommand cmd) {
+        TripEntity e = new TripEntity();
+        e.setId(UUID.randomUUID());
+        e.setTripCode(tripCode);
+        e.setVehicleId(cmd.vehicleId());
+        e.setDriverId(cmd.driverId());
+        e.setFleetId(cmd.fleetId());
+        e.setCreatedBy(cmd.managerId());
+        e.setStatus("SCHEDULED");
+        e.setStartDate(cmd.startDate());
+        e.setStartTime(cmd.startTime());
+        e.setDepartureLocation(cmd.departureLocation());
+        e.setDepartureKmIndex(cmd.departureKmIndex());
+        e.setDepartureFuelIndex(cmd.departureFuelIndex());
+        e.setMissionObject(cmd.missionObject());
+        e.setMissionCost(cmd.missionCost());
+        e.setRateType(cmd.rateType());
+        e.setScheduledReturnDatetime(cmd.scheduledReturnDatetime());
+        e.setNew(true);
+        return e;
+    }
+
+    private Mono<Void> saveDetails(UUID tripId, List<TripDetailInput> inputs) {
+        if (inputs == null || inputs.isEmpty()) return Mono.empty();
+        List<TripDetailEntity> entities = inputs
+            .stream()
+            .map(d -> {
+                TripDetailEntity de = new TripDetailEntity();
+                de.setId(UUID.randomUUID());
+                de.setTripId(tripId);
+                de.setItemType(d.itemType());
+                de.setDescription(d.description());
+                de.setQuantity(d.quantity());
+                de.setWeight(d.weight());
+                de.setDepartureQuantity(
+                    d.departureQuantity() != null
+                        ? d.departureQuantity()
+                        : d.quantity()
+                );
+                de.setNew(true);
+                return de;
+            })
+            .collect(Collectors.toList());
+        return detailRepository.saveAll(entities).then();
+    }
+
+    private Mono<Trip> loadTripWithDetails(UUID tripId) {
+        return tripRepository.findById(tripId).flatMap(entity ->
+            detailRepository
+                .findAllByTripIdOrderBySortOrder(entity.getId())
+                .collectList()
+                .map(details -> mapToDomain(entity, details))
+        );
+    }
+
+    private Trip mapToDomain(
+        TripEntity e,
+        List<TripDetailEntity> detailEntities
+    ) {
+        List<TripDetail> details = detailEntities
+            .stream()
+            .map(d ->
+                new TripDetail(
+                    d.getId(),
+                    d.getTripId(),
+                    TripDetail.ItemType.valueOf(d.getItemType()),
+                    d.getDescription(),
+                    d.getQuantity(),
+                    d.getWeight(),
+                    d.getDepartureQuantity(),
+                    d.getReturnQuantity(),
+                    d.getSortOrder()
+                )
+            )
+            .collect(Collectors.toList());
+
+        Trip.RateType rateType = null;
+        if (e.getRateType() != null) {
+            try {
+                rateType = Trip.RateType.valueOf(e.getRateType());
+            } catch (Exception ex) {
+                /* ignore */
+            }
+        }
+
+        Trip.Status status = null;
+        if (e.getStatus() != null) {
+            try {
+                status = Trip.Status.valueOf(e.getStatus());
+            } catch (Exception ex) {
+                /* ignore */
+            }
+        }
+
+        return new Trip(
+            e.getId(),
+            e.getTripCode(),
+            e.getVehicleId(),
+            e.getDriverId(),
+            e.getFleetId(),
+            e.getCreatedBy(),
+            status,
+            e.getStartDate(),
+            e.getStartTime(),
+            e.getDepartureLocation(),
+            e.getDepartureKmIndex(),
+            e.getDepartureFuelIndex(),
+            e.getEndDate(),
+            e.getEndTime(),
+            e.getReturnLocation(),
+            e.getReturnKmIndex(),
+            e.getReturnFuelIndex(),
+            e.getReturnRegisteredAt(),
+            e.getScheduledReturnDatetime(),
+            e.getMissionObject(),
+            e.getMissionCost(),
+            rateType,
+            e.getDistanceKm(),
+            e.getDurationMinutes(),
+            e.getComputedDistanceKm(),
+            e.getComputedFuelConsumed(),
+            e.getCancelReason(),
+            e.getCancelledAt(),
+            details
+        );
     }
 }

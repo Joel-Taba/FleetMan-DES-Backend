@@ -192,6 +192,25 @@ public class DriverService implements ManageDriverUseCase {
         return drivers;
     }
 
+    @Override
+    public Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> getDriversEnriched(
+            UUID fleetId, Boolean isAssigned, UUID requesterId) {
+        return getDriversWithFilters(fleetId, isAssigned, requesterId).flatMap(this::enrichDriver);
+    }
+
+    @Override
+    public Mono<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> getDriverEnriched(UUID userId) {
+        return driverPersistencePort.findById(userId)
+                .switchIfEmpty(Mono.error(new RuntimeException("Conducteur introuvable")))
+                .flatMap(this::enrichDriver);
+    }
+
+    private Mono<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> enrichDriver(Driver driver) {
+        return userRepo.findById(driver.userId())
+                .map(user -> com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse.from(driver, user))
+                .defaultIfEmpty(com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse.from(driver, null));
+    }
+
     public Mono<Driver> searchDriver(String identifier) {
         // On utilise le repository UserLocal pour trouver l'ID via email/username
         return userRepo.findByUsername(identifier)

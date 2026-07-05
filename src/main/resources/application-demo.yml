@@ -1,0 +1,10 @@
+# Profil « demo » — développement local avec auth Kernel et données de test.
+# Démarrage : SPRING_PROFILES_ACTIVE=local,demo
+# La logique métier existante n'est pas modifiée ; seuls le seed et le mode auth sont configurés.
+
+application:
+  auth:
+    mode: kernel   # Auth réelle via Kernel RT-Comops (fake disponible via profil fake-auth)
+  bootstrap:
+    demo-data:
+      enabled: true

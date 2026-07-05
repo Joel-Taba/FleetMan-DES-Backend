@@ -22,6 +22,9 @@ public class IncidentEntity implements Persistable<UUID> {
     @Id
     private UUID id;
 
+    @Override
+    public UUID getId() { return this.id; }
+
     @Column("type")
     private String type;
 

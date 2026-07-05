@@ -8,7 +8,8 @@ import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
@@ -24,12 +25,13 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
-@Slf4j
 @RestController
 @RequestMapping("/api/v1/health")
 @RequiredArgsConstructor
 @Tag(name = OpenApiConfig.TAG_MONITORING , description = "Endpoints de diagnostic et statistiques publiques")
 public class HealthCheckController {
+
+    private static final Logger log = LoggerFactory.getLogger(HealthCheckController.class);
 
     private final DatabaseClient databaseClient;
     private final ReactiveRedisConnectionFactory redisConnectionFactory;
@@ -105,7 +107,7 @@ public class HealthCheckController {
             stats.put("totalDrivers", t.getT4());
             stats.put("serviceStatus", "All systems operational");
             return stats;
-        }).flatMap(stats -> 
+        }).flatMap(stats ->
             redisTemplate.opsForValue().set(STATS_CACHE_KEY, stats, Duration.ofHours(6))
                 .thenReturn(stats)
         );
@@ -123,14 +125,14 @@ public class HealthCheckController {
 
     private Mono<String> checkRemote(String path, String baseUrl, String token, String name) {
         if (baseUrl == null || baseUrl.isBlank()) return Mono.just("NOT_CONFIGURED");
-        
+
         return webClientBuilder.build().get()
                 .uri(baseUrl + path)
                 .header("Authorization", token)
                 .exchangeToMono(response -> {
                     // Si le code est 2xx, 401 ou 403, le service est considéré comme "UP"
-                    if (response.statusCode().is2xxSuccessful() || 
-                        response.statusCode().value() == 401 || 
+                    if (response.statusCode().is2xxSuccessful() ||
+                        response.statusCode().value() == 401 ||
                         response.statusCode().value() == 403) {
                         return Mono.just("UP");
                     }

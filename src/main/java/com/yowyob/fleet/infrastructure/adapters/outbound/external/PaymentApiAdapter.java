@@ -16,8 +16,10 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 @Slf4j
-@Component
+@ConditionalOnProperty(name = "application.external.payment-mode", havingValue = "remote", matchIfMissing = true)
 public class PaymentApiAdapter implements ExternalPaymentPort {
 
     private final WebClient webClient;

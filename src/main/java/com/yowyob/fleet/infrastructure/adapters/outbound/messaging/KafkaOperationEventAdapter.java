@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.reactive.ReactiveKafkaProducerTemplate;
-import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import reactor.core.publisher.Mono;
 
 /**
@@ -16,8 +16,8 @@ import reactor.core.publisher.Mono;
  * (les services appellent ce port en fire & forget).
  */
 @Slf4j
-@Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "application.kafka.mode", havingValue = "real")
 public class KafkaOperationEventAdapter implements OperationEventPort {
 
     private final ReactiveKafkaProducerTemplate<String, Object> kafkaProducer;

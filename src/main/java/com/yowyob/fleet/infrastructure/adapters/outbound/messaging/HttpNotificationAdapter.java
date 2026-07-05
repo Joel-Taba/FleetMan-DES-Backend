@@ -6,15 +6,11 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.Notific
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Primary;
-import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 @Slf4j
-@Primary
-@Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "application.notification.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "application.notification.mode", havingValue = "http")
 public class HttpNotificationAdapter implements SendNotificationPort {
 
     private final NotificationApiClient notificationApiClient;

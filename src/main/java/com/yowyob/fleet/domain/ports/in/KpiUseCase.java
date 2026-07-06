@@ -32,6 +32,12 @@ public interface KpiUseCase {
                                           LocalDate from,
                                           LocalDate to);
 
+    /** Historique des KPIs d'un véhicule sur une plage de dates. */
+    Flux<KpiSnapshot> getVehicleKpiHistory(UUID vehicleId,
+                                            KpiSnapshot.PeriodType periodType,
+                                            LocalDate from,
+                                            LocalDate to);
+
     /** Top N véhicules par kilométrage pour une flotte. */
     Flux<KpiSnapshot> getTopVehiclesByKm(UUID fleetId,
                                           KpiSnapshot.PeriodType periodType,
@@ -54,6 +60,16 @@ public interface KpiUseCase {
     Mono<KpiSnapshot> recalculateFleetKpi(UUID fleetId,
                                            KpiSnapshot.PeriodType periodType,
                                            LocalDate periodStart);
+
+    /** Déclenche le calcul immédiat des KPIs pour un véhicule. */
+    Mono<KpiSnapshot> recalculateVehicleKpi(UUID vehicleId,
+                                           KpiSnapshot.PeriodType periodType,
+                                           LocalDate periodStart);
+
+    /** Déclenche le calcul immédiat des KPIs pour un conducteur. */
+    Mono<KpiSnapshot> recalculateDriverKpi(UUID driverId,
+                                            KpiSnapshot.PeriodType periodType,
+                                            LocalDate periodStart);
 
     // ── Record de comparaison ─────────────────────────────────────────────────
 

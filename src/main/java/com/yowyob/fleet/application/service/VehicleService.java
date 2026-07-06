@@ -52,6 +52,7 @@ public class VehicleService implements ManageVehicleUseCase {
     private final VehicleColorR2dbcRepository colorRepo;
     
     private final OperationalParameterR2dbcRepository operationalRepo;
+    private final PlanLimitGuard planLimitGuard;
 
     // ========================================================================
     // --- 09a. GESTION DU PARC (FLEET MANAGER) ---
@@ -80,7 +81,7 @@ public class VehicleService implements ManageVehicleUseCase {
                     vehicle.serialNumberPhotoUrl(), vehicle.registrationPhotoUrl(),
                     vehicle.illustrationImages(), vehicle.financialParameters(), 
                     vehicle.maintenanceParameters(), vehicle.operationalParameters(),
-                    vehicle.geofenceRemoteId()
+                    vehicle.geofenceRemoteId(), vehicle.kernelResourceId()
                 );
                 return localPersistencePort.saveLocalData(updated);
             })
@@ -134,7 +135,8 @@ public class VehicleService implements ManageVehicleUseCase {
     @Override
     @Transactional
     public Mono<Vehicle> createVehicle(UUID fleetId, VehicleRequest req, UUID managerId, String token) {
-        return Mono.zip(
+        return planLimitGuard.assertCanCreateVehicle(managerId)
+                .then(Mono.defer(() -> Mono.zip(
             args -> args, // Combinateur : on retourne le tableau brut
             vehicleTypeRepo.findById(req.vehicleTypeId()).switchIfEmpty(Mono.error(VehicleException.invalidVehicleType())),
             mfrRepo.findById(req.manufacturerId()),
@@ -156,23 +158,28 @@ public class VehicleService implements ManageVehicleUseCase {
             var transLabel  = ((com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.resources.TransmissionTypeEntity) args[7]).getLabel();
             var colorLabel  = ((com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.resources.VehicleColorEntity) args[8]).getLabel();
 
-                return externalVehiclePort.createRemoteVehicle(
-                    req, 
-                    token, 
-                    brandLabel, 
-                    modelLabel, 
-                    fuelLabel, 
-                    transLabel, 
-                    colorLabel
-                )
+                return resolveRemoteContext(fleetId)
+                .flatMap(context -> externalVehiclePort.createRemoteVehicle(
+                    req,
+                    token,
+                    brandLabel,
+                    modelLabel,
+                    fuelLabel,
+                    transLabel,
+                    colorLabel,
+                    context
+                ))
                 .flatMap(remote -> {
+                    UUID kernelResourceId = remote.kernelResourceId() != null
+                            ? remote.kernelResourceId() : remote.id();
                     Vehicle shell = new Vehicle(
                         remote.id(), fleetId, managerId, null, req.vehicleTypeId(),
                         req.licensePlate(), remote.vehicleSerialNumber(), brandLabel, modelLabel,
-                        req.manufacturingYear(), transLabel, fuelLabel, 
-                        req.tankCapacity(), req.totalSeatNumber(), req.averageFuelConsumption(), 
-                        colorLabel, "AVAILABLE", remote.photoUrl(), 
-                        null, null, Collections.emptyList(), null, null, null, null); 
+                        req.manufacturingYear(), transLabel, fuelLabel,
+                        req.tankCapacity(), req.totalSeatNumber(), req.averageFuelConsumption(),
+                        colorLabel, "AVAILABLE", remote.photoUrl(),
+                        null, null, Collections.emptyList(), null, null, null, null,
+                        kernelResourceId);
                     
                     return localPersistencePort.saveLocalData(shell);
                 })
@@ -188,7 +195,7 @@ public class VehicleService implements ManageVehicleUseCase {
                             return Mono.just(savedLocal);
                         })
                 );
-        }).flatMap(v -> getVehicleDetails(v.id(), token));
+        }))).flatMap(v -> getVehicleDetails(v.id(), token));
     }
 
     @Override
@@ -210,7 +217,7 @@ public class VehicleService implements ManageVehicleUseCase {
                         v.tankCapacity(), v.totalSeatNumber(), v.averageFuelConsumption(),
                         v.color(), v.status(), v.photoUrl(), v.serialNumberPhotoUrl(),
                         v.registrationPhotoUrl(), v.illustrationImages(), p, v.maintenanceParameters(), 
-                        v.operationalParameters(), v.geofenceRemoteId()
+                        v.operationalParameters(), v.geofenceRemoteId(), v.kernelResourceId()
                     );
                     return localPersistencePort.saveLocalData(updated);
                 }).then(getVehicleDetails(id, t));
@@ -228,7 +235,7 @@ public class VehicleService implements ManageVehicleUseCase {
                         v.tankCapacity(), v.totalSeatNumber(), v.averageFuelConsumption(),
                         v.color(), v.status(), v.photoUrl(), v.serialNumberPhotoUrl(),
                         v.registrationPhotoUrl(), v.illustrationImages(), v.financialParameters(), p, 
-                        v.operationalParameters(), v.geofenceRemoteId()
+                        v.operationalParameters(), v.geofenceRemoteId(), v.kernelResourceId()
                     );
                     return localPersistencePort.saveLocalData(updated);
                 }).then(getVehicleDetails(id, t));
@@ -327,6 +334,15 @@ public class VehicleService implements ManageVehicleUseCase {
     // --- LOGIQUE DE SYNCHRONISATION DU CACHE ---
     // ========================================================================
 
+    private Mono<ExternalVehiclePort.VehicleRemoteContext> resolveRemoteContext(UUID fleetId) {
+        if (fleetId == null) {
+            return Mono.just(ExternalVehiclePort.VehicleRemoteContext.empty());
+        }
+        return fleetRepository.findById(fleetId)
+                .map(f -> new ExternalVehiclePort.VehicleRemoteContext(f.kernelOrganizationId(), null))
+                .defaultIfEmpty(ExternalVehiclePort.VehicleRemoteContext.empty());
+    }
+
     private Mono<Vehicle> syncLocalCache(Vehicle remote, UUID vehicleId) {
         return localPersistencePort.getLocalDataById(vehicleId)
                 .flatMap(local -> {
@@ -338,8 +354,9 @@ public class VehicleService implements ManageVehicleUseCase {
                         local.color(), local.status(), remote.photoUrl(),
                         remote.serialNumberPhotoUrl(), remote.registrationPhotoUrl(),
                         local.illustrationImages(), local.financialParameters(), 
-                        local.maintenanceParameters(), local.operationalParameters(),
-                        local.geofenceRemoteId() 
+                        local.maintenanceParameters(),                         local.operationalParameters(),
+                        local.geofenceRemoteId(),
+                        local.kernelResourceId()
                     );
                     return localPersistencePort.saveLocalData(updated);
                 });

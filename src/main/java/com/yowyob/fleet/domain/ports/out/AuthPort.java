@@ -8,6 +8,12 @@ import java.util.UUID;
 
 public interface AuthPort {
     Mono<AuthResponse> login(String identifier, String password);
+
+    /** Étape 2 du flow multi-tenant Kernel (no-op en mode fake). */
+    default Mono<AuthResponse> selectContext(String selectionToken, String contextId, UUID organizationId) {
+        return Mono.error(new UnsupportedOperationException("selectContext non supporté pour ce mode auth"));
+    }
+
     Mono<AuthResponse> refresh(String refreshToken); 
 
     Mono<AuthResponse> registerInRemote(AuthUseCase.RegisterCommand command);

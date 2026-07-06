@@ -8,9 +8,9 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
 
-  # R2DBC — base locale fleetmanBD sur port 5432
+  # R2DBC — PostgreSQL Docker (fleet-management-db) sur port hôte 5433
   r2dbc:
-    url: r2dbc:postgresql://localhost:5432/fleetmanBD
+    url: r2dbc:postgresql://localhost:5433/fleetmanBD
     username: fleet_admin
     password: fleet_password
     pool:
@@ -21,23 +21,23 @@ spring:
 
   # JDBC — uniquement pour Liquibase
   datasource:
-    url: jdbc:postgresql://localhost:5432/fleetmanBD
+    url: jdbc:postgresql://localhost:5433/fleetmanBD
     username: fleet_admin
     password: fleet_password
     driver-class-name: org.postgresql.Driver
 
-  # Liquibase — désactivé si le profil demo est actif (tables déjà créées)
+  # Liquibase — migrations au démarrage
   liquibase:
-    url: jdbc:postgresql://localhost:5432/fleetmanBD
+    url: jdbc:postgresql://localhost:5433/fleetmanBD
     user: fleet_admin
     password: fleet_password
     enabled: true
 
-  # Redis désactivé en local
+  # Redis Docker (port hôte 6380)
   data:
     redis:
       host: localhost
-      port: 6379
+      port: 6380
       password: ""
 
   kafka:

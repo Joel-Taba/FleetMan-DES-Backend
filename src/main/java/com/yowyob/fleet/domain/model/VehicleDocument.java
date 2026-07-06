@@ -40,6 +40,9 @@ public class VehicleDocument {
     private LocalDate issueDate;
     private final LocalDate expiryDate;
     private String fileUrl;
+    private String fileOriginalName;
+    private String fileMimeType;
+    private Long fileSizeBytes;
     private Status status;
     private String notes;
     private final LocalDateTime createdAt;
@@ -55,6 +58,9 @@ public class VehicleDocument {
                            LocalDate issueDate,
                            LocalDate expiryDate,
                            String fileUrl,
+                           String fileOriginalName,
+                           String fileMimeType,
+                           Long fileSizeBytes,
                            Status status,
                            String notes,
                            LocalDateTime createdAt,
@@ -75,6 +81,9 @@ public class VehicleDocument {
         this.issueDate = issueDate;
         this.expiryDate = expiryDate;
         this.fileUrl = fileUrl;
+        this.fileOriginalName = fileOriginalName;
+        this.fileMimeType = fileMimeType;
+        this.fileSizeBytes = fileSizeBytes;
         this.status = status != null ? status : computeStatus(expiryDate);
         this.notes = notes;
         this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
@@ -127,14 +136,23 @@ public class VehicleDocument {
     public String getIssuer()        { return issuer; }
     public LocalDate getIssueDate()  { return issueDate; }
     public LocalDate getExpiryDate() { return expiryDate; }
-    public String getFileUrl()       { return fileUrl; }
-    public Status getStatus()        { return status; }
+    public String getFileUrl()             { return fileUrl; }
+    public String getFileOriginalName()    { return fileOriginalName; }
+    public String getFileMimeType()        { return fileMimeType; }
+    public Long getFileSizeBytes()         { return fileSizeBytes; }
+    public Status getStatus()              { return status; }
     public String getNotes()         { return notes; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 
     public void setId(UUID id)           { this.id = id; }
     public void setFileUrl(String url)   { this.fileUrl = url; this.updatedAt = LocalDateTime.now(); }
+    public void setFileMetadata(String originalName, String mimeType, Long sizeBytes) {
+        this.fileOriginalName = originalName;
+        this.fileMimeType = mimeType;
+        this.fileSizeBytes = sizeBytes;
+        this.updatedAt = LocalDateTime.now();
+    }
     public void setStatus(Status status) { this.status = status; this.updatedAt = LocalDateTime.now(); }
     public void setNotes(String notes)   { this.notes = notes; }
 }

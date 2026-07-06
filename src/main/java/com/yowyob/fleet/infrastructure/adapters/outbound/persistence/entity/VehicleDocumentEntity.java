@@ -27,6 +27,9 @@ public class VehicleDocumentEntity implements Persistable<UUID> {
     private LocalDate issueDate;
     private LocalDate expiryDate;
     private String fileUrl;
+    private String fileOriginalName;
+    private String fileMimeType;
+    private Long fileSizeBytes;
     private String status;
     private String notes;
     private LocalDateTime createdAt;

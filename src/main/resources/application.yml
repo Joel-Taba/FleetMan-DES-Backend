@@ -16,7 +16,7 @@ spring:
   # R2DBC (Application Runtime)
 
   r2dbc:
-    url: r2dbc:postgresql://localhost:5432/fleetmanBD
+    url: r2dbc:postgresql://localhost:5433/fleetmanBD
     username: fleet_admin
     password: fleet_password
     pool:
@@ -28,14 +28,14 @@ spring:
 
   # JDBC (Liquibase Migration)
   datasource:
-    url: jdbc:postgresql://localhost:5432/fleetmanBD
+    url: jdbc:postgresql://localhost:5433/fleetmanBD
     username: fleet_admin
     password: fleet_password
     driver-class-name: org.postgresql.Driver
 
   # LIQUIBASE
   liquibase:
-    url: jdbc:postgresql://localhost:5432/fleetmanBD
+    url: jdbc:postgresql://localhost:5433/fleetmanBD
     user: fleet_admin
     password: fleet_password
     change-log: classpath:db/changelog/db.changelog-master.yaml
@@ -77,10 +77,16 @@ application:
     api-key: ${KERNEL_API_KEY:K5mWlNhc6zH2-JcaZJWSs1sLxUzjS902u4MxEnJar5g}
     tenant-id: ${KERNEL_TENANT_ID:f5b814d9-766e-4c87-91ec-d6c8e32cb56c}
     organization-id: ${KERNEL_ORG_ID:5e69f5c5-1f03-41cb-a4a3-d59188f73323}
-    service: FLEET_MANAGEMENT
+    business-actor-id: ${KERNEL_BUSINESS_ACTOR_ID:54fb5d86-345e-4522-a247-5cbc1de510fc}
+    organization-sync: ${KERNEL_ORG_SYNC:true}
+    service: COMMERCIAL
+
+  file:
+    mode: ${FILE_MODE:kernel}
 
   external:
     vehicle-service-url:  https://traefikdev.yowyob.com/vehicule
+    vehicle-mode: ${VEHICLE_MODE:kernel}
     geofence-service-url: https://traefikdev.yowyob.com/geofence-service
     payment-service-url:  https://traefikdev.yowyob.com/payment
   auth:
@@ -106,7 +112,7 @@ application:
   geofence-system-user:
     username: "system@fleetman.cm"
     password: "SystemFleetMan2026!" 
-    organization-id: "723e4567-e89b-12d3-a456-426614174000" # UUID de notre application dans
+    organization-id: "5e69f5c5-1f03-41cb-a4a3-d59188f73323"
  
   bootstrap:
     admin:
@@ -144,3 +150,9 @@ management:
 resilience4j:
   circuitbreaker:
     instances: {}
+
+# Stockage fichiers (documents PDF / images)
+fleetman:
+  uploads:
+    dir: uploads
+    max-bytes: 10485760

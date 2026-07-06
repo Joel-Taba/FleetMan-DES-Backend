@@ -2,7 +2,9 @@ package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
 import com.yowyob.fleet.domain.ports.in.ManageFleetManagerUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
+import com.yowyob.fleet.application.service.PlanLimitGuard;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.FleetManagerResponse;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerSubscriptionResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerKpiResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.UpdateManagerRequest;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
@@ -28,6 +30,7 @@ import java.util.UUID;
 public class FleetManagerController {
 
     private final ManageFleetManagerUseCase managerUseCase;
+    private final PlanLimitGuard planLimitGuard;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -41,6 +44,13 @@ public class FleetManagerController {
             Authentication auth
     ) {
         return managerUseCase.getManagerDetails(getUserId(auth), token);
+    }
+
+    @GetMapping("/me/subscription")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Mon abonnement et limites de plan")
+    public Mono<ManagerSubscriptionResponse> getMySubscription(Authentication auth) {
+        return planLimitGuard.getSubscription(getUserId(auth));
     }
 
     @GetMapping("/kpis")

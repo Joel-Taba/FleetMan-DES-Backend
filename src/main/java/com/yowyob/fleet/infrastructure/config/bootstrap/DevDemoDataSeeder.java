@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.Ordered;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.r2dbc.connection.init.ResourceDatabasePopulator;
 import org.springframework.stereotype.Component;
@@ -19,7 +20,7 @@ import reactor.core.publisher.Mono;
  */
 @Slf4j
 @Component
-@Order(100)
+@Order(Ordered.LOWEST_PRECEDENCE)
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "application.bootstrap.demo-data.enabled", havingValue = "true")
 public class DevDemoDataSeeder implements CommandLineRunner {
@@ -31,21 +32,23 @@ public class DevDemoDataSeeder implements CommandLineRunner {
     public void run(String... args) {
         userRepo.existsById(DemoTestAccounts.SUPER_ADMIN_ID)
                 .flatMap(exists -> {
-                    if (Boolean.TRUE.equals(exists)) {
-                        log.info("🌱 [DEMO] Données déjà présentes — seed ignoré.");
-                        return Mono.empty();
+                    if (Boolean.FALSE.equals(exists)) {
+                        log.info("🌱 [DEMO] Chargement des données de test fleet...");
+                        var populator = new ResourceDatabasePopulator(new ClassPathResource("db/demo-seed.sql"));
+                        return Mono.from(populator.populate(connectionFactory));
                     }
-                    log.info("🌱 [DEMO] Chargement des données de test fleet...");
-                    return Mono.fromRunnable(this::executeSqlSeed);
+                    log.info("🌱 [DEMO] Données déjà présentes — seed ignoré.");
+                    return Mono.empty();
                 })
+                .then(runKernelOrgPatch())
                 .doOnSuccess(v -> log.info("✅ [DEMO] Données de test chargées."))
-                .doOnError(e -> log.error("❌ [DEMO] Échec du seed : {}", e.getMessage()))
+                .doOnError(e -> log.error("❌ [DEMO] Échec du seed : {}", e.getMessage(), e))
                 .onErrorResume(e -> Mono.empty())
                 .block();
     }
 
-    private void executeSqlSeed() {
-        var populator = new ResourceDatabasePopulator(new ClassPathResource("db/demo-seed.sql"));
-        populator.populate(connectionFactory).block();
+    private Mono<Void> runKernelOrgPatch() {
+        var patch = new ResourceDatabasePopulator(new ClassPathResource("db/demo-kernel-org-patch.sql"));
+        return Mono.from(patch.populate(connectionFactory));
     }
 }

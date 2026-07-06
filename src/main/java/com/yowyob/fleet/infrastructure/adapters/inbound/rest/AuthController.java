@@ -105,11 +105,7 @@ public class AuthController {
     public Mono<AuthPort.AuthResponse> selectContext(
             @org.springframework.web.bind.annotation.RequestBody SelectContextRequest request) {
         log.info("✅ select-context: contextId={} orgId={}", request.contextId(), request.organizationId());
-        if (authPort instanceof KernelAuthAdapter kernelAdapter) {
-            return kernelAdapter.selectContext(request.selectionToken(), request.contextId(), request.organizationId());
-        }
-        // Mode fake : simuler un login direct
-        return authUseCase.login("fake@user.com", "fake");
+        return authUseCase.selectContext(request.selectionToken(), request.contextId(), request.organizationId());
     }
 
     // ── Records internes ───────────────────────────────────────────────────────

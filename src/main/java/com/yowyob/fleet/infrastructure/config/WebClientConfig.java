@@ -81,6 +81,66 @@ public class WebClientConfig {
         return createProxy(webClient, KernelAuthApiClient.class);
     }
 
+    @Bean
+    public KernelAdminApiClient kernelAdminApiClient(
+            @Value("${application.kernel.url}") String kernelUrl,
+            @Value("${application.kernel.client-id}") String clientId,
+            @Value("${application.kernel.api-key}") String apiKey) {
+        WebClient webClient = WebClient.builder()
+                .baseUrl(kernelUrl)
+                .defaultHeader("X-Client-Id", clientId)
+                .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .filter(logRequest())
+                .build();
+        return createProxy(webClient, KernelAdminApiClient.class);
+    }
+
+    @Bean
+    public KernelOrganizationApiClient kernelOrganizationApiClient(
+            @Value("${application.kernel.url}") String kernelUrl,
+            @Value("${application.kernel.client-id}") String clientId,
+            @Value("${application.kernel.api-key}") String apiKey) {
+        WebClient webClient = WebClient.builder()
+                .baseUrl(kernelUrl)
+                .defaultHeader("X-Client-Id", clientId)
+                .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .filter(logRequest())
+                .build();
+        return createProxy(webClient, KernelOrganizationApiClient.class);
+    }
+
+    @Bean
+    public KernelResourceApiClient kernelResourceApiClient(
+            @Value("${application.kernel.url}") String kernelUrl,
+            @Value("${application.kernel.client-id}") String clientId,
+            @Value("${application.kernel.api-key}") String apiKey) {
+        WebClient webClient = WebClient.builder()
+                .baseUrl(kernelUrl)
+                .defaultHeader("X-Client-Id", clientId)
+                .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .filter(logRequest())
+                .build();
+        return createProxy(webClient, KernelResourceApiClient.class);
+    }
+
+    @Bean
+    public KernelFileApiClient kernelFileApiClient(
+            @Value("${application.kernel.url}") String kernelUrl,
+            @Value("${application.kernel.client-id}") String clientId,
+            @Value("${application.kernel.api-key}") String apiKey) {
+        WebClient webClient = WebClient.builder()
+                .baseUrl(kernelUrl)
+                .defaultHeader("X-Client-Id", clientId)
+                .defaultHeader("X-Api-Key", apiKey)
+                .filter(logRequest())
+                .build();
+        return createProxy(webClient, KernelFileApiClient.class);
+    }
+
     // --- CLIENTS STANDARDS ---
 
     @Bean("paymentWebClient")

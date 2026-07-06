@@ -61,6 +61,24 @@ public class AuthService implements AuthUseCase {
     }
 
     @Override
+    public Mono<AuthPort.AuthResponse> selectContext(
+        String selectionToken,
+        String contextId,
+        UUID organizationId
+    ) {
+        return authPort
+            .selectContext(selectionToken, contextId, organizationId)
+            .flatMap(response ->
+                resolveLocalUser(response.user())
+                    .flatMap(localId ->
+                        ensureRoleProfileExistsForLocalId(response.user(), localId)
+                            .then(checkUserAccessByLocalId(localId))
+                    )
+                    .thenReturn(response)
+            );
+    }
+
+    @Override
     public Mono<AuthPort.AuthResponse> register(RegisterCommand command) {
         return ensureRolesExist(command.roles())
             .then(authPort.registerInRemote(command))

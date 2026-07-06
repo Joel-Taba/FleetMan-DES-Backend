@@ -22,6 +22,8 @@ public interface ManageSubscriptionPlanUseCase {
     record ApproveSubscriptionCommand(UUID managerId, UUID approvedBy, UUID planId) {}
     record RejectSubscriptionCommand(UUID managerId, UUID rejectedBy, String reason) {}
 
+    record PlanFeatureCommand(String key, String label, boolean enabled) {}
+
     Mono<SubscriptionPlan> createPlan(CreatePlanCommand command);
     Flux<SubscriptionPlan> listPlans();
     Mono<SubscriptionPlan> getPlan(UUID id);
@@ -33,4 +35,8 @@ public interface ManageSubscriptionPlanUseCase {
     Flux<Object> listPendingSubscriptions();
     Mono<Void> approveSubscription(ApproveSubscriptionCommand command);
     Mono<Void> rejectSubscription(RejectSubscriptionCommand command);
+
+    Flux<PlanFeatureCommand> getPlanFeatures(UUID planId);
+    Mono<Void> replacePlanFeatures(UUID planId, java.util.List<PlanFeatureCommand> features);
+    Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ActiveSubscriptionDto> listActiveSubscriptions();
 }

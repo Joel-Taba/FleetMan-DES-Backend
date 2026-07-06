@@ -18,6 +18,9 @@ public record DriverDocumentResponse(
         LocalDate issueDate,
         LocalDate expiryDate,
         String fileUrl,
+        String fileOriginalName,
+        String fileMimeType,
+        Long fileSizeBytes,
         String status,
         long daysUntilExpiry,
         String notes,
@@ -30,7 +33,9 @@ public record DriverDocumentResponse(
                 d.getDocType().name(), d.getDocNumber(),
                 d.getLicenseCategories(), d.getIssuer(),
                 d.getIssueDate(), d.getExpiryDate(),
-                d.getFileUrl(), d.getStatus().name(),
+                d.getFileUrl(), d.getFileOriginalName(), d.getFileMimeType(),
+                d.getFileSizeBytes(),
+                d.getStatus().name(),
                 d.daysUntilExpiry(),
                 d.getNotes(), d.getCreatedAt(), d.getUpdatedAt()
         );

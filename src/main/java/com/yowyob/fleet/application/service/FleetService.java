@@ -14,9 +14,11 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
+import com.yowyob.fleet.infrastructure.config.KernelTokenHolder;
 import com.yowyob.fleet.infrastructure.mappers.FleetMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -45,6 +47,18 @@ public class FleetService implements ManageFleetUseCase {
     private final VehicleLocalR2dbcRepository vehicleRepo;
     private final DriverR2dbcRepository driverRepo;
     private final TripR2dbcRepository tripRepo;
+    private final PlanLimitGuard planLimitGuard;
+    private final ExternalOrganizationPort externalOrganizationPort;
+    private final KernelTokenHolder kernelTokenHolder;
+
+    @Value("${application.kernel.organization-sync:true}")
+    private boolean organizationSync;
+
+    @Value("${application.kernel.business-actor-id:}")
+    private String businessActorId;
+
+    @Value("${application.kernel.service:COMMERCIAL}")
+    private String kernelServiceCode;
 
     // ========================================================================
     // --- 10a. ADMINISTRATION CRUD ---
@@ -53,13 +67,69 @@ public class FleetService implements ManageFleetUseCase {
     @Override
     @Transactional
     public Mono<Fleet> createFleet(Fleet fleet, UUID managerId) {
+        return planLimitGuard.assertCanCreateFleet(managerId)
+                .then(Mono.defer(() -> {
+                    if (!organizationSync || !externalOrganizationPort.isEnabled()) {
+                        return saveFleetLocally(fleet, managerId, null);
+                    }
+                    return kernelTokenHolder.getValidAccessToken()
+                            .flatMap(token -> provisionKernelOrganization(fleet, token))
+                            .flatMap(orgId -> saveFleetLocally(fleet, managerId, orgId));
+                }));
+    }
+
+    private Mono<UUID> provisionKernelOrganization(Fleet fleet, String ownerToken) {
+        UUID actorId = resolveBusinessActorId();
+        String code = toOrganizationCode(fleet.name());
+        var command = new ExternalOrganizationPort.CreateOrganizationCommand(
+                actorId,
+                code,
+                fleet.name(),
+                fleet.name(),
+                kernelServiceCode
+        );
+        return externalOrganizationPort.createOrganization(command, ownerToken)
+                .flatMap(org -> externalOrganizationPort
+                        .approveOrganization(org.id(), "FleetMan fleet provisioning", ownerToken)
+                        .then(subscribeDefaultServices(org.id(), ownerToken))
+                        .thenReturn(org.id()));
+    }
+
+    private Mono<Void> subscribeDefaultServices(UUID organizationId, String ownerToken) {
+        return externalOrganizationPort.subscribeService(organizationId, "COMMERCIAL", ownerToken)
+                .then(externalOrganizationPort.subscribeService(organizationId, "RESOURCE", ownerToken));
+    }
+
+    private Mono<Fleet> saveFleetLocally(Fleet fleet, UUID managerId, UUID kernelOrganizationId) {
         FleetEntity entity = mapper.toEntity(fleet);
         entity.setId(UUID.randomUUID());
         entity.setManagerId(managerId);
+        entity.setKernelOrganizationId(kernelOrganizationId);
         entity.setCreatedAt(Instant.now());
         entity.setNew(true);
-        
         return repository.save(entity).map(mapper::toDomain);
+    }
+
+    private UUID resolveBusinessActorId() {
+        if (businessActorId == null || businessActorId.isBlank()) {
+            throw FleetException.invalidResourceStatus(
+                    "application.kernel.business-actor-id requis pour créer une organisation Kernel");
+        }
+        return UUID.fromString(businessActorId);
+    }
+
+    private static String toOrganizationCode(String fleetName) {
+        String normalized = fleetName.toUpperCase()
+                .replaceAll("[^A-Z0-9]", "-")
+                .replaceAll("-+", "-")
+                .replaceAll("^-|-$", "");
+        if (normalized.isBlank()) {
+            normalized = "FLEET";
+        }
+        if (normalized.length() > 16) {
+            normalized = normalized.substring(0, 16);
+        }
+        return normalized + "-" + UUID.randomUUID().toString().substring(0, 4).toUpperCase();
     }
 
     @Override
@@ -68,7 +138,26 @@ public class FleetService implements ManageFleetUseCase {
                 .switchIfEmpty(Mono.error(FleetException.notFound(id)))
                 .filter(f -> isAdmin || f.getManagerId().equals(requesterId))
                 .switchIfEmpty(Mono.error(FleetException.accessDenied()))
+                .flatMap(this::enrichFromKernelIfLinked)
                 .map(mapper::toDomain);
+    }
+
+    /** Vérifie le statut Kernel si la flotte est liée à une organisation. */
+    private Mono<FleetEntity> enrichFromKernelIfLinked(FleetEntity entity) {
+        if (entity.getKernelOrganizationId() == null || !externalOrganizationPort.isEnabled()) {
+            return Mono.just(entity);
+        }
+        return kernelTokenHolder.getValidAccessToken()
+                .flatMap(token -> externalOrganizationPort
+                        .getOrganization(entity.getKernelOrganizationId(), token)
+                        .doOnNext(org -> log.debug(
+                                "🏢 Flotte {} ↔ org Kernel {} ({})",
+                                entity.getId(), org.id(), org.governanceStatus()))
+                        .thenReturn(entity))
+                .onErrorResume(e -> {
+                    log.warn("⚠️ Sync org Kernel ignorée pour flotte {} : {}", entity.getId(), e.getMessage());
+                    return Mono.just(entity);
+                });
     }
 
     @Override
@@ -149,7 +238,8 @@ public class FleetService implements ManageFleetUseCase {
                         vehicle.fuelType(), vehicle.tankCapacity(), vehicle.totalSeatNumber(), vehicle.averageFuelConsumption(),
                         vehicle.color(), vehicle.status(), vehicle.photoUrl(), vehicle.serialNumberPhotoUrl(),
                         vehicle.registrationPhotoUrl(), vehicle.illustrationImages(), vehicle.financialParameters(),
-                        vehicle.maintenanceParameters(), vehicle.operationalParameters(), vehicle.geofenceRemoteId());
+                        vehicle.maintenanceParameters(), vehicle.operationalParameters(), vehicle.geofenceRemoteId(),
+                        vehicle.kernelResourceId());
                 
                 return vehiclePersistence.saveLocalData(updated);
             })
@@ -171,7 +261,8 @@ public class FleetService implements ManageFleetUseCase {
                             vehicle.fuelType(), vehicle.tankCapacity(), vehicle.totalSeatNumber(), vehicle.averageFuelConsumption(),
                             vehicle.color(), vehicle.status(), vehicle.photoUrl(), vehicle.serialNumberPhotoUrl(),
                             vehicle.registrationPhotoUrl(), vehicle.illustrationImages(), vehicle.financialParameters(),
-                            vehicle.maintenanceParameters(), vehicle.operationalParameters(), vehicle.geofenceRemoteId());
+                            vehicle.maintenanceParameters(), vehicle.operationalParameters(), vehicle.geofenceRemoteId(),
+                        vehicle.kernelResourceId());
                     return vehiclePersistence.saveLocalData(updated);
                 }).then();
     }

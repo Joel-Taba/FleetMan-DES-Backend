@@ -29,6 +29,20 @@ public class FakeVehicleAdapter implements ExternalVehiclePort {
     @Override
     public Mono<Vehicle> createRemoteVehicle(VehicleRequest request, String token,
             String brandLabel, String modelLabel, String fuelLabel,
+            String transLabel, String colorLabel, VehicleRemoteContext context) {
+        return createRemoteVehicle(request, token, brandLabel, modelLabel, fuelLabel, transLabel, colorLabel);
+    }
+
+    @Override
+    public Mono<Vehicle> updateRemoteVehicle(UUID vehicleId, VehicleRequest request, String token,
+            String brandLabel, String modelLabel, String fuelLabel,
+            String transLabel, String colorLabel, VehicleRemoteContext context) {
+        return updateRemoteVehicle(vehicleId, request, token, brandLabel, modelLabel, fuelLabel, transLabel, colorLabel);
+    }
+
+    @Override
+    public Mono<Vehicle> createRemoteVehicle(VehicleRequest request, String token,
+            String brandLabel, String modelLabel, String fuelLabel,
             String transLabel, String colorLabel) {
         log.info("🛠 [FAKE VEHICLE] createRemoteVehicle: plate={}", request.licensePlate());
         return Mono.empty();

@@ -91,8 +91,26 @@ public class TripEntity implements Persistable<UUID> {
     @Column("mission_cost")
     private BigDecimal missionCost;
 
+    @Column("mission_cost_currency")
+    private String missionCostCurrency;
+
     @Column("rate_type")
     private String rateType;
+
+    @Column("departure_registered_at")
+    private Instant departureRegisteredAt;
+
+    @Column("departure_lat")
+    private BigDecimal departureLat;
+
+    @Column("departure_lng")
+    private BigDecimal departureLng;
+
+    @Column("return_lat")
+    private BigDecimal returnLat;
+
+    @Column("return_lng")
+    private BigDecimal returnLng;
 
     // ── Calculés ──────────────────────────────────────────────────────────────
     @Column("distance_km")

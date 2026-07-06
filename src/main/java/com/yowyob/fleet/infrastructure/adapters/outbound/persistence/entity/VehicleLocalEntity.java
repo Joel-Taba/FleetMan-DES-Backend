@@ -54,6 +54,9 @@ public class VehicleLocalEntity implements Persistable<UUID> {
     @Column("geofence_remote_id")
     private String geofenceRemoteId;
 
+    @Column("kernel_resource_id")
+    private UUID kernelResourceId;
+
     @Transient
     private boolean isNew = false;
 

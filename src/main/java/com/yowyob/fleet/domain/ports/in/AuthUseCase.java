@@ -7,6 +7,7 @@ import java.util.List;
 
 public interface AuthUseCase {
     Mono<AuthPort.AuthResponse> login(String identifier, String password);
+    Mono<AuthPort.AuthResponse> selectContext(String selectionToken, String contextId, UUID organizationId);
     Mono<AuthPort.AuthResponse> register(RegisterCommand command);
     Mono<AuthPort.AuthResponse> refreshToken(String refreshToken);
 

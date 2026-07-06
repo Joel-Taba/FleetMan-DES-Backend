@@ -43,7 +43,9 @@ public class DocumentService implements ManageDocumentUseCase {
                             null, cmd.vehicleId(), type,
                             cmd.docNumber(), cmd.issuer(),
                             cmd.issueDate(), cmd.expiryDate(),
-                            cmd.fileUrl(), null, cmd.notes(),
+                            cmd.fileUrl(), cmd.fileOriginalName(),
+                            cmd.fileMimeType(), cmd.fileSizeBytes(),
+                            null, cmd.notes(),
                             null, null
                     );
                     return documentPort.saveVehicleDoc(doc);
@@ -69,6 +71,9 @@ public class DocumentService implements ManageDocumentUseCase {
                 .switchIfEmpty(Mono.error(DocumentException.vehicleDocNotFound(cmd.documentId())))
                 .flatMap(doc -> {
                     if (cmd.fileUrl() != null)   doc.setFileUrl(cmd.fileUrl());
+                    if (cmd.fileOriginalName() != null || cmd.fileMimeType() != null || cmd.fileSizeBytes() != null) {
+                        doc.setFileMetadata(cmd.fileOriginalName(), cmd.fileMimeType(), cmd.fileSizeBytes());
+                    }
                     if (cmd.notes() != null)     doc.setNotes(cmd.notes());
                     if (cmd.status() != null) {
                         try {
@@ -108,7 +113,9 @@ public class DocumentService implements ManageDocumentUseCase {
                             null, cmd.driverId(), type,
                             cmd.docNumber(), cmd.licenseCategories(),
                             cmd.issuer(), cmd.issueDate(), cmd.expiryDate(),
-                            cmd.fileUrl(), null, cmd.notes(),
+                            cmd.fileUrl(), cmd.fileOriginalName(),
+                            cmd.fileMimeType(), cmd.fileSizeBytes(),
+                            null, cmd.notes(),
                             null, null
                     );
                     return documentPort.saveDriverDoc(doc);
@@ -134,6 +141,9 @@ public class DocumentService implements ManageDocumentUseCase {
                 .switchIfEmpty(Mono.error(DocumentException.driverDocNotFound(cmd.documentId())))
                 .flatMap(doc -> {
                     if (cmd.fileUrl() != null) doc.setFileUrl(cmd.fileUrl());
+                    if (cmd.fileOriginalName() != null || cmd.fileMimeType() != null || cmd.fileSizeBytes() != null) {
+                        doc.setFileMetadata(cmd.fileOriginalName(), cmd.fileMimeType(), cmd.fileSizeBytes());
+                    }
                     if (cmd.notes() != null)   doc.setNotes(cmd.notes());
                     if (cmd.status() != null) {
                         try {

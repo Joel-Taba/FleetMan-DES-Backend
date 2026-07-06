@@ -37,6 +37,15 @@ public record VehicleDocumentRequest(
         @Schema(description = "URL du fichier numérisé")
         String fileUrl,
 
+        @Schema(description = "Nom original du fichier")
+        String fileOriginalName,
+
+        @Schema(description = "Type MIME du fichier", example = "application/pdf")
+        String fileMimeType,
+
+        @Schema(description = "Taille du fichier en octets")
+        Long fileSizeBytes,
+
         @Schema(description = "Notes")
         String notes
 ) {}

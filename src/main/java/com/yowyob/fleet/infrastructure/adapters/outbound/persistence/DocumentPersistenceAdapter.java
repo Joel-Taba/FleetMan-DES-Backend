@@ -115,7 +115,8 @@ public class DocumentPersistenceAdapter implements DocumentPersistencePort {
                 VehicleDocument.DocType.valueOf(e.getDocType()),
                 e.getDocNumber(), e.getIssuer(),
                 e.getIssueDate(), e.getExpiryDate(),
-                e.getFileUrl(),
+                e.getFileUrl(), e.getFileOriginalName(),
+                e.getFileMimeType(), e.getFileSizeBytes(),
                 e.getStatus() != null
                         ? VehicleDocument.Status.valueOf(e.getStatus())
                         : VehicleDocument.computeStatus(e.getExpiryDate()),
@@ -133,6 +134,9 @@ public class DocumentPersistenceAdapter implements DocumentPersistencePort {
         e.setIssueDate(d.getIssueDate());
         e.setExpiryDate(d.getExpiryDate());
         e.setFileUrl(d.getFileUrl());
+        e.setFileOriginalName(d.getFileOriginalName());
+        e.setFileMimeType(d.getFileMimeType());
+        e.setFileSizeBytes(d.getFileSizeBytes());
         e.setStatus(d.getStatus().name());
         e.setNotes(d.getNotes());
         e.setCreatedAt(d.getCreatedAt() != null ? d.getCreatedAt() : LocalDateTime.now());
@@ -146,7 +150,8 @@ public class DocumentPersistenceAdapter implements DocumentPersistencePort {
                 DriverDocument.DocType.valueOf(e.getDocType()),
                 e.getDocNumber(), e.getLicenseCategories(),
                 e.getIssuer(), e.getIssueDate(), e.getExpiryDate(),
-                e.getFileUrl(),
+                e.getFileUrl(), e.getFileOriginalName(),
+                e.getFileMimeType(), e.getFileSizeBytes(),
                 e.getStatus() != null
                         ? DriverDocument.Status.valueOf(e.getStatus())
                         : DriverDocument.computeStatus(e.getExpiryDate()),
@@ -165,6 +170,9 @@ public class DocumentPersistenceAdapter implements DocumentPersistencePort {
         e.setIssueDate(d.getIssueDate());
         e.setExpiryDate(d.getExpiryDate());
         e.setFileUrl(d.getFileUrl());
+        e.setFileOriginalName(d.getFileOriginalName());
+        e.setFileMimeType(d.getFileMimeType());
+        e.setFileSizeBytes(d.getFileSizeBytes());
         e.setStatus(d.getStatus().name());
         e.setNotes(d.getNotes());
         e.setCreatedAt(d.getCreatedAt() != null ? d.getCreatedAt() : LocalDateTime.now());

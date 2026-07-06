@@ -40,6 +40,8 @@ public class Trip {
     private LocalDate startDate;
     private LocalTime startTime;
     private String departureLocation;
+    private BigDecimal departureLat;
+    private BigDecimal departureLng;
     private BigDecimal departureKmIndex;
     private BigDecimal departureFuelIndex;
 
@@ -47,6 +49,8 @@ public class Trip {
     private LocalDate endDate;
     private LocalTime endTime;
     private String returnLocation;
+    private BigDecimal returnLat;
+    private BigDecimal returnLng;
     private BigDecimal returnKmIndex;
     private BigDecimal returnFuelIndex;
     private Instant returnRegisteredAt;
@@ -55,7 +59,9 @@ public class Trip {
     // ── Mission ───────────────────────────────────────────────────────────────
     private String missionObject;
     private BigDecimal missionCost;
+    private String missionCostCurrency;
     private RateType rateType;
+    private Instant departureRegisteredAt;
 
     // ── Valeurs calculées ─────────────────────────────────────────────────────
     private Double distanceKm; // ancien champ (GPS)
@@ -82,18 +88,24 @@ public class Trip {
         LocalDate startDate,
         LocalTime startTime,
         String departureLocation,
+        BigDecimal departureLat,
+        BigDecimal departureLng,
         BigDecimal departureKmIndex,
         BigDecimal departureFuelIndex,
         LocalDate endDate,
         LocalTime endTime,
         String returnLocation,
+        BigDecimal returnLat,
+        BigDecimal returnLng,
         BigDecimal returnKmIndex,
         BigDecimal returnFuelIndex,
         Instant returnRegisteredAt,
         LocalDateTime scheduledReturnDatetime,
         String missionObject,
         BigDecimal missionCost,
+        String missionCostCurrency,
         RateType rateType,
+        Instant departureRegisteredAt,
         Double distanceKm,
         Integer durationMinutes,
         BigDecimal computedDistanceKm,
@@ -112,18 +124,24 @@ public class Trip {
         this.startDate = startDate;
         this.startTime = startTime;
         this.departureLocation = departureLocation;
+        this.departureLat = departureLat;
+        this.departureLng = departureLng;
         this.departureKmIndex = departureKmIndex;
         this.departureFuelIndex = departureFuelIndex;
         this.endDate = endDate;
         this.endTime = endTime;
         this.returnLocation = returnLocation;
+        this.returnLat = returnLat;
+        this.returnLng = returnLng;
         this.returnKmIndex = returnKmIndex;
         this.returnFuelIndex = returnFuelIndex;
         this.returnRegisteredAt = returnRegisteredAt;
         this.scheduledReturnDatetime = scheduledReturnDatetime;
         this.missionObject = missionObject;
         this.missionCost = missionCost;
+        this.missionCostCurrency = missionCostCurrency;
         this.rateType = rateType;
+        this.departureRegisteredAt = departureRegisteredAt;
         this.distanceKm = distanceKm;
         this.durationMinutes = durationMinutes;
         this.computedDistanceKm = computedDistanceKm;
@@ -174,6 +192,14 @@ public class Trip {
         return departureLocation;
     }
 
+    public BigDecimal getDepartureLat() {
+        return departureLat;
+    }
+
+    public BigDecimal getDepartureLng() {
+        return departureLng;
+    }
+
     public BigDecimal getDepartureKmIndex() {
         return departureKmIndex;
     }
@@ -192,6 +218,14 @@ public class Trip {
 
     public String getReturnLocation() {
         return returnLocation;
+    }
+
+    public BigDecimal getReturnLat() {
+        return returnLat;
+    }
+
+    public BigDecimal getReturnLng() {
+        return returnLng;
     }
 
     public BigDecimal getReturnKmIndex() {
@@ -216,6 +250,14 @@ public class Trip {
 
     public BigDecimal getMissionCost() {
         return missionCost;
+    }
+
+    public String getMissionCostCurrency() {
+        return missionCostCurrency;
+    }
+
+    public Instant getDepartureRegisteredAt() {
+        return departureRegisteredAt;
     }
 
     public RateType getRateType() {
@@ -305,6 +347,42 @@ public class Trip {
 
     public void setDurationMinutes(Integer durationMinutes) {
         this.durationMinutes = durationMinutes;
+    }
+
+    public void setMissionCost(BigDecimal missionCost) {
+        this.missionCost = missionCost;
+    }
+
+    public void setMissionCostCurrency(String missionCostCurrency) {
+        this.missionCostCurrency = missionCostCurrency;
+    }
+
+    public void setVehicleId(UUID vehicleId) {
+        this.vehicleId = vehicleId;
+    }
+
+    public void setDepartureLocation(String departureLocation) {
+        this.departureLocation = departureLocation;
+    }
+
+    public void setDepartureKmIndex(BigDecimal departureKmIndex) {
+        this.departureKmIndex = departureKmIndex;
+    }
+
+    public void setDepartureFuelIndex(BigDecimal departureFuelIndex) {
+        this.departureFuelIndex = departureFuelIndex;
+    }
+
+    public void setMissionObject(String missionObject) {
+        this.missionObject = missionObject;
+    }
+
+    public void setStartDate(LocalDate startDate) {
+        this.startDate = startDate;
+    }
+
+    public void setStartTime(LocalTime startTime) {
+        this.startTime = startTime;
     }
 
     public void setCancelReason(String cancelReason) {

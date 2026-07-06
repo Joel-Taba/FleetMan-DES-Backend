@@ -26,7 +26,7 @@ public class TripException extends DomainException {
 
     public static TripException driverOccupied() {
         return new TripException(
-            "Vous avez déjà une course en cours.",
+            "Ce conducteur est déjà affecté à un trajet en cours.",
             HttpStatus.CONFLICT,
             "TRP_002"
         );
@@ -69,6 +69,14 @@ public class TripException extends DomainException {
             "Aucun trajet trouvé avec le code : " + code,
             HttpStatus.NOT_FOUND,
             "TRP_007"
+        );
+    }
+
+    public static TripException tripNotModifiable() {
+        return new TripException(
+            "Ce trajet est clôturé et ne peut plus être modifié.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_008"
         );
     }
 }

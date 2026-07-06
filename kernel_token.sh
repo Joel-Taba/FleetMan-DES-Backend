@@ -330,7 +330,9 @@ main() {
     echo ""
     echo -e "${CYAN}Exemple d'utilisation :${NC}"
     echo '  curl -s -H "Authorization: Bearer $TOKEN" \'
-    echo '    http://localhost:8081/api/v1/vehicles | python3 -m json.tool'
+    echo '    -H "X-Client-Id: $CID" -H "X-Api-Key: $KEY" \'
+    echo '    -H "X-Tenant-Id: $FLEET_TENANT_ID" -H "X-Organization-Id: $FLEET_ORG_ID" \'
+    echo '    "$KERNEL/api/users/me" | python3 -m json.tool'
     echo ""
 }
 

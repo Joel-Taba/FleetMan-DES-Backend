@@ -51,6 +51,9 @@ public interface ManageDocumentUseCase {
             LocalDate issueDate,
             LocalDate expiryDate,
             String fileUrl,
+            String fileOriginalName,
+            String fileMimeType,
+            Long fileSizeBytes,
             String notes
     ) {}
 
@@ -61,6 +64,9 @@ public interface ManageDocumentUseCase {
             LocalDate issueDate,
             LocalDate expiryDate,
             String fileUrl,
+            String fileOriginalName,
+            String fileMimeType,
+            Long fileSizeBytes,
             String status,
             String notes
     ) {}
@@ -74,6 +80,9 @@ public interface ManageDocumentUseCase {
             LocalDate issueDate,
             LocalDate expiryDate,
             String fileUrl,
+            String fileOriginalName,
+            String fileMimeType,
+            Long fileSizeBytes,
             String notes
     ) {}
 
@@ -85,6 +94,9 @@ public interface ManageDocumentUseCase {
             LocalDate issueDate,
             LocalDate expiryDate,
             String fileUrl,
+            String fileOriginalName,
+            String fileMimeType,
+            Long fileSizeBytes,
             String status,
             String notes
     ) {}

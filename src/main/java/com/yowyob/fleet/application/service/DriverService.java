@@ -39,14 +39,16 @@ public class DriverService implements ManageDriverUseCase {
     private final AuthPort authPort;
     private final FleetR2dbcRepository fleetRepository;
     private final ExternalVehiclePort externalVehiclePort;
-    private final UserLocalR2dbcRepository userRepo; // Repository pour accéder aux données utilisateur locales
+    private final UserLocalR2dbcRepository userRepo;
+    private final PlanLimitGuard planLimitGuard;
 
     private static final String SERVICE_NAME = "FLEET_MANAGEMENT";
 
     // --- 1. CRÉATION COMPLÈTE ---
     @Override
     public Mono<Driver> registerDriver(UUID fleetId, DriverRegistrationRequest request, UUID managerId) {
-        return checkFleetOwnership(fleetId, managerId)
+        return planLimitGuard.assertCanCreateDriver(managerId)
+                .then(checkFleetOwnership(fleetId, managerId))
                 .then(Mono.defer(() -> {
                     AuthUseCase.RegisterCommand command = new AuthUseCase.RegisterCommand(
                             request.username(), request.password(), request.email(), request.phone(),
@@ -248,7 +250,8 @@ private Mono<Void> updateVehicleLink(UUID vehicleId, UUID driverId) {
                         v.financialParameters(),
                         v.maintenanceParameters(),
                         v.operationalParameters(),
-                        v.geofenceRemoteId());
+                        v.geofenceRemoteId(),
+                        v.kernelResourceId());
                 return vehiclePersistencePort.saveLocalData(updated);
             }).then();
 }

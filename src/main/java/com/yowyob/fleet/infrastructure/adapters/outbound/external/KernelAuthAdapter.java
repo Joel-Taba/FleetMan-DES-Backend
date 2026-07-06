@@ -6,11 +6,13 @@ import com.yowyob.fleet.domain.exception.AuthException;
 import com.yowyob.fleet.domain.ports.in.AuthUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.AuthController;
+import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelAdminApiClient;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelAuthApiClient;
-import lombok.RequiredArgsConstructor;
+import com.yowyob.fleet.infrastructure.config.KernelTokenHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
@@ -33,18 +35,33 @@ import java.util.UUID;
  * Sécurité : headers X-Client-Id + X-Api-Key injectés automatiquement par le WebClient.
  */
 @Slf4j
-@RequiredArgsConstructor
 public class KernelAuthAdapter implements AuthPort {
 
     private final KernelAuthApiClient kernelClient;
+    private final KernelAdminApiClient kernelAdminClient;
+    private final KernelTokenHolder kernelTokenHolder;
     private final WebClient kernelWebClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public KernelAuthAdapter(
+            KernelAuthApiClient kernelClient,
+            KernelAdminApiClient kernelAdminClient,
+            KernelTokenHolder kernelTokenHolder,
+            WebClient kernelWebClient) {
+        this.kernelClient = kernelClient;
+        this.kernelAdminClient = kernelAdminClient;
+        this.kernelTokenHolder = kernelTokenHolder;
+        this.kernelWebClient = kernelWebClient;
+    }
 
     @Value("${application.kernel.service:FLEET_MANAGEMENT}")
     private String serviceName;
 
     @Value("${application.kernel.organization-id:}")
     private String defaultOrgId;
+
+    @Value("${application.kernel.tenant-id:}")
+    private String defaultTenantId;
 
     // ── Login (2 étapes) ──────────────────────────────────────────────────────
 
@@ -74,14 +91,7 @@ public class KernelAuthAdapter implements AuthPort {
                             .orElse(discover.contexts().get(0));
 
                     // Déterminer l'organizationId cible
-                    UUID orgId = null;
-                    if (ctx.organizations() != null && !ctx.organizations().isEmpty()) {
-                        orgId = ctx.organizations().stream()
-                                .filter(o -> serviceName.equalsIgnoreCase(o.service()))
-                                .map(KernelAuthApiClient.OrganizationRef::organizationId)
-                                .findFirst()
-                                .orElse(ctx.organizations().get(0).organizationId());
-                    }
+                    UUID orgId = resolveOrganizationId(ctx);
 
                     log.debug("✅ [KERNEL AUTH] Context sélectionné: {} org={}", ctx.contextId(), orgId);
 
@@ -127,15 +137,19 @@ public class KernelAuthAdapter implements AuthPort {
 
     @Override
     public Mono<AuthResponse> registerInRemote(AuthUseCase.RegisterCommand command) {
-        log.info("📝 [KERNEL AUTH] Inscription : {}", command.email());
-        return kernelClient.register(
+        log.info("📝 [KERNEL AUTH] Inscription via owner : {}", command.email());
+        return kernelTokenHolder.getValidAccessToken()
+                .flatMap(ownerToken -> kernelAdminClient.registerUser(
+                        ensureBearer(ownerToken),
+                        defaultTenantId,
+                        defaultOrgId,
                         new KernelAuthApiClient.RegisterUserRequest(
                                 command.username(),
                                 command.email(),
                                 command.phone(),
                                 command.password(),
                                 "LOCAL"
-                        ))
+                        )))
                 .flatMap(resp -> {
                     if (!resp.success() || resp.data() == null) {
                         return Mono.error(AuthException.generic(resp.message(), HttpStatus.BAD_REQUEST));
@@ -143,7 +157,7 @@ public class KernelAuthAdapter implements AuthPort {
                     var user = resp.data();
                     UserDetail detail = new UserDetail(
                             user.id(), user.username(), user.email(), user.phoneNumber(),
-                            null, null, serviceName,
+                            command.firstName(), command.lastName(), serviceName,
                             command.roles(), List.of(),
                             null, null, null, null, true, null
                     );
@@ -269,6 +283,7 @@ public class KernelAuthAdapter implements AuthPort {
                 .onErrorResume(WebClientResponseException.class, this::mapWebClientError);
     }
 
+    @Override
     public Mono<AuthResponse> selectContext(String selectionToken, String contextId, java.util.UUID organizationId) {
         return kernelClient.selectContext(new KernelAuthApiClient.SelectContextRequest(selectionToken, contextId, organizationId))
                 .map(resp -> {
@@ -342,6 +357,24 @@ public class KernelAuthAdapter implements AuthPort {
     }
 
     // ── Helpers de mapping ────────────────────────────────────────────────────
+
+    private UUID resolveOrganizationId(KernelAuthApiClient.DiscoveredContext ctx) {
+        if (ctx.organizations() != null && !ctx.organizations().isEmpty()) {
+            return ctx.organizations().stream()
+                    .filter(o -> serviceName.equalsIgnoreCase(o.service()))
+                    .map(KernelAuthApiClient.OrganizationRef::organizationId)
+                    .findFirst()
+                    .orElse(ctx.organizations().get(0).organizationId());
+        }
+        if (defaultOrgId != null && !defaultOrgId.isBlank()) {
+            try {
+                return UUID.fromString(defaultOrgId);
+            } catch (IllegalArgumentException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
 
     private String ensureBearer(String token) {
         if (token == null) return "";

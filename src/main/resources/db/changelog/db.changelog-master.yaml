@@ -82,3 +82,31 @@ databaseChangeLog:
   # 22. Plans Tarifaires et Workflow Approbation Souscriptions
   - include:
       file: db/changelog/changes/022-subscription-plans.sql
+
+  # 23. Trajets — lieux, devise, compléments conducteur
+  - include:
+      file: db/changelog/changes/023-trip-enhancements.sql
+
+  # 25. KPI — granularité annuelle
+  - include:
+      file: db/changelog/changes/025-kpi-yearly.sql
+
+  # 26. Abonnements — features structurées et dates
+  - include:
+      file: db/changelog/changes/026-subscription-features.sql
+
+  # 27. Intégration Kernel — kernel_id users, kernel_organization_id fleets
+  - include:
+      file: db/changelog/changes/027-kernel-integration.sql
+
+  # 28. Intégration Kernel — kernel_resource_id vehicles
+  - include:
+      file: db/changelog/changes/028-kernel-resource-id.sql
+
+  # 29. Intégration Kernel — kernel_file_id documents
+  - include:
+      file: db/changelog/changes/029-kernel-file-id.sql
+
+  # 30. Limites plan Starter — environnement de test
+  - include:
+      file: db/changelog/changes/030-dev-plan-limits.sql

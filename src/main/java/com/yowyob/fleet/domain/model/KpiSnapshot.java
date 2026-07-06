@@ -87,7 +87,7 @@ public record KpiSnapshot(
 
 ) {
     public enum EntityType { FLEET, VEHICLE, DRIVER }
-    public enum PeriodType { DAILY, WEEKLY, MONTHLY }
+    public enum PeriodType { DAILY, WEEKLY, MONTHLY, YEARLY }
 
     /**
      * Calcule le coût par km à partir des totaux.

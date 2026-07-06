@@ -21,6 +21,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  *   "0 0 3 * * *"   - Chaque nuit a 3h00 (calcul KPIs quotidiens)
  *   "0 0 4 * * MON" - Chaque lundi a 4h00 (calcul KPIs hebdomadaires)
  *   "0 0 5 1 * *"   - Le 1er de chaque mois a 5h00 (KPIs mensuels)
+ *   "0 0 6 1 1 *"   - Le 1er janvier a 6h00 (KPIs annuels)
  *   "0 0/30 * * * *"- Toutes les 30 minutes (verification alertes)
  */
 @Configuration

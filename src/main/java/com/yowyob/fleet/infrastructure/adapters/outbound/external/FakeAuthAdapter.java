@@ -33,6 +33,11 @@ public class FakeAuthAdapter implements AuthPort {
     }
 
     @Override
+    public Mono<AuthResponse> selectContext(String selectionToken, String contextId, UUID organizationId) {
+        return login("manager@fleetman.cm", DemoTestAccounts.DEMO_PASSWORD);
+    }
+
+    @Override
     public Mono<UserDetail> getUserProfile(String token) {
         return Mono.just(resolveUserFromToken(token));
     }

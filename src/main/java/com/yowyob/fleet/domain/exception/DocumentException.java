@@ -69,4 +69,18 @@ public class DocumentException extends DomainException {
                 "Type de document invalide : " + type,
                 HttpStatus.BAD_REQUEST, "DOC_008");
     }
+
+    /** DOC_009 — Type ou taille de fichier invalide */
+    public static DocumentException invalidFileType(String detail) {
+        return new DocumentException(
+                "Fichier non autorisé (PDF, JPEG, PNG ou WebP uniquement) : " + detail,
+                HttpStatus.BAD_REQUEST, "DOC_009");
+    }
+
+    /** DOC_010 — Fichier trop volumineux */
+    public static DocumentException fileTooLarge(long maxBytes) {
+        return new DocumentException(
+                "Fichier trop volumineux (max " + (maxBytes / 1024 / 1024) + " Mo).",
+                HttpStatus.BAD_REQUEST, "DOC_010");
+    }
 }

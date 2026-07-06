@@ -9,5 +9,6 @@ public record Fleet(
     String name,
     String phoneNumber,
     Instant createdAt,
-    Integer vehicleCount
+    Integer vehicleCount,
+    UUID kernelOrganizationId
 ) {}

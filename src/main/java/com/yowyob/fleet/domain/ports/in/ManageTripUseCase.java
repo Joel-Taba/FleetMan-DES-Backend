@@ -33,13 +33,40 @@ public interface ManageTripUseCase {
         LocalDate startDate,
         LocalTime startTime,
         String departureLocation,
+        BigDecimal departureLat,
+        BigDecimal departureLng,
         BigDecimal departureKmIndex,
         BigDecimal departureFuelIndex,
         String missionObject,
         BigDecimal missionCost,
+        String missionCostCurrency,
         String rateType,
         LocalDateTime scheduledReturnDatetime,
         List<TripDetailInput> details
+    ) {}
+
+    record UpdateTripCommand(
+        UUID managerId,
+        UUID vehicleId,
+        UUID driverId,
+        LocalDate startDate,
+        LocalTime startTime,
+        String departureLocation,
+        BigDecimal departureLat,
+        BigDecimal departureLng,
+        BigDecimal departureKmIndex,
+        BigDecimal departureFuelIndex,
+        String missionObject,
+        BigDecimal missionCost,
+        String missionCostCurrency
+    ) {}
+
+    record MissionSubmissionInput(
+        String itemType,
+        String description,
+        Integer quantity,
+        BigDecimal weight,
+        String notes
     ) {}
 
     record RegisterReturnCommand(
@@ -47,6 +74,8 @@ public interface ManageTripUseCase {
         LocalDate returnDate,
         LocalTime returnTime,
         String returnLocation,
+        BigDecimal returnLat,
+        BigDecimal returnLng,
         BigDecimal returnKmIndex,
         BigDecimal returnFuelIndex,
         List<ReturnDetailInput> detailUpdates
@@ -65,8 +94,30 @@ public interface ManageTripUseCase {
     /** Retrouve un trajet par son code (ex: TRJ-2026-0001). */
     Mono<Trip> getTripByCode(String tripCode);
 
-    /** Change le conducteur d'un trajet en statut SCHEDULED. */
+    /** Change le conducteur d'un trajet non clôturé. */
     Mono<Trip> updateTripDriver(UUID tripId, UUID newDriverId, UUID managerId);
+
+    /** Change le véhicule d'un trajet non clôturé. */
+    Mono<Trip> updateTripVehicle(UUID tripId, UUID newVehicleId, UUID managerId);
+
+    /** Met à jour les informations de départ / mission tant que le trajet n'est pas clôturé. */
+    Mono<Trip> updateTrip(UUID tripId, UpdateTripCommand command);
+
+    /** Trajets en cours (départ enregistré, retour non clôturé). */
+    Flux<Trip> getOpenTrips(UUID managerId);
+
+    /** Complément d'information soumis par le conducteur (en attente validation). */
+    Mono<UUID> submitMissionComplement(
+        UUID tripId,
+        UUID driverId,
+        MissionSubmissionInput input
+    );
+
+    /** Valide un complément conducteur et l'intègre aux détails du trajet. */
+    Mono<Trip> approveMissionSubmission(UUID submissionId, UUID managerId);
+
+    /** Rejette un complément conducteur. */
+    Mono<Void> rejectMissionSubmission(UUID submissionId, UUID managerId);
 
     /** Annule un trajet avec un motif. */
     Mono<Trip> cancelTrip(UUID tripId, String reason, UUID managerId);

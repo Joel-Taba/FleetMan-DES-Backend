@@ -5,17 +5,18 @@ services:
     # image: postgres:16-alpine
     container_name: fleet-management-db
     environment:
-      POSTGRES_DB: yowyob_db
+      POSTGRES_DB: fleetmanBD
       POSTGRES_USER: fleet_admin
       POSTGRES_PASSWORD: fleet_password
     ports:
+      # 5433 sur l'hôte pour éviter le conflit avec un PostgreSQL système sur 5432
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - fleet-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fleet_admin -d yowyob_db"]
+      test: ["CMD-SHELL", "pg_isready -U fleet_admin -d fleetmanBD"]
       interval: 5s
       timeout: 5s
       retries: 5

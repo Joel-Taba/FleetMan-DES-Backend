@@ -48,7 +48,9 @@ public class DocumentController {
                 new ManageDocumentUseCase.AddVehicleDocumentCommand(
                         vehicleId, request.docType(), request.docNumber(),
                         request.issuer(), request.issueDate(), request.expiryDate(),
-                        request.fileUrl(), request.notes()
+                        request.fileUrl(), request.fileOriginalName(),
+                        request.fileMimeType(), request.fileSizeBytes(),
+                        request.notes()
                 );
         return documentUseCase.addVehicleDocument(cmd).map(VehicleDocumentResponse::from);
     }
@@ -94,7 +96,9 @@ public class DocumentController {
                 new ManageDocumentUseCase.UpdateVehicleDocumentCommand(
                         docId, request.docNumber(), request.issuer(),
                         request.issueDate(), request.expiryDate(),
-                        request.fileUrl(), null, request.notes()
+                        request.fileUrl(), request.fileOriginalName(),
+                        request.fileMimeType(), request.fileSizeBytes(),
+                        null, request.notes()
                 );
         return documentUseCase.updateVehicleDocument(cmd).map(VehicleDocumentResponse::from);
     }
@@ -129,7 +133,9 @@ public class DocumentController {
                         driverId, request.docType(), request.docNumber(),
                         request.licenseCategories(), request.issuer(),
                         request.issueDate(), request.expiryDate(),
-                        request.fileUrl(), request.notes()
+                        request.fileUrl(), request.fileOriginalName(),
+                        request.fileMimeType(), request.fileSizeBytes(),
+                        request.notes()
                 );
         return documentUseCase.addDriverDocument(cmd).map(DriverDocumentResponse::from);
     }
@@ -173,7 +179,9 @@ public class DocumentController {
                 new ManageDocumentUseCase.UpdateDriverDocumentCommand(
                         docId, request.docNumber(), request.licenseCategories(),
                         request.issuer(), request.issueDate(), request.expiryDate(),
-                        request.fileUrl(), null, request.notes()
+                        request.fileUrl(), request.fileOriginalName(),
+                        request.fileMimeType(), request.fileSizeBytes(),
+                        null, request.notes()
                 );
         return documentUseCase.updateDriverDocument(cmd).map(DriverDocumentResponse::from);
     }

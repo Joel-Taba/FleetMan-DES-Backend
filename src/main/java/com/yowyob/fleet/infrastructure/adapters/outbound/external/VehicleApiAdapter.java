@@ -8,7 +8,6 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.Vehicle
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.dto.VehicleExternalResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -23,7 +22,6 @@ import java.util.UUID;
 
 @Slf4j
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "application.external.vehicle-mode", havingValue = "remote", matchIfMissing = true)
 public class VehicleApiAdapter implements ExternalVehiclePort {
 
     private final VehicleApiClient apiClient;
@@ -42,12 +40,22 @@ public class VehicleApiAdapter implements ExternalVehiclePort {
     }
 
     @Override
+    public Mono<Vehicle> createRemoteVehicle(VehicleRequest req, String token, String brandLabel, String modelLabel, String fuelLabel, String transLabel, String colorLabel, VehicleRemoteContext context) {
+        return createRemoteVehicle(req, token, brandLabel, modelLabel, fuelLabel, transLabel, colorLabel);
+    }
+
+    @Override
     public Mono<Vehicle> createRemoteVehicle(VehicleRequest req, String token, String brandLabel, String modelLabel, String fuelLabel, String transLabel, String colorLabel) {
         return apiClient.createSimplified(
             translateToRemote(req, brandLabel, modelLabel, fuelLabel, transLabel, colorLabel), 
             ensureBearer(token)
         ).map(this::mapToDomain);
     }
+   @Override
+    public Mono<Vehicle> updateRemoteVehicle(UUID vehicleId, VehicleRequest req, String token, String brandLabel, String modelLabel, String fuelLabel, String transLabel, String colorLabel, VehicleRemoteContext context) {
+        return updateRemoteVehicle(vehicleId, req, token, brandLabel, modelLabel, fuelLabel, transLabel, colorLabel);
+    }
+
    @Override
     public Mono<Vehicle> updateRemoteVehicle(UUID vehicleId, VehicleRequest req, String token, String brandLabel, String modelLabel, String fuelLabel, String transLabel, String colorLabel) {
         return apiClient.updateFull(
@@ -126,7 +134,7 @@ public class VehicleApiAdapter implements ExternalVehiclePort {
             ext.registrationNumber(), ext.vehicleSerialNumber(), ext.brand(), "Model",
             null, "Transmission", "Fuel", ext.tankCapacity(), ext.totalSeatNumber(),
             ext.averageFuelConsumptionPerKm(), null, "AVAILABLE", ext.vehicleSerialPhoto(), 
-            ext.vehicleSerialPhoto(), ext.registrationPhoto(), null, null, null, null, null
+            ext.vehicleSerialPhoto(), ext.registrationPhoto(), null, null, null, null, null, null
         );
     }
 

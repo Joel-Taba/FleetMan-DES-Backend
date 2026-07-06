@@ -13,19 +13,15 @@ import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authentication.AuthenticationWebFilter;
+import org.springframework.security.web.server.util.matcher.AndServerWebExchangeMatcher;
+import org.springframework.security.web.server.util.matcher.NegatedServerWebExchangeMatcher;
 import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatchers;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import reactor.core.publisher.Mono;
 
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.reactive.CorsConfigurationSource;  // Important : package .reactive
-import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import java.util.List;
-import java.util.stream.Collectors;
-import org.springframework.security.core.authority.SimpleGrantedAuthority; // Import manquant pour la compilation
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken; // Import manquant
 
 @Configuration
 @EnableWebFluxSecurity
@@ -44,8 +40,12 @@ public class SecurityConfig {
         jwtFilter.setServerAuthenticationConverter(authenticationConverter);
 
         jwtFilter.setRequiresAuthenticationMatcher(
-                ServerWebExchangeMatchers.pathMatchers("/api/v1/**")
-                        .and(ServerWebExchangeMatchers.pathMatchers("/api/v1/files/**").negate())
+                new AndServerWebExchangeMatcher(
+                        ServerWebExchangeMatchers.pathMatchers("/api/v1/**"),
+                        new NegatedServerWebExchangeMatcher(
+                                ServerWebExchangeMatchers.pathMatchers("/api/v1/files/**")
+                        )
+                )
         );
 
         return http

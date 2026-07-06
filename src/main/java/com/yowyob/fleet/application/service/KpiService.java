@@ -1,8 +1,16 @@
 package com.yowyob.fleet.application.service;
 
+import com.yowyob.fleet.domain.model.DriverScore;
 import com.yowyob.fleet.domain.model.KpiSnapshot;
 import com.yowyob.fleet.domain.ports.in.KpiUseCase;
-import com.yowyob.fleet.domain.ports.out.*;
+import com.yowyob.fleet.domain.ports.out.DriverPersistencePort;
+import com.yowyob.fleet.domain.ports.out.DriverScorePersistencePort;
+import com.yowyob.fleet.domain.ports.out.KpiPersistencePort;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FuelRechargeR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.IncidentR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.MaintenanceR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,32 +29,32 @@ import java.util.UUID;
 public class KpiService implements KpiUseCase {
 
     private final KpiPersistencePort kpiPort;
-    private final VehiclePersistencePort vehiclePort;
     private final DriverPersistencePort driverPort;
-    private final MaintenancePersistencePort maintenancePort;
-    private final IncidentPersistencePort incidentPort;
-    private final FuelRechargePersistencePort fuelPort;
+    private final DriverScorePersistencePort driverScorePort;
+    private final TripR2dbcRepository tripRepo;
+    private final VehicleLocalR2dbcRepository vehicleRepo;
+    private final FuelRechargeR2dbcRepository fuelRepo;
+    private final IncidentR2dbcRepository incidentRepo;
+    private final MaintenanceR2dbcRepository maintenanceRepo;
 
     // ── Lecture ───────────────────────────────────────────────────────────────
 
     @Override
-    public Mono<KpiSnapshot> getLatestFleetKpi(UUID fleetId,
-                                                KpiSnapshot.PeriodType periodType) {
+    public Mono<KpiSnapshot> getLatestFleetKpi(UUID fleetId, KpiSnapshot.PeriodType periodType) {
         return kpiPort.findLatest(fleetId, KpiSnapshot.EntityType.FLEET, periodType)
-                .switchIfEmpty(recalculateFleetKpi(fleetId, periodType,
-                        currentPeriodStart(periodType)));
+                .switchIfEmpty(recalculateFleetKpi(fleetId, periodType, currentPeriodStart(periodType)));
     }
 
     @Override
-    public Mono<KpiSnapshot> getLatestVehicleKpi(UUID vehicleId,
-                                                  KpiSnapshot.PeriodType periodType) {
-        return kpiPort.findLatest(vehicleId, KpiSnapshot.EntityType.VEHICLE, periodType);
+    public Mono<KpiSnapshot> getLatestVehicleKpi(UUID vehicleId, KpiSnapshot.PeriodType periodType) {
+        return kpiPort.findLatest(vehicleId, KpiSnapshot.EntityType.VEHICLE, periodType)
+                .switchIfEmpty(recalculateVehicleKpi(vehicleId, periodType, currentPeriodStart(periodType)));
     }
 
     @Override
-    public Mono<KpiSnapshot> getLatestDriverKpi(UUID driverId,
-                                                 KpiSnapshot.PeriodType periodType) {
-        return kpiPort.findLatest(driverId, KpiSnapshot.EntityType.DRIVER, periodType);
+    public Mono<KpiSnapshot> getLatestDriverKpi(UUID driverId, KpiSnapshot.PeriodType periodType) {
+        return kpiPort.findLatest(driverId, KpiSnapshot.EntityType.DRIVER, periodType)
+                .switchIfEmpty(recalculateDriverKpi(driverId, periodType, currentPeriodStart(periodType)));
     }
 
     @Override
@@ -54,8 +62,15 @@ public class KpiService implements KpiUseCase {
                                                   KpiSnapshot.PeriodType periodType,
                                                   LocalDate from,
                                                   LocalDate to) {
-        return kpiPort.findHistory(fleetId, KpiSnapshot.EntityType.FLEET,
-                periodType, from, to);
+        return kpiPort.findHistory(fleetId, KpiSnapshot.EntityType.FLEET, periodType, from, to);
+    }
+
+    @Override
+    public Flux<KpiSnapshot> getVehicleKpiHistory(UUID vehicleId,
+                                                    KpiSnapshot.PeriodType periodType,
+                                                    LocalDate from,
+                                                    LocalDate to) {
+        return kpiPort.findHistory(vehicleId, KpiSnapshot.EntityType.VEHICLE, periodType, from, to);
     }
 
     @Override
@@ -68,8 +83,8 @@ public class KpiService implements KpiUseCase {
 
     @Override
     public Flux<KpiSnapshot> getTopDriversByScore(UUID fleetId,
-                                                   KpiSnapshot.PeriodType periodType,
-                                                   int limit) {
+                                                     KpiSnapshot.PeriodType periodType,
+                                                     int limit) {
         return kpiPort.findTopByFleet(fleetId, KpiSnapshot.EntityType.DRIVER,
                 periodType, currentPeriodStart(periodType), limit);
     }
@@ -86,18 +101,14 @@ public class KpiService implements KpiUseCase {
 
         return Mono.zip(p1.defaultIfEmpty(emptySnapshot(fleetId, periodType, period1Start)),
                         p2.defaultIfEmpty(emptySnapshot(fleetId, periodType, period2Start)))
-                .map(tuple -> {
-                    KpiSnapshot s1 = tuple.getT1();
-                    KpiSnapshot s2 = tuple.getT2();
-                    return new KpiComparisonDto(
-                            s1, s2,
-                            BigDecimalDelta.of(s1.totalKm(), s2.totalKm()),
-                            BigDecimalDelta.of(s1.costPerKm(), s2.costPerKm()),
-                            BigDecimalDelta.of(s1.totalFuelCost(), s2.totalFuelCost()),
-                            BigDecimalDelta.of(s1.incidentRate(), s2.incidentRate()),
-                            BigDecimalDelta.of(s1.availabilityRate(), s2.availabilityRate())
-                    );
-                });
+                .map(tuple -> new KpiComparisonDto(
+                        tuple.getT1(), tuple.getT2(),
+                        BigDecimalDelta.of(tuple.getT1().totalKm(), tuple.getT2().totalKm()),
+                        BigDecimalDelta.of(tuple.getT1().costPerKm(), tuple.getT2().costPerKm()),
+                        BigDecimalDelta.of(tuple.getT1().totalFuelCost(), tuple.getT2().totalFuelCost()),
+                        BigDecimalDelta.of(tuple.getT1().incidentRate(), tuple.getT2().incidentRate()),
+                        BigDecimalDelta.of(tuple.getT1().availabilityRate(), tuple.getT2().availabilityRate())
+                ));
     }
 
     // ── Calcul ────────────────────────────────────────────────────────────────
@@ -107,67 +118,155 @@ public class KpiService implements KpiUseCase {
                                                   KpiSnapshot.PeriodType periodType,
                                                   LocalDate periodStart) {
         LocalDate periodEnd = periodEnd(periodType, periodStart);
-        log.info("Calcul KPI flotte {} — {} [{} → {}]",
-                fleetId, periodType, periodStart, periodEnd);
+        log.info("Calcul KPI flotte {} — {} [{} → {}]", fleetId, periodType, periodStart, periodEnd);
 
-        // Agrégation réactive de toutes les sources de données
-        Mono<BigDecimal> totalKmMono = vehiclePort.getVehiclesByManager(fleetId)
-                .flatMap(v -> fuelPort.getTotalQuantityByVehicleId(v.id()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        LocalDateTime startDt = periodStart.atStartOfDay();
+        LocalDateTime endDt = periodEnd.plusDays(1).atStartOfDay();
 
-        Mono<BigDecimal> fuelCostMono = vehiclePort.getVehiclesByManager(fleetId)
-                .flatMap(v -> fuelPort.getTotalCostByVehicleId(v.id()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        Mono<BigDecimal> kmMono = tripRepo.sumDistanceByFleetAndPeriod(fleetId, periodStart, periodEnd);
+        Mono<Long> tripsMono = tripRepo.countTripsByFleetAndPeriod(fleetId, periodStart, periodEnd);
+        Mono<BigDecimal> fuelCostMono = fuelRepo.sumCostByFleetAndPeriod(fleetId, startDt, endDt);
+        Mono<BigDecimal> fuelLitersMono = fuelRepo.sumQuantityByFleetAndPeriod(fleetId, startDt, endDt);
+        Mono<BigDecimal> maintCostMono = maintenanceRepo.sumCostByFleetAndPeriod(fleetId, startDt, endDt);
+        Mono<BigDecimal> incCostMono = incidentRepo.sumCostByFleetAndPeriod(fleetId, startDt, endDt);
+        Mono<Long> incCountMono = incidentRepo.countByFleetAndPeriod(fleetId, startDt, endDt);
+        Mono<BigDecimal> availabilityMono = computeFleetAvailability(fleetId);
 
-        Mono<BigDecimal> fuelLitersMono = vehiclePort.getVehiclesByManager(fleetId)
-                .flatMap(v -> fuelPort.getTotalQuantityByVehicleId(v.id()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return Mono.zip(kmMono, tripsMono, fuelCostMono, fuelLitersMono,
+                        maintCostMono, incCostMono, incCountMono, availabilityMono)
+                .flatMap(t -> saveSnapshot(
+                        fleetId, fleetId, KpiSnapshot.EntityType.FLEET,
+                        periodType, periodStart, periodEnd,
+                        t.getT1(), t.getT2().intValue(), null, t.getT8(),
+                        t.getT3(), t.getT4(), t.getT5(), t.getT6(),
+                        t.getT7().intValue(), null, null
+                ))
+                .doOnSuccess(s -> log.info("KPI flotte {} calculé", fleetId));
+    }
 
-        Mono<BigDecimal> maintenanceCostMono = vehiclePort.getVehiclesByManager(fleetId)
-                .flatMap(v -> maintenancePort.findByVehicleId(v.id())
-                        .map(m -> m.getCost() != null ? m.getCost() : BigDecimal.ZERO)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    @Override
+    public Mono<KpiSnapshot> recalculateVehicleKpi(UUID vehicleId,
+                                                    KpiSnapshot.PeriodType periodType,
+                                                    LocalDate periodStart) {
+        return vehicleRepo.findById(vehicleId)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("Véhicule introuvable: " + vehicleId)))
+                .flatMap(vehicle -> {
+                    UUID fleetId = vehicle.getFleetId();
+                    LocalDate periodEnd = periodEnd(periodType, periodStart);
+                    LocalDateTime startDt = periodStart.atStartOfDay();
+                    LocalDateTime endDt = periodEnd.plusDays(1).atStartOfDay();
 
-        Mono<BigDecimal> incidentCostMono = vehiclePort.getVehiclesByManager(fleetId)
-                .flatMap(v -> incidentPort.getTotalCostByVehicleId(v.id()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    Mono<BigDecimal> kmMono = tripRepo.sumDistanceByVehicleAndPeriod(vehicleId, periodStart, periodEnd);
+                    Mono<Long> tripsMono = tripRepo.countTripsByVehicleAndPeriod(vehicleId, periodStart, periodEnd);
+                    Mono<BigDecimal> fuelCostMono = fuelRepo.sumCostByVehicleAndPeriod(vehicleId, startDt, endDt);
+                    Mono<BigDecimal> fuelLitersMono = fuelRepo.sumQuantityByVehicleAndPeriod(vehicleId, startDt, endDt);
+                    Mono<BigDecimal> maintCostMono = maintenanceRepo.sumCostByVehicleAndPeriod(vehicleId, startDt, endDt);
+                    Mono<BigDecimal> incCostMono = incidentRepo.sumCostByVehicleAndPeriod(vehicleId, startDt, endDt);
+                    Mono<Long> incCountMono = incidentRepo.countByVehicleAndPeriod(vehicleId, startDt, endDt);
 
-        Mono<Long> incidentCountMono = vehiclePort.getVehiclesByManager(fleetId)
-                .flatMap(v -> incidentPort.countByVehicleId(v.id()))
-                .reduce(0L, Long::sum);
+                    return Mono.zip(kmMono, tripsMono, fuelCostMono, fuelLitersMono,
+                                    maintCostMono, incCostMono, incCountMono)
+                            .flatMap(t -> saveSnapshot(
+                                    fleetId, vehicleId, KpiSnapshot.EntityType.VEHICLE,
+                                    periodType, periodStart, periodEnd,
+                                    t.getT1(), t.getT2().intValue(), null, null,
+                                    t.getT3(), t.getT4(), t.getT5(), t.getT6(),
+                                    t.getT7().intValue(), null, null
+                            ));
+                });
+    }
 
-        return Mono.zip(totalKmMono, fuelCostMono, fuelLitersMono,
-                        maintenanceCostMono, incidentCostMono, incidentCountMono)
-                .flatMap(t -> {
-                    BigDecimal km          = t.getT1();
-                    BigDecimal fuelCost    = t.getT2();
-                    BigDecimal fuelLiters  = t.getT3();
-                    BigDecimal maintCost   = t.getT4();
-                    BigDecimal incCost     = t.getT5();
-                    long       incCount    = t.getT6();
+    @Override
+    public Mono<KpiSnapshot> recalculateDriverKpi(UUID driverId,
+                                                   KpiSnapshot.PeriodType periodType,
+                                                   LocalDate periodStart) {
+        return driverPort.findById(driverId)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("Conducteur introuvable: " + driverId)))
+                .flatMap(driver -> {
+                    UUID fleetId = driver.fleetId();
+                    LocalDate periodEnd = periodEnd(periodType, periodStart);
+                    LocalDateTime startDt = periodStart.atStartOfDay();
+                    LocalDateTime endDt = periodEnd.plusDays(1).atStartOfDay();
 
-                    BigDecimal totalCost = fuelCost.add(maintCost).add(incCost);
+                    Mono<BigDecimal> kmMono = tripRepo.sumDistanceByDriverAndPeriod(driverId, periodStart, periodEnd);
+                    Mono<Long> tripsMono = tripRepo.countTripsByDriverAndPeriod(driverId, periodStart, periodEnd);
+                    Mono<BigDecimal> incCostMono = incidentRepo.sumCostByDriverAndPeriod(driverId, startDt, endDt);
+                    Mono<Long> incCountMono = incidentRepo.countByDriverAndPeriod(driverId, startDt, endDt);
+                    Mono<BigDecimal> scoreMono = resolveDriverScore(driverId, periodType, periodStart);
 
-                    KpiSnapshot snapshot = new KpiSnapshot(
-                            null, fleetId,
-                            KpiSnapshot.EntityType.FLEET, fleetId,
-                            periodType, periodStart, periodEnd,
-                            km, null, null, null,
-                            fuelCost, fuelLiters, maintCost, incCost,
-                            KpiSnapshot.computeCostPerKm(totalCost, km),
-                            KpiSnapshot.computeFuelPer100Km(fuelLiters, km),
-                            (int) incCount,
-                            KpiSnapshot.computeIncidentRate((int) incCount, km),
-                            null, null,
-                            LocalDateTime.now()
-                    );
-                    return kpiPort.save(snapshot);
-                })
-                .doOnSuccess(s -> log.info("KPI flotte {} calculé et sauvegardé", fleetId));
+                    return Mono.zip(kmMono, tripsMono, incCostMono, incCountMono, scoreMono)
+                            .flatMap(t -> saveSnapshot(
+                                    fleetId, driverId, KpiSnapshot.EntityType.DRIVER,
+                                    periodType, periodStart, periodEnd,
+                                    t.getT1(), t.getT2().intValue(), null, null,
+                                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, t.getT3(),
+                                    t.getT4().intValue(), t.getT5(), null
+                            ));
+                });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private Mono<KpiSnapshot> saveSnapshot(UUID fleetId,
+                                            UUID entityId,
+                                            KpiSnapshot.EntityType entityType,
+                                            KpiSnapshot.PeriodType periodType,
+                                            LocalDate periodStart,
+                                            LocalDate periodEnd,
+                                            BigDecimal km,
+                                            int tripCount,
+                                            BigDecimal drivingHours,
+                                            BigDecimal availabilityRate,
+                                            BigDecimal fuelCost,
+                                            BigDecimal fuelLiters,
+                                            BigDecimal maintCost,
+                                            BigDecimal incCost,
+                                            int incCount,
+                                            BigDecimal avgDriverScore,
+                                            BigDecimal docComplianceRate) {
+        BigDecimal totalCost = safe(fuelCost).add(safe(maintCost)).add(safe(incCost));
+        KpiSnapshot snapshot = new KpiSnapshot(
+                null, fleetId, entityType, entityId,
+                periodType, periodStart, periodEnd,
+                km, tripCount, drivingHours, availabilityRate,
+                fuelCost, fuelLiters, maintCost, incCost,
+                KpiSnapshot.computeCostPerKm(totalCost, km),
+                KpiSnapshot.computeFuelPer100Km(fuelLiters, km),
+                incCount,
+                KpiSnapshot.computeIncidentRate(incCount, km),
+                avgDriverScore, docComplianceRate,
+                LocalDateTime.now()
+        );
+        return kpiPort.save(snapshot);
+    }
+
+    private Mono<BigDecimal> computeFleetAvailability(UUID fleetId) {
+        Mono<Long> total = vehicleRepo.countByFleetId(fleetId);
+        Mono<Long> available = vehicleRepo.countByFleetIdAndStatus(fleetId, "AVAILABLE");
+        return Mono.zip(total, available).map(t -> {
+            if (t.getT1() == 0) return BigDecimal.valueOf(100);
+            return BigDecimal.valueOf(t.getT2())
+                    .multiply(BigDecimal.valueOf(100))
+                    .divide(BigDecimal.valueOf(t.getT1()), 2, RoundingMode.HALF_UP);
+        });
+    }
+
+    private Mono<BigDecimal> resolveDriverScore(UUID driverId,
+                                                 KpiSnapshot.PeriodType periodType,
+                                                 LocalDate periodStart) {
+        DriverScore.PeriodType scorePeriod = switch (periodType) {
+            case WEEKLY -> DriverScore.PeriodType.WEEKLY;
+            case MONTHLY, YEARLY -> DriverScore.PeriodType.MONTHLY;
+            case DAILY -> DriverScore.PeriodType.WEEKLY;
+        };
+        return driverScorePort.findByDriverAndPeriod(driverId, scorePeriod, periodStart)
+                .map(DriverScore::getFinalScore)
+                .defaultIfEmpty(BigDecimal.ZERO);
+    }
+
+    private BigDecimal safe(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
+    }
 
     private LocalDate currentPeriodStart(KpiSnapshot.PeriodType type) {
         LocalDate today = LocalDate.now();
@@ -175,6 +274,7 @@ public class KpiService implements KpiUseCase {
             case DAILY   -> today;
             case WEEKLY  -> today.with(java.time.DayOfWeek.MONDAY);
             case MONTHLY -> today.withDayOfMonth(1);
+            case YEARLY  -> today.withDayOfYear(1);
         };
     }
 
@@ -183,6 +283,7 @@ public class KpiService implements KpiUseCase {
             case DAILY   -> start;
             case WEEKLY  -> start.plusDays(6);
             case MONTHLY -> start.withDayOfMonth(start.lengthOfMonth());
+            case YEARLY  -> start.withDayOfYear(start.lengthOfYear());
         };
     }
 

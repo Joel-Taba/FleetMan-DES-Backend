@@ -291,6 +291,31 @@ public class SuperAdminController {
         );
     }
 
+    @GetMapping("/subscriptions/active")
+    @Operation(summary = "Abonnements actifs et expirés")
+    public Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ActiveSubscriptionDto> listActiveSubscriptions() {
+        return planUseCase.listActiveSubscriptions();
+    }
+
+    @GetMapping("/plans/{id}/features")
+    @Operation(summary = "Fonctionnalités d'un plan")
+    public Flux<ManageSubscriptionPlanUseCase.PlanFeatureCommand> getPlanFeatures(@PathVariable UUID id) {
+        return planUseCase.getPlanFeatures(id);
+    }
+
+    public record PlanFeatureUpdateRequest(
+        java.util.List<ManageSubscriptionPlanUseCase.PlanFeatureCommand> features
+    ) {}
+
+    @PutMapping("/plans/{id}/features")
+    @Operation(summary = "Remplacer les fonctionnalités d'un plan")
+    public Mono<Void> updatePlanFeatures(
+        @PathVariable UUID id,
+        @RequestBody PlanFeatureUpdateRequest req
+    ) {
+        return planUseCase.replacePlanFeatures(id, req.features());
+    }
+
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
     }

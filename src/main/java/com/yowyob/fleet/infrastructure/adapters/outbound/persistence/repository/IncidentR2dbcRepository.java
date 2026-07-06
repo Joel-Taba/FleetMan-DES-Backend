@@ -91,4 +91,48 @@ public interface IncidentR2dbcRepository extends ReactiveCrudRepository<Incident
      */
     @Query("SELECT COALESCE(SUM(cost), 0) FROM fleet.incidents WHERE driver_id = :driverId")
     Mono<BigDecimal> getTotalCostByDriverId(UUID driverId);
+
+    @Query("""
+            SELECT COALESCE(SUM(i.cost), 0) FROM fleet.incidents i
+            JOIN fleet.vehicles v ON i.vehicle_id = v.id
+            WHERE v.fleet_id = :fleetId
+              AND i.incident_date_time >= :start AND i.incident_date_time < :end
+            """)
+    Mono<BigDecimal> sumCostByFleetAndPeriod(UUID fleetId, LocalDateTime start, LocalDateTime end);
+
+    @Query("""
+            SELECT COUNT(*) FROM fleet.incidents i
+            JOIN fleet.vehicles v ON i.vehicle_id = v.id
+            WHERE v.fleet_id = :fleetId
+              AND i.incident_date_time >= :start AND i.incident_date_time < :end
+            """)
+    Mono<Long> countByFleetAndPeriod(UUID fleetId, LocalDateTime start, LocalDateTime end);
+
+    @Query("""
+            SELECT COALESCE(SUM(i.cost), 0) FROM fleet.incidents i
+            WHERE i.vehicle_id = :vehicleId
+              AND i.incident_date_time >= :start AND i.incident_date_time < :end
+            """)
+    Mono<BigDecimal> sumCostByVehicleAndPeriod(UUID vehicleId, LocalDateTime start, LocalDateTime end);
+
+    @Query("""
+            SELECT COUNT(*) FROM fleet.incidents i
+            WHERE i.vehicle_id = :vehicleId
+              AND i.incident_date_time >= :start AND i.incident_date_time < :end
+            """)
+    Mono<Long> countByVehicleAndPeriod(UUID vehicleId, LocalDateTime start, LocalDateTime end);
+
+    @Query("""
+            SELECT COALESCE(SUM(i.cost), 0) FROM fleet.incidents i
+            WHERE i.driver_id = :driverId
+              AND i.incident_date_time >= :start AND i.incident_date_time < :end
+            """)
+    Mono<BigDecimal> sumCostByDriverAndPeriod(UUID driverId, LocalDateTime start, LocalDateTime end);
+
+    @Query("""
+            SELECT COUNT(*) FROM fleet.incidents i
+            WHERE i.driver_id = :driverId
+              AND i.incident_date_time >= :start AND i.incident_date_time < :end
+            """)
+    Mono<Long> countByDriverAndPeriod(UUID driverId, LocalDateTime start, LocalDateTime end);
 }

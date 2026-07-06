@@ -54,10 +54,13 @@ public class TripController {
         @NotNull LocalDate startDate,
         @NotNull LocalTime startTime,
         String departureLocation,
+        BigDecimal departureLat,
+        BigDecimal departureLng,
         BigDecimal departureKmIndex,
         BigDecimal departureFuelIndex,
         String missionObject,
         BigDecimal missionCost,
+        String missionCostCurrency,
         String rateType,
         LocalDateTime scheduledReturnDatetime,
         List<TripDetailInputDto> details
@@ -70,12 +73,39 @@ public class TripController {
         @NotNull LocalDate returnDate,
         @NotNull LocalTime returnTime,
         String returnLocation,
+        BigDecimal returnLat,
+        BigDecimal returnLng,
         BigDecimal returnKmIndex,
         BigDecimal returnFuelIndex,
         List<ReturnDetailInputDto> detailUpdates
     ) {}
 
     public record UpdateDriverRequest(@NotNull UUID newDriverId) {}
+
+    public record UpdateVehicleRequest(@NotNull UUID newVehicleId) {}
+
+    public record UpdateTripRequest(
+        UUID vehicleId,
+        UUID driverId,
+        LocalDate startDate,
+        LocalTime startTime,
+        String departureLocation,
+        BigDecimal departureLat,
+        BigDecimal departureLng,
+        BigDecimal departureKmIndex,
+        BigDecimal departureFuelIndex,
+        String missionObject,
+        BigDecimal missionCost,
+        String missionCostCurrency
+    ) {}
+
+    public record MissionSubmissionRequest(
+        @NotBlank String itemType,
+        String description,
+        Integer quantity,
+        BigDecimal weight,
+        String notes
+    ) {}
 
     public record CancelTripRequest(String reason) {}
 
@@ -116,10 +146,13 @@ public class TripController {
                 req.startDate(),
                 req.startTime(),
                 req.departureLocation(),
+                req.departureLat(),
+                req.departureLng(),
                 req.departureKmIndex(),
                 req.departureFuelIndex(),
                 req.missionObject(),
                 req.missionCost(),
+                req.missionCostCurrency() != null ? req.missionCostCurrency() : "XAF",
                 req.rateType(),
                 req.scheduledReturnDatetime(),
                 details
@@ -154,6 +187,8 @@ public class TripController {
                 req.returnDate(),
                 req.returnTime(),
                 req.returnLocation(),
+                req.returnLat(),
+                req.returnLng(),
                 req.returnKmIndex(),
                 req.returnFuelIndex(),
                 detailUpdates
@@ -167,6 +202,59 @@ public class TripController {
     @Operation(summary = "Retrouver un trajet par son code (TRJ-2026-XXXX)")
     public Mono<Trip> getByCode(@PathVariable String code) {
         return tripUseCase.getTripByCode(code);
+    }
+
+    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+    @GetMapping("/open")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Trajets non clôturés (départ enregistré, retour en attente)")
+    public Flux<Trip> listOpen(Authentication auth) {
+        return tripUseCase.getOpenTrips(getUserId(auth));
+    }
+
+    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+    @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Modifier un trajet non clôturé")
+    public Mono<Trip> updateTrip(
+        @PathVariable UUID id,
+        @RequestBody UpdateTripRequest req,
+        Authentication auth
+    ) {
+        return tripUseCase.updateTrip(
+            id,
+            new ManageTripUseCase.UpdateTripCommand(
+                getUserId(auth),
+                req.vehicleId(),
+                req.driverId(),
+                req.startDate(),
+                req.startTime(),
+                req.departureLocation(),
+                req.departureLat(),
+                req.departureLng(),
+                req.departureKmIndex(),
+                req.departureFuelIndex(),
+                req.missionObject(),
+                req.missionCost(),
+                req.missionCostCurrency()
+            )
+        );
+    }
+
+    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+    @PatchMapping("/{id}/vehicle")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Changer le véhicule d'un trajet non clôturé")
+    public Mono<Trip> updateVehicle(
+        @PathVariable UUID id,
+        @RequestBody UpdateVehicleRequest req,
+        Authentication auth
+    ) {
+        return tripUseCase.updateTripVehicle(
+            id,
+            req.newVehicleId(),
+            getUserId(auth)
+        );
     }
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
@@ -220,6 +308,57 @@ public class TripController {
     }
 
     // ── TÉLÉMÉTRIE CHAUFFEUR (conservée) ─────────────────────────────────────
+
+    @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
+    @PostMapping("/{id}/submissions")
+    @PreAuthorize("hasRole('FLEET_DRIVER')")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Soumettre un complément d'information mission (conducteur)")
+    public Mono<UUID> submitComplement(
+        @PathVariable UUID id,
+        @Valid @RequestBody MissionSubmissionRequest req,
+        Authentication auth
+    ) {
+        return tripUseCase.submitMissionComplement(
+            id,
+            getUserId(auth),
+            new ManageTripUseCase.MissionSubmissionInput(
+                req.itemType(),
+                req.description(),
+                req.quantity(),
+                req.weight(),
+                req.notes()
+            )
+        );
+    }
+
+    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+    @PatchMapping("/submissions/{submissionId}/approve")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Valider un complément conducteur")
+    public Mono<Trip> approveSubmission(
+        @PathVariable UUID submissionId,
+        Authentication auth
+    ) {
+        return tripUseCase.approveMissionSubmission(
+            submissionId,
+            getUserId(auth)
+        );
+    }
+
+    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+    @PatchMapping("/submissions/{submissionId}/reject")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Rejeter un complément conducteur")
+    public Mono<Void> rejectSubmission(
+        @PathVariable UUID submissionId,
+        Authentication auth
+    ) {
+        return tripUseCase.rejectMissionSubmission(
+            submissionId,
+            getUserId(auth)
+        );
+    }
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
     @PostMapping("/{id}/telemetry")

@@ -40,7 +40,8 @@ public record Vehicle(
     VehicleParameters.Financial financialParameters,
     VehicleParameters.Maintenance maintenanceParameters,
     VehicleParameters.Operational operationalParameters,
-    String geofenceRemoteId
+    String geofenceRemoteId,
+    UUID kernelResourceId
 ) {
     // Helper pour ajouter des images de galerie
     public Vehicle withGallery(List<String> images) {
@@ -48,14 +49,20 @@ public record Vehicle(
             vehicleSerialNumber, brand, model, manufacturingYear, transmissionType, fuelType, 
             tankCapacity, totalSeatNumber, averageFuelConsumption, color, status, photoUrl, 
             serialNumberPhotoUrl, registrationPhotoUrl, images, financialParameters, 
-            maintenanceParameters, operationalParameters, geofenceRemoteId);
+            maintenanceParameters, operationalParameters, geofenceRemoteId, kernelResourceId);
     }
-    // Helper pour mettre à jour l'ID distant (Immutabilité)
     public Vehicle withGeofenceRemoteId(String newRemoteId) {
         return new Vehicle(id, fleetId, managerId, currentDriverId, vehicleTypeId, licensePlate, 
             vehicleSerialNumber, brand, model, manufacturingYear, transmissionType, fuelType, 
             tankCapacity, totalSeatNumber, averageFuelConsumption, color, status, photoUrl, 
             serialNumberPhotoUrl, registrationPhotoUrl, illustrationImages, financialParameters, 
-            maintenanceParameters, operationalParameters, newRemoteId);
+            maintenanceParameters, operationalParameters, newRemoteId, kernelResourceId);
+    }
+    public Vehicle withKernelResourceId(UUID kernelResourceId) {
+        return new Vehicle(id, fleetId, managerId, currentDriverId, vehicleTypeId, licensePlate,
+            vehicleSerialNumber, brand, model, manufacturingYear, transmissionType, fuelType,
+            tankCapacity, totalSeatNumber, averageFuelConsumption, color, status, photoUrl,
+            serialNumberPhotoUrl, registrationPhotoUrl, illustrationImages, financialParameters,
+            maintenanceParameters, operationalParameters, geofenceRemoteId, kernelResourceId);
     }
 }

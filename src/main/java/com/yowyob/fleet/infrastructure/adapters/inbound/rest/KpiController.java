@@ -128,6 +128,20 @@ public class KpiController {
                 KpiSnapshot.PeriodType.valueOf(period.toUpperCase()));
     }
 
+    @GetMapping("/vehicle/{vehicleId}/history")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Historique des KPIs d'un véhicule")
+    public Mono<List<KpiSnapshot>> getVehicleKpiHistory(
+            @PathVariable UUID vehicleId,
+            @RequestParam(defaultValue = "MONTHLY") String period,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+
+        return kpiUseCase.getVehicleKpiHistory(vehicleId,
+                KpiSnapshot.PeriodType.valueOf(period.toUpperCase()), from, to)
+                .collectList();
+    }
+
     @GetMapping("/driver/{driverId}")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "KPIs d'un conducteur")
@@ -179,6 +193,43 @@ public class KpiController {
         ).map(csv -> ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"kpis-" + fleetId + "-" + period + ".csv\"")
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .body(csv));
+    }
+
+    @GetMapping(value = "/vehicle/{vehicleId}/export", produces = "text/csv")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Exporter les KPIs véhicule en CSV")
+    public Mono<ResponseEntity<String>> exportVehicleCsv(
+            @PathVariable UUID vehicleId,
+            @RequestParam(defaultValue = "MONTHLY") String period,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+
+        return CsvExportUtil.export(
+                kpiUseCase.getVehicleKpiHistory(vehicleId,
+                        KpiSnapshot.PeriodType.valueOf(period.toUpperCase()), from, to),
+                List.of("Période", "Début", "Fin", "Km totaux", "Trajets",
+                        "Coût/km", "Carburant (L)", "Coût carburant",
+                        "Coût maintenance", "Coût incidents",
+                        "Nb incidents", "Taux incidents/1000km"),
+                s -> List.of(
+                        s.periodType().name(),
+                        s.periodStart() != null ? s.periodStart().toString() : "",
+                        s.periodEnd()   != null ? s.periodEnd().toString()   : "",
+                        s.totalKm()     != null ? s.totalKm().toPlainString()     : "0",
+                        s.totalTrips()  != null ? s.totalTrips().toString()       : "0",
+                        s.costPerKm()   != null ? s.costPerKm().toPlainString()   : "",
+                        s.totalFuelLiters() != null ? s.totalFuelLiters().toPlainString() : "0",
+                        s.totalFuelCost()   != null ? s.totalFuelCost().toPlainString()   : "0",
+                        s.totalMaintenanceCost() != null ? s.totalMaintenanceCost().toPlainString() : "0",
+                        s.totalIncidentCost()    != null ? s.totalIncidentCost().toPlainString()    : "0",
+                        s.totalIncidents() != null ? s.totalIncidents().toString() : "0",
+                        s.incidentRate()   != null ? s.incidentRate().toPlainString()   : ""
+                )
+        ).map(csv -> ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"kpis-vehicle-" + vehicleId + "-" + period + ".csv\"")
                 .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
                 .body(csv));
     }

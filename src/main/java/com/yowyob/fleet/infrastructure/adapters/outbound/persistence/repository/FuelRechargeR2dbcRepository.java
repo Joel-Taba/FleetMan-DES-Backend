@@ -49,4 +49,34 @@ public interface FuelRechargeR2dbcRepository extends ReactiveCrudRepository<Fuel
      */
     @Query("SELECT COALESCE(SUM(price), 0) FROM fleet.fuel_recharges WHERE vehicle_id = :vehicleId")
     Mono<BigDecimal> getTotalCostByVehicleId(UUID vehicleId);
+
+    @Query("""
+            SELECT COALESCE(SUM(fr.quantity), 0) FROM fleet.fuel_recharges fr
+            JOIN fleet.vehicles v ON fr.vehicle_id = v.id
+            WHERE v.fleet_id = :fleetId
+              AND fr.recharge_date_time >= :start AND fr.recharge_date_time < :end
+            """)
+    Mono<BigDecimal> sumQuantityByFleetAndPeriod(UUID fleetId, LocalDateTime start, LocalDateTime end);
+
+    @Query("""
+            SELECT COALESCE(SUM(fr.price), 0) FROM fleet.fuel_recharges fr
+            JOIN fleet.vehicles v ON fr.vehicle_id = v.id
+            WHERE v.fleet_id = :fleetId
+              AND fr.recharge_date_time >= :start AND fr.recharge_date_time < :end
+            """)
+    Mono<BigDecimal> sumCostByFleetAndPeriod(UUID fleetId, LocalDateTime start, LocalDateTime end);
+
+    @Query("""
+            SELECT COALESCE(SUM(fr.quantity), 0) FROM fleet.fuel_recharges fr
+            WHERE fr.vehicle_id = :vehicleId
+              AND fr.recharge_date_time >= :start AND fr.recharge_date_time < :end
+            """)
+    Mono<BigDecimal> sumQuantityByVehicleAndPeriod(UUID vehicleId, LocalDateTime start, LocalDateTime end);
+
+    @Query("""
+            SELECT COALESCE(SUM(fr.price), 0) FROM fleet.fuel_recharges fr
+            WHERE fr.vehicle_id = :vehicleId
+              AND fr.recharge_date_time >= :start AND fr.recharge_date_time < :end
+            """)
+    Mono<BigDecimal> sumCostByVehicleAndPeriod(UUID vehicleId, LocalDateTime start, LocalDateTime end);
 }

@@ -2,7 +2,9 @@ package com.yowyob.fleet.infrastructure.adapters.inbound.messaging;
 
 import com.yowyob.fleet.domain.model.KpiSnapshot;
 import com.yowyob.fleet.domain.ports.in.KpiUseCase;
+import com.yowyob.fleet.domain.ports.out.DriverPersistencePort;
 import com.yowyob.fleet.domain.ports.out.FleetRepositoryPort;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,13 +15,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 
 /**
- * Job planifié : Calcul périodique des KPIs.
- *
- * - Quotidien  : chaque nuit à 3h00
- * - Hebdomadaire : chaque lundi à 4h00
- * - Mensuel    : le 1er de chaque mois à 5h00
- *
- * Pour chaque flotte active, calcule et persiste un KpiSnapshot.
+ * Job planifié : Calcul périodique des KPIs (flotte, véhicules, conducteurs).
  */
 @Component
 @RequiredArgsConstructor
@@ -29,39 +25,51 @@ public class KpiCalculationJob {
 
     private final KpiUseCase kpiUseCase;
     private final FleetRepositoryPort fleetPort;
+    private final VehicleLocalR2dbcRepository vehicleRepo;
+    private final DriverPersistencePort driverPort;
 
-    /** Calcul quotidien — chaque nuit à 3h00 */
     @Scheduled(cron = "0 0 3 * * *")
     public void calculateDailyKpis() {
         log.info("=== Démarrage calcul KPIs quotidiens ===");
-        LocalDate today = LocalDate.now();
-        runForAllFleets(KpiSnapshot.PeriodType.DAILY, today);
+        runForAllFleets(KpiSnapshot.PeriodType.DAILY, LocalDate.now());
     }
 
-    /** Calcul hebdomadaire — chaque lundi à 4h00 */
     @Scheduled(cron = "0 0 4 * * MON")
     public void calculateWeeklyKpis() {
         log.info("=== Démarrage calcul KPIs hebdomadaires ===");
-        LocalDate monday = LocalDate.now().with(DayOfWeek.MONDAY);
-        runForAllFleets(KpiSnapshot.PeriodType.WEEKLY, monday);
+        runForAllFleets(KpiSnapshot.PeriodType.WEEKLY, LocalDate.now().with(DayOfWeek.MONDAY));
     }
 
-    /** Calcul mensuel — le 1er de chaque mois à 5h00 */
     @Scheduled(cron = "0 0 5 1 * *")
     public void calculateMonthlyKpis() {
         log.info("=== Démarrage calcul KPIs mensuels ===");
-        LocalDate firstOfMonth = LocalDate.now().withDayOfMonth(1);
-        runForAllFleets(KpiSnapshot.PeriodType.MONTHLY, firstOfMonth);
+        runForAllFleets(KpiSnapshot.PeriodType.MONTHLY, LocalDate.now().withDayOfMonth(1));
+    }
+
+    @Scheduled(cron = "0 0 6 1 1 *")
+    public void calculateYearlyKpis() {
+        log.info("=== Démarrage calcul KPIs annuels ===");
+        runForAllFleets(KpiSnapshot.PeriodType.YEARLY, LocalDate.now().withDayOfYear(1));
     }
 
     private void runForAllFleets(KpiSnapshot.PeriodType periodType, LocalDate periodStart) {
         fleetPort.findAll()
-                .flatMap(fleet -> kpiUseCase
-                        .recalculateFleetKpi(fleet.id(), periodType, periodStart)
-                        .doOnSuccess(s -> log.debug("KPI {} calculé pour flotte {}",
-                                periodType, fleet.id()))
-                        .doOnError(e -> log.error("Erreur KPI flotte {}: {}",
-                                fleet.id(), e.getMessage()))
+                .flatMap(fleet -> kpiUseCase.recalculateFleetKpi(fleet.id(), periodType, periodStart)
+                        .thenMany(vehicleRepo.findByFleetId(fleet.id())
+                                .flatMap(vehicle -> kpiUseCase.recalculateVehicleKpi(
+                                        vehicle.getId(), periodType, periodStart)
+                                        .onErrorResume(e -> {
+                                            log.warn("KPI véhicule {} ignoré: {}", vehicle.getId(), e.getMessage());
+                                            return reactor.core.publisher.Mono.empty();
+                                        })))
+                        .thenMany(driverPort.findAllByFleetId(fleet.id())
+                                .flatMap(driver -> kpiUseCase.recalculateDriverKpi(
+                                        driver.userId(), periodType, periodStart)
+                                        .onErrorResume(e -> {
+                                            log.warn("KPI conducteur {} ignoré: {}", driver.userId(), e.getMessage());
+                                            return reactor.core.publisher.Mono.empty();
+                                        })))
+                        .doOnError(e -> log.error("Erreur KPI flotte {}: {}", fleet.id(), e.getMessage()))
                         .onErrorResume(e -> reactor.core.publisher.Mono.empty())
                 )
                 .doOnComplete(() -> log.info("=== Calcul KPIs {} terminé ===", periodType))

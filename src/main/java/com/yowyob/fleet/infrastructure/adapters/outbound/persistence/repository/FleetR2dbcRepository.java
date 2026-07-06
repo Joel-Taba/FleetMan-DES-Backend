@@ -12,4 +12,5 @@ public interface FleetR2dbcRepository extends ReactiveCrudRepository<FleetEntity
     Flux<FleetEntity> findAllByManagerId(UUID managerId);
     Mono<Boolean> existsByIdAndManagerId(UUID id, UUID managerId);
     Mono<Long> countByManagerId(UUID managerId);
+    Mono<FleetEntity> findByKernelOrganizationId(UUID kernelOrganizationId);
 }

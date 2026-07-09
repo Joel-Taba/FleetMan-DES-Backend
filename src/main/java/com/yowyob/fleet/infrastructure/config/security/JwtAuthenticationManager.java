@@ -12,7 +12,8 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -29,9 +30,16 @@ public class JwtAuthenticationManager implements ReactiveAuthenticationManager {
         return authPort.getUserProfile(token)
                 .flatMap(this::resolveAndRebind)
                 .map(userDetail -> {
-                    var authorities = userDetail.roles().stream()
+                    List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+                    userDetail.roles().stream()
                             .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
-                            .collect(Collectors.toList());
+                            .forEach(authorities::add);
+                    if (userDetail.permissions() != null) {
+                        userDetail.permissions().stream()
+                                .filter(p -> p != null && !p.isBlank())
+                                .map(SimpleGrantedAuthority::new)
+                                .forEach(authorities::add);
+                    }
                     return new UsernamePasswordAuthenticationToken(
                             userDetail,
                             token,

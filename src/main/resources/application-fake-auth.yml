@@ -1,12 +1,18 @@
 # Profil « fake-auth » — Auth simulée en mémoire (sans Kernel)
 # Démarrage : SPRING_PROFILES_ACTIVE=local,demo,fake-auth
 # COMPTES DISPONIBLES (mot de passe : FleetMan2026!) :
-#   superadmin@fleetman.cm  → FLEET_SUPER_ADMIN
+#   superadmin@fleetman.cm  → FLEET_SUPER_ADMIN  (alias joeltaba4@gmail.com)
 #   admin@fleetman.cm       → FLEET_ADMIN
 #   manager1@fleetman.cm    → FLEET_MANAGER  (Jean Dupont)
-#   manager2@fleetman.cm    → FLEET_MANAGER  (Paul Foka)
-#   driver1@fleetman.cm     → FLEET_DRIVER   (Thomas Tabi)
+#   manager2@fleetman.cm    → FLEET_MANAGER  (Paul Foka) — alias local
+#   driver1@fleetman.cm     → FLEET_DRIVER   (alias driver@fleetman.cm)
 
 application:
   auth:
     mode: fake
+  external:
+    vehicle-mode: fake
+  file:
+    mode: local
+  frontend:
+    url: ${FRONTEND_URL:http://localhost:3001}

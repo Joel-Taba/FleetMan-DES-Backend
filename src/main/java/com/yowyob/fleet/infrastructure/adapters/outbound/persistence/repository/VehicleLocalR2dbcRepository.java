@@ -25,4 +25,6 @@ public interface VehicleLocalR2dbcRepository extends ReactiveCrudRepository<Vehi
     // Compte les véhicules d'un manager ayant un statut spécifique (ex: 'ON_TRIP')
     @Query("SELECT COUNT(*) FROM fleet.vehicles WHERE manager_id = :managerId AND status = :status")
     Mono<Long> countByManagerIdAndStatus(UUID managerId, String status);
+
+    Mono<VehicleLocalEntity> findByKernelResourceId(UUID kernelResourceId);
 }

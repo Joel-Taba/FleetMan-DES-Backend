@@ -1,0 +1,29 @@
+# Profil intégration — DB/Redis/Kafka locaux + Kernel réel + événements Kernel activés
+# Usage : SPRING_PROFILES_ACTIVE=integration,demo
+
+spring:
+  autoconfigure:
+    exclude: []
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+  data:
+    redis:
+      host: localhost
+      port: 6380
+
+management:
+  health:
+    redis:
+      enabled: true
+    kafka:
+      enabled: true
+
+application:
+  kafka:
+    kernel-events:
+      enabled: true
+
+  mail:
+    enabled: true

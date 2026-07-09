@@ -3,6 +3,7 @@ package com.yowyob.fleet.infrastructure.adapters.outbound.external;
 import com.yowyob.fleet.domain.ports.out.ExternalOrganizationPort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelAuthApiClient;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelOrganizationApiClient;
+import com.yowyob.fleet.infrastructure.config.KernelCallSupport;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -14,10 +15,15 @@ import java.util.UUID;
 public class KernelOrganizationAdapter implements ExternalOrganizationPort {
 
     private final KernelOrganizationApiClient organizationClient;
+    private final KernelCallSupport kernelCallSupport;
     private final String tenantId;
 
-    public KernelOrganizationAdapter(KernelOrganizationApiClient organizationClient, String tenantId) {
+    public KernelOrganizationAdapter(
+            KernelOrganizationApiClient organizationClient,
+            KernelCallSupport kernelCallSupport,
+            String tenantId) {
         this.organizationClient = organizationClient;
+        this.kernelCallSupport = kernelCallSupport;
         this.tenantId = tenantId;
     }
 
@@ -28,14 +34,15 @@ public class KernelOrganizationAdapter implements ExternalOrganizationPort {
 
     @Override
     public Mono<OrganizationInfo> getOrganization(UUID organizationId, String bearerToken) {
-        return organizationClient.getOrganization(
+        return kernelCallSupport.run("kernel-organization",
+                organizationClient.getOrganization(
                         bearerHeader(bearerToken),
                         tenantId,
                         organizationId.toString(),
                         organizationId)
                 .flatMap(this::mapResponse)
                 .doOnSubscribe(s -> log.info("🏢 [KERNEL ORG] GET organization {}", organizationId))
-                .onErrorMap(this::wrapError);
+                .onErrorMap(this::wrapError));
     }
 
     @Override
@@ -47,13 +54,14 @@ public class KernelOrganizationAdapter implements ExternalOrganizationPort {
                 command.shortName(),
                 command.longName()
         );
-        return organizationClient.createOrganization(
+        return kernelCallSupport.run("kernel-organization",
+                organizationClient.createOrganization(
                         bearerHeader(bearerToken),
                         tenantId,
                         request)
                 .flatMap(this::mapResponse)
                 .doOnSuccess(org -> log.info("✅ [KERNEL ORG] Organisation créée : {} ({})", org.displayName(), org.id()))
-                .onErrorMap(this::wrapError);
+                .onErrorMap(this::wrapError));
     }
 
     @Override

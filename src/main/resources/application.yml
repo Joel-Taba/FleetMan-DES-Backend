@@ -68,6 +68,22 @@ spring:
     compose:
       enabled: false
 
+  # MAIL (SMTP) — emails transactionnels (rejet de souscription, etc.)
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
 # CONFIG METIER
 application:
   # ── Kernel RT-Comops ────────────────────────────────────────────────────────
@@ -80,9 +96,18 @@ application:
     business-actor-id: ${KERNEL_BUSINESS_ACTOR_ID:54fb5d86-345e-4522-a247-5cbc1de510fc}
     organization-sync: ${KERNEL_ORG_SYNC:true}
     service: COMMERCIAL
+    roles:
+      fleet-driver-id: ${KERNEL_ROLE_FLEET_DRIVER_ID:}
+      fleet-manager-id: ${KERNEL_ROLE_FLEET_MANAGER_ID:}
 
   file:
     mode: ${FILE_MODE:kernel}
+
+  # Envoi d'emails transactionnels (rejet de souscription)
+  mail:
+    enabled: ${MAIL_ENABLED:true}
+    from: ${MAIL_FROM:${MAIL_USERNAME:no-reply@fleetman.cm}}
+    from-name: ${MAIL_FROM_NAME:FleetMan}
 
   external:
     vehicle-service-url:  https://traefikdev.yowyob.com/vehicule
@@ -129,6 +154,9 @@ application:
     topics:
       geofence-alerts: geofence-alerts-topic
       operation-events: operation-events-topic
+      kernel-events: iwm.events.business
+    kernel-events:
+      enabled: ${KAFKA_KERNEL_EVENTS_ENABLED:true}
 
 # MONITORING
 management:
@@ -149,7 +177,44 @@ management:
 # Resilience4j
 resilience4j:
   circuitbreaker:
-    instances: {}
+    instances:
+      kernel-auth:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+      kernel-organization:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+      kernel-resource:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+      kernel-file:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+      kernel-actor:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+      notification:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+  timelimiter:
+    instances:
+      kernel-auth:
+        timeoutDuration: 10s
+      kernel-organization:
+        timeoutDuration: 10s
+      kernel-resource:
+        timeoutDuration: 10s
+      kernel-file:
+        timeoutDuration: 10s
+      kernel-actor:
+        timeoutDuration: 10s
 
 # Stockage fichiers (documents PDF / images)
 fleetman:

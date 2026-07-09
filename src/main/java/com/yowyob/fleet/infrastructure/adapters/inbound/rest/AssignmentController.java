@@ -3,6 +3,7 @@ package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 import com.yowyob.fleet.domain.ports.in.ManageAssignmentUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.AssignmentRequest;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.AssignmentResourceUpdateRequest;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.AssignmentResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.AssignmentStatusRequest;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.PageResponse;
@@ -223,6 +224,16 @@ public class AssignmentController {
             @Valid @RequestBody AssignmentStatusRequest request) {
 
         return assignmentUseCase.updateStatus(id, request.status(), request.actualKm())
+                .map(AssignmentResponse::from);
+    }
+
+    @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Réassigner véhicule/conducteur (Manager UI)")
+    public Mono<AssignmentResponse> updateResources(
+            @PathVariable UUID id,
+            @RequestBody AssignmentResourceUpdateRequest request) {
+        return assignmentUseCase.updateResources(id, request.vehicleId(), request.driverId())
                 .map(AssignmentResponse::from);
     }
 

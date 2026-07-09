@@ -28,12 +28,14 @@ public class FileStorageConfig {
     public ExternalFilePort kernelFilePort(
             @Qualifier("kernelWebClient") WebClient kernelWebClient,
             KernelTokenHolder kernelTokenHolder,
+            KernelCallSupport kernelCallSupport,
             ObjectMapper objectMapper,
             @Value("${application.kernel.tenant-id}") String tenantId,
             @Value("${application.kernel.organization-id}") String organizationId) {
         return new KernelFileAdapter(
                 kernelWebClient,
                 kernelTokenHolder,
+                kernelCallSupport,
                 objectMapper,
                 tenantId,
                 UUID.fromString(organizationId));

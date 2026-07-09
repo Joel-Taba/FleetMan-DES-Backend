@@ -94,7 +94,10 @@ public class PlanLimitGuard {
                 SELECT fm.user_id, fm.plan_id, fm.subscription_status,
                        fm.subscription_start, fm.subscription_end,
                        sp.name AS plan_name, sp.max_fleets, sp.max_vehicles, sp.max_drivers,
-                       COALESCE(sp.grace_days, 7) AS grace_days
+                       COALESCE(
+                         (SELECT setting_value::int FROM fleet.app_settings WHERE setting_key = 'subscription_grace_days'),
+                         COALESCE(sp.grace_days, 7)
+                       ) AS grace_days
                 FROM fleet.fleet_managers fm
                 LEFT JOIN fleet.subscription_plans sp ON sp.id = fm.plan_id
                 WHERE fm.user_id = :managerId

@@ -161,6 +161,14 @@ public class TripController {
     }
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+    @PostMapping("/{id}/start")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Lancer un trajet créé — capture la date/heure réelle de départ")
+    public Mono<Trip> startTrip(@PathVariable UUID id, Authentication auth) {
+        return tripUseCase.startTrip(id, getUserId(auth));
+    }
+
+    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @PostMapping("/return")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Enregistrer le retour d'un trajet par son code")
@@ -295,16 +303,27 @@ public class TripController {
     }
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Supprimer un trajet (SCHEDULED/CANCELLED)")
+    public Mono<Void> deleteTrip(@PathVariable UUID id, Authentication auth) {
+        return tripUseCase.deleteTrip(id, getUserId(auth));
+    }
+
+    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @GetMapping
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(
-        summary = "Lister les trajets du manager (filtre optionnel par flotte)"
+        summary = "Lister les trajets du manager (filtres fleetId/status/vehicleId)"
     )
     public Flux<Trip> list(
         Authentication auth,
-        @RequestParam(required = false) UUID fleetId
+        @RequestParam(required = false) UUID fleetId,
+        @RequestParam(required = false) String status,
+        @RequestParam(required = false) UUID vehicleId
     ) {
-        return tripUseCase.getManagerTrips(getUserId(auth), fleetId);
+        return tripUseCase.getManagerTrips(getUserId(auth), fleetId, status, vehicleId);
     }
 
     // ── TÉLÉMÉTRIE CHAUFFEUR (conservée) ─────────────────────────────────────

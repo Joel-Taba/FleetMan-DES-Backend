@@ -4,6 +4,8 @@ import com.yowyob.fleet.domain.model.SubscriptionPlan;
 import com.yowyob.fleet.domain.ports.in.ManageSubscriptionPlanUseCase;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.SubscriptionPlanEntity;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ActiveSubscriptionDto;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.PendingSubscriptionDto;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SubscriptionHistoryDto;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.PlanFeatureEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetManagerR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.PlanFeatureR2dbcRepository;
@@ -34,6 +36,7 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
     private final UserLocalR2dbcRepository userRepo;
     private final FleetManagerR2dbcRepository managerRepo;
     private final DatabaseClient db;
+    private final SubscriptionRegistrationService registrationService;
 
     @Override
     public Mono<SubscriptionPlan> createPlan(CreatePlanCommand cmd) {
@@ -112,12 +115,78 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
     // ── Workflow approbation B3 ───────────────────────────────────────────────
 
     @Override
-    public Flux<Object> listPendingSubscriptions() {
-        return db.sql("SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.approval_status, fm.company_name " +
-                      "FROM fleet.users u LEFT JOIN fleet.fleet_managers fm ON fm.user_id = u.id " +
-                      "WHERE u.approval_status = 'PENDING'")
+    public Flux<PendingSubscriptionDto> listPendingSubscriptions() {
+        return db.sql("""
+                SELECT u.id, u.username, u.email, u.first_name, u.last_name,
+                       fm.company_name, fm.plan_id,
+                       COALESCE(u.approved_at, NOW()) AS created_at
+                FROM fleet.users u
+                LEFT JOIN fleet.fleet_managers fm ON fm.user_id = u.id
+                WHERE u.approval_status = 'PENDING'
+                ORDER BY u.username
+                """)
             .fetch().all()
-            .map(row -> (Object) row);
+            .map(row -> new PendingSubscriptionDto(
+                    (UUID) row.get("id"),
+                    str(row.get("username")),
+                    str(row.get("email")),
+                    str(row.get("first_name")),
+                    str(row.get("last_name")),
+                    row.get("company_name") != null ? row.get("company_name").toString() : null,
+                    toInstant(row.get("created_at")),
+                    null,
+                    row.get("plan_id") instanceof UUID planId ? planId : null
+            ));
+    }
+
+    @Override
+    public Flux<SubscriptionHistoryDto> listSubscriptionHistory() {
+        return db.sql("""
+                SELECT u.id, u.username, u.email, u.first_name, u.last_name,
+                       fm.company_name, u.approved_at AS processed_at,
+                       u.approval_status AS status, sp.name AS plan_name,
+                       u.rejection_reason,
+                       COALESCE(approver.username, approver.email) AS processed_by
+                FROM fleet.users u
+                LEFT JOIN fleet.fleet_managers fm ON fm.user_id = u.id
+                LEFT JOIN fleet.subscription_plans sp ON sp.id = fm.plan_id
+                LEFT JOIN fleet.users approver ON approver.id = u.approved_by
+                WHERE u.approval_status IN ('APPROVED', 'REJECTED')
+                  AND u.approved_at IS NOT NULL
+                ORDER BY u.approved_at DESC
+                """)
+            .fetch().all()
+            .map(row -> {
+                Instant processedAt = toInstant(row.get("processed_at"));
+                return new SubscriptionHistoryDto(
+                        (UUID) row.get("id"),
+                        str(row.get("username")),
+                        str(row.get("email")),
+                        str(row.get("first_name")),
+                        str(row.get("last_name")),
+                        row.get("company_name") != null ? row.get("company_name").toString() : null,
+                        processedAt,
+                        processedAt,
+                        str(row.get("status")),
+                        row.get("plan_name") != null ? row.get("plan_name").toString() : null,
+                        row.get("rejection_reason") != null ? row.get("rejection_reason").toString() : null,
+                        row.get("processed_by") != null ? row.get("processed_by").toString() : null
+                );
+            });
+    }
+
+    private static String str(Object value) {
+        return value != null ? value.toString() : "";
+    }
+
+    private static Instant toInstant(Object value) {
+        if (value == null) return Instant.now();
+        if (value instanceof Instant i) return i;
+        if (value instanceof java.time.OffsetDateTime odt) return odt.toInstant();
+        if (value instanceof java.time.LocalDateTime ldt) {
+            return ldt.atZone(java.time.ZoneId.systemDefault()).toInstant();
+        }
+        return Instant.parse(value.toString());
     }
 
     @Override
@@ -146,7 +215,13 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
                 u.setApprovedBy(cmd.rejectedBy());
                 u.setApprovedAt(Instant.now());
                 u.setNewRecord(false);
-                return userRepo.save(u);
+                String email = u.getEmail();
+                String subject = cmd.subject() != null && !cmd.subject().isBlank()
+                        ? cmd.subject() : "Votre demande d'inscription FleetMan a été rejetée";
+                String body = cmd.message() != null && !cmd.message().isBlank()
+                        ? cmd.message() : cmd.reason();
+                return userRepo.save(u)
+                        .then(registrationService.sendRejectionEmail(email, subject, body));
             }).then();
     }
 

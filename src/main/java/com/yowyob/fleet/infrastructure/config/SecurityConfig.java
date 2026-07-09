@@ -43,7 +43,9 @@ public class SecurityConfig {
                 new AndServerWebExchangeMatcher(
                         ServerWebExchangeMatchers.pathMatchers("/api/v1/**"),
                         new NegatedServerWebExchangeMatcher(
-                                ServerWebExchangeMatchers.pathMatchers("/api/v1/files/**")
+                                // GET fichiers publics anonymes ; POST upload doit pouvoir lire le Bearer
+                                ServerWebExchangeMatchers.pathMatchers(
+                                        org.springframework.http.HttpMethod.GET, "/api/v1/files/**")
                         )
                 )
         );
@@ -73,9 +75,12 @@ public class SecurityConfig {
                                 "/webjars/**",
                                 "/actuator/**",
                                 "/api/v1/health/**",
-                                "/api/v1/auth/**"
+                                "/api/v1/auth/**",
+                                "/api/v1/public/**"
                         ).permitAll()
                         .pathMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/files/**").permitAll()
+                        // Upload inscription publique (signup) — catégorie restreinte dans le contrôleur
+                        .pathMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/files/upload").permitAll()
                         // B. OPTIONS (Indispensable pour le pre-flight CORS)
                         .pathMatchers(org.springframework.http.HttpMethod.OPTIONS).permitAll()
                         .anyExchange().authenticated()

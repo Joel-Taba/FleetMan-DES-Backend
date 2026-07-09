@@ -24,13 +24,13 @@ public interface TripR2dbcRepository
 
     @Query(
         "SELECT COUNT(*) > 0 FROM fleet.trips WHERE driver_id = :driverId " +
-            "AND status IN ('DEPARTED', 'RETURNING')"
+            "AND status IN ('SCHEDULED', 'DEPARTED', 'RETURNING')"
     )
     Mono<Boolean> existsActiveTripForDriver(UUID driverId);
 
     @Query(
         "SELECT COUNT(*) > 0 FROM fleet.trips WHERE driver_id = :driverId " +
-            "AND status IN ('DEPARTED', 'RETURNING') AND id != :excludeTripId"
+            "AND status IN ('SCHEDULED', 'DEPARTED', 'RETURNING') AND id != :excludeTripId"
     )
     Mono<Boolean> existsActiveTripForDriverExcluding(
         UUID driverId,
@@ -39,13 +39,13 @@ public interface TripR2dbcRepository
 
     @Query(
         "SELECT COUNT(*) > 0 FROM fleet.trips WHERE vehicle_id = :vehicleId " +
-            "AND status IN ('DEPARTED', 'RETURNING')"
+            "AND status IN ('SCHEDULED', 'DEPARTED', 'RETURNING')"
     )
     Mono<Boolean> existsActiveTripForVehicle(UUID vehicleId);
 
     @Query(
         "SELECT COUNT(*) > 0 FROM fleet.trips WHERE vehicle_id = :vehicleId " +
-            "AND status IN ('DEPARTED', 'RETURNING') AND id != :excludeTripId"
+            "AND status IN ('SCHEDULED', 'DEPARTED', 'RETURNING') AND id != :excludeTripId"
     )
     Mono<Boolean> existsActiveTripForVehicleExcluding(
         UUID vehicleId,

@@ -64,6 +64,9 @@ public class UserLocalEntity implements Persistable<UUID> {
     @Column("kernel_id")
     private UUID kernelId;
 
+    @Column("tenant_id")
+    private UUID tenantId;
+
     @Transient
     @Builder.Default
     private boolean isNewRecord = false;

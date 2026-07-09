@@ -8,6 +8,7 @@ import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.AuthController;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelAdminApiClient;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelAuthApiClient;
+import com.yowyob.fleet.infrastructure.config.KernelCallSupport;
 import com.yowyob.fleet.infrastructure.config.KernelTokenHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,17 +42,20 @@ public class KernelAuthAdapter implements AuthPort {
     private final KernelAdminApiClient kernelAdminClient;
     private final KernelTokenHolder kernelTokenHolder;
     private final WebClient kernelWebClient;
+    private final KernelCallSupport kernelCallSupport;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public KernelAuthAdapter(
             KernelAuthApiClient kernelClient,
             KernelAdminApiClient kernelAdminClient,
             KernelTokenHolder kernelTokenHolder,
-            WebClient kernelWebClient) {
+            WebClient kernelWebClient,
+            KernelCallSupport kernelCallSupport) {
         this.kernelClient = kernelClient;
         this.kernelAdminClient = kernelAdminClient;
         this.kernelTokenHolder = kernelTokenHolder;
         this.kernelWebClient = kernelWebClient;
+        this.kernelCallSupport = kernelCallSupport;
     }
 
     @Value("${application.kernel.service:FLEET_MANAGEMENT}")
@@ -70,7 +74,8 @@ public class KernelAuthAdapter implements AuthPort {
         log.info("🔑 [KERNEL AUTH] Login pour : {}", identifier);
 
         // Étape 1 : discover-contexts
-        return kernelClient.discoverContexts(
+        return kernelCallSupport.run("kernel-auth",
+                kernelClient.discoverContexts(
                         new KernelAuthApiClient.LoginRequest(identifier, password))
                 .flatMap(resp -> {
                     if (!resp.success() || resp.data() == null) {
@@ -83,19 +88,16 @@ public class KernelAuthAdapter implements AuthPort {
                         return Mono.error(AuthException.invalidCredentials());
                     }
 
-                    // Prendre le premier contexte disponible (ou celui du service FLEET_MANAGEMENT)
                     var ctx = discover.contexts().stream()
                             .filter(c -> c.organizations() != null && c.organizations().stream()
                                     .anyMatch(o -> serviceName.equalsIgnoreCase(o.service())))
                             .findFirst()
                             .orElse(discover.contexts().get(0));
 
-                    // Déterminer l'organizationId cible
                     UUID orgId = resolveOrganizationId(ctx);
 
                     log.debug("✅ [KERNEL AUTH] Context sélectionné: {} org={}", ctx.contextId(), orgId);
 
-                    // Étape 2 : select-context
                     return kernelClient.selectContext(
                             new KernelAuthApiClient.SelectContextRequest(
                                     discover.selectionToken(),
@@ -111,14 +113,15 @@ public class KernelAuthAdapter implements AuthPort {
                     return mapToAuthResponse(session);
                 })
                 .onErrorResume(WebClientResponseException.class, this::mapWebClientError)
-                .doOnSuccess(r -> log.info("✅ [KERNEL AUTH] Login réussi : {}", identifier));
+                .doOnSuccess(r -> log.info("✅ [KERNEL AUTH] Login réussi : {}", identifier)));
     }
 
     // ── Refresh Token ─────────────────────────────────────────────────────────
 
     @Override
     public Mono<AuthResponse> refresh(String refreshToken) {
-        return kernelClient.refreshToken(
+        return kernelCallSupport.run("kernel-auth",
+                kernelClient.refreshToken(
                         new KernelAuthApiClient.RefreshTokenRequest(refreshToken))
                 .map(resp -> {
                     if (!resp.success() || resp.data() == null) {
@@ -130,7 +133,7 @@ public class KernelAuthAdapter implements AuthPort {
                             serviceName, List.of(), List.of(), null, null, null, null, true, null);
                     return new AuthResponse(r.accessToken(), r.refreshToken(), fakeUser);
                 })
-                .onErrorResume(WebClientResponseException.class, this::mapWebClientError);
+                .onErrorResume(WebClientResponseException.class, this::mapWebClientError));
     }
 
     // ── Inscription ───────────────────────────────────────────────────────────
@@ -138,7 +141,8 @@ public class KernelAuthAdapter implements AuthPort {
     @Override
     public Mono<AuthResponse> registerInRemote(AuthUseCase.RegisterCommand command) {
         log.info("📝 [KERNEL AUTH] Inscription via owner : {}", command.email());
-        return kernelTokenHolder.getValidAccessToken()
+        return kernelCallSupport.run("kernel-auth",
+                kernelTokenHolder.getValidAccessToken()
                 .flatMap(ownerToken -> kernelAdminClient.registerUser(
                         ensureBearer(ownerToken),
                         defaultTenantId,
@@ -164,7 +168,7 @@ public class KernelAuthAdapter implements AuthPort {
                     return Mono.just(new AuthResponse("", "", detail));
                 })
                 .onErrorResume(WebClientResponseException.class, this::mapWebClientError)
-                .doOnSuccess(r -> log.info("✅ [KERNEL AUTH] Inscription réussie : {}", command.email()));
+                .doOnSuccess(r -> log.info("✅ [KERNEL AUTH] Inscription réussie : {}", command.email())));
     }
 
     // ── Profil utilisateur ────────────────────────────────────────────────────

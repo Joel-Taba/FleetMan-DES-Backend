@@ -27,12 +27,21 @@ public class SubscriptionExpiryJob {
     public void expireSubscriptions() {
         log.info("=== Vérification expiration abonnements ===");
         db.sql("""
-                SELECT fm.user_id, fm.subscription_end, COALESCE(sp.grace_days, 7) AS grace_days
+                SELECT fm.user_id, fm.subscription_end,
+                       COALESCE(
+                         (SELECT setting_value::int FROM fleet.app_settings WHERE setting_key = 'subscription_grace_days'),
+                         COALESCE(sp.grace_days, 7)
+                       ) AS grace_days
                 FROM fleet.fleet_managers fm
                 LEFT JOIN fleet.subscription_plans sp ON sp.id = fm.plan_id
                 WHERE fm.subscription_status = 'ACTIVE'
                   AND fm.subscription_end IS NOT NULL
-                  AND fm.subscription_end + (COALESCE(sp.grace_days, 7) || ' days')::interval < CURRENT_DATE
+                  AND fm.subscription_end + (
+                        COALESCE(
+                          (SELECT setting_value::int FROM fleet.app_settings WHERE setting_key = 'subscription_grace_days'),
+                          COALESCE(sp.grace_days, 7)
+                        ) || ' days'
+                      )::interval < CURRENT_DATE
                 """)
                 .fetch()
                 .all()

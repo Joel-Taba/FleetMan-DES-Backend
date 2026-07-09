@@ -49,13 +49,12 @@ public class AdminService implements ManageAdminUseCase {
 
     @Override
     public Mono<Void> toggleManagerStatus(UUID managerId, UUID requesterId, boolean isSuperAdmin) {
-        // On vérifie d'abord que c'est bien un manager
-        return this.getManagerDetails(managerId, "", isSuperAdmin)
-                .then(userRepo.findById(managerId))
+        return userRepo.findById(managerId)
+                .switchIfEmpty(Mono.defer(() -> userRepo.findByKernelId(managerId)))
                 .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
                 .flatMap(u -> {
                     u.setActive(!u.isActive());
-                    u.setNewRecord(false); // On force l'UPDATE
+                    u.setNewRecord(false);
                     return userRepo.save(u);
                 })
                 .doOnSuccess(u -> log.info("🔐 Statut Manager {} changé vers : {}", managerId, u.isActive()))
@@ -87,17 +86,38 @@ public class AdminService implements ManageAdminUseCase {
                     n.setNewRecord(true);
                     return userRepo.save(n);
                 }))
-                .flatMap(localUser -> 
-                    managerPersistencePort.createProfile(remote.id(), "Société de " + remote.lastName())
-                        .onErrorResume(e -> Mono.empty())
-                        .then(managerPersistencePort.getCompanyName(remote.id()))
+                .flatMap(localUser ->
+                    managerRepo.existsById(localUser.getId())
+                        .flatMap(exists -> {
+                            if (Boolean.TRUE.equals(exists)) {
+                                return Mono.empty();
+                            }
+                            return managerPersistencePort
+                                    .createProfile(localUser.getId(), "Société de " + remote.lastName())
+                                    .onErrorResume(e -> {
+                                        log.warn("⚠️ Profil manager non créé pour {} : {}",
+                                                localUser.getId(), e.getMessage());
+                                        return Mono.empty();
+                                    });
+                        })
+                        .then(managerPersistencePort.getCompanyName(localUser.getId())
+                                .defaultIfEmpty(""))
                         .map(company -> new AuthPort.UserDetail(
-                                remote.id(), remote.username(), remote.email(), remote.phone(),
-                                remote.firstName(), remote.lastName(), remote.service(),
-                                remote.roles(), remote.permissions(), remote.photoUrl(), 
-                                company, null, null, 
-                                localUser.isActive(),      // <--- À l'intérieur des parenthèses
-                                localUser.getLastLoginAt() // <--- À l'intérieur des parenthèses
+                                localUser.getId(),
+                                remote.username(),
+                                remote.email(),
+                                remote.phone(),
+                                remote.firstName(),
+                                remote.lastName(),
+                                remote.service(),
+                                remote.roles() != null ? remote.roles() : java.util.List.of("FLEET_MANAGER"),
+                                remote.permissions(),
+                                remote.photoUrl(),
+                                company.isBlank() ? null : company,
+                                null,
+                                null,
+                                localUser.isActive(),
+                                localUser.getLastLoginAt()
                         ))
                 );
     }

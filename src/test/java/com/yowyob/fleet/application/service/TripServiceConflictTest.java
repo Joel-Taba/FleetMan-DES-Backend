@@ -118,6 +118,6 @@ class TripServiceConflictTest {
     }
 
     private Driver sampleDriver() {
-        return new Driver(driverId, UUID.randomUUID(), "B1234567CM", "ACTIVE", null, null);
+        return new Driver(driverId, UUID.randomUUID(), "B1234567CM", "ACTIVE", null, null, null);
     }
 }

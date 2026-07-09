@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -76,18 +77,8 @@ public class TripService implements ManageTripUseCase {
                 .flatMap(tripCode -> {
                     TripEntity entity = buildTripEntity(tripCode, cmd);
 
-                    vehicle.setStatus("ON_TRIP");
-                    vehicle.setNew(false);
-
-                    return vehicleRepository
-                        .save(vehicle)
-                        .then(
-                            linkDriverVehicleForTrip(
-                                cmd.driverId(),
-                                cmd.vehicleId()
-                            )
-                        )
-                        .then(tripRepository.save(entity))
+                    return tripRepository
+                        .save(entity)
                         .flatMap(saved ->
                             saveDetails(saved.getId(), cmd.details()).then(
                                 loadTripWithDetails(saved.getId())
@@ -95,6 +86,56 @@ public class TripService implements ManageTripUseCase {
                         );
                 });
         });
+    }
+
+    // ── Lancement effectif d'un trajet planifié ───────────────────────────────
+
+    @Override
+    @Transactional
+    public Mono<Trip> startTrip(UUID tripId, UUID managerId) {
+        return tripRepository
+            .findById(tripId)
+            .switchIfEmpty(Mono.error(TripException.notFound(tripId)))
+            .flatMap(trip -> {
+                if (!managerId.equals(trip.getCreatedBy())) {
+                    return Mono.error(TripException.forbidden());
+                }
+                if (!"SCHEDULED".equals(trip.getStatus())) {
+                    return Mono.error(TripException.invalidStartState());
+                }
+
+                return vehicleRepository
+                    .findById(trip.getVehicleId())
+                    .switchIfEmpty(
+                        Mono.error(TripException.notFound(trip.getVehicleId()))
+                    )
+                    .flatMap(vehicle -> {
+                        if (!"AVAILABLE".equals(vehicle.getStatus())) {
+                            return Mono.error(TripException.vehicleOccupied());
+                        }
+
+                        LocalDateTime now = LocalDateTime.now();
+                        trip.setStatus("DEPARTED");
+                        trip.setStartDate(now.toLocalDate());
+                        trip.setStartTime(now.toLocalTime().withNano(0));
+                        trip.setDepartureRegisteredAt(Instant.now());
+                        trip.setNew(false);
+
+                        vehicle.setStatus("ON_TRIP");
+                        vehicle.setNew(false);
+
+                        return vehicleRepository
+                            .save(vehicle)
+                            .then(
+                                linkDriverVehicleForTrip(
+                                    trip.getDriverId(),
+                                    trip.getVehicleId()
+                                )
+                            )
+                            .then(tripRepository.save(trip))
+                            .flatMap(saved -> loadTripWithDetails(saved.getId()));
+                    });
+            });
     }
 
     // ── Enregistrement du retour ──────────────────────────────────────────────
@@ -335,6 +376,25 @@ public class TripService implements ManageTripUseCase {
             ? tripRepository.findAllByCreatedByAndFleetId(managerId, fleetId)
             : tripRepository.findAllByCreatedBy(managerId);
         return source.flatMap(e -> loadTripWithDetails(e.getId()));
+    }
+
+    @Override
+    @Transactional
+    public Mono<Void> deleteTrip(UUID tripId, UUID managerId) {
+        return tripRepository
+            .findById(tripId)
+            .switchIfEmpty(Mono.error(TripException.notFound(tripId)))
+            .flatMap(trip -> {
+                if (!managerId.equals(trip.getCreatedBy())) {
+                    return Mono.error(new AccessDeniedException("Ce trajet ne vous appartient pas."));
+                }
+                String status = trip.getStatus();
+                if ("SCHEDULED".equals(status) || "CANCELLED".equals(status)) {
+                    return tripRepository.deleteById(tripId);
+                }
+                return Mono.error(new IllegalStateException(
+                        "Seuls les trajets SCHEDULED ou CANCELLED peuvent être supprimés. Annulez-le d'abord."));
+            });
     }
 
     @Override
@@ -771,7 +831,7 @@ public class TripService implements ManageTripUseCase {
         e.setDriverId(cmd.driverId());
         e.setFleetId(cmd.fleetId());
         e.setCreatedBy(cmd.managerId());
-        e.setStatus("DEPARTED");
+        e.setStatus("SCHEDULED");
         e.setStartDate(cmd.startDate());
         e.setStartTime(cmd.startTime());
         e.setDepartureLocation(cmd.departureLocation());
@@ -784,7 +844,7 @@ public class TripService implements ManageTripUseCase {
         e.setMissionCostCurrency(
             cmd.missionCostCurrency() != null ? cmd.missionCostCurrency() : "XAF"
         );
-        e.setDepartureRegisteredAt(Instant.now());
+        e.setDepartureRegisteredAt(null);
         e.setRateType(cmd.rateType());
         e.setScheduledReturnDatetime(cmd.scheduledReturnDatetime());
         e.setNew(true);

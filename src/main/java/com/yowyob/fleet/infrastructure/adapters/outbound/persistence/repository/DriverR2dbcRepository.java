@@ -28,6 +28,8 @@ public interface DriverR2dbcRepository extends ReactiveCrudRepository<DriverEnti
      * Recherche par ID de véhicule assigné.
      */
     Mono<DriverEntity> findByAssignedVehicleId(UUID assignedVehicleId);
+
+    Mono<DriverEntity> findByKernelActorId(UUID kernelActorId);
     // --- AJOUT TÂCHE 6.2 ---
     Mono<Long> countByFleetId(UUID fleetId);
 

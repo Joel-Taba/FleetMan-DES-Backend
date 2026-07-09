@@ -1,5 +1,7 @@
 package com.yowyob.fleet.domain.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -33,7 +35,8 @@ public record Vehicle(
     String serialNumberPhotoUrl,
     String registrationPhotoUrl,
     
-    // Galerie (1-N)
+    // Galerie (1-N) — exposée comme galleryUrls pour le front Manager
+    @JsonProperty("galleryUrls")
     List<String> illustrationImages,
     
     // Sous-objets

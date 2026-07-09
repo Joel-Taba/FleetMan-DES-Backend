@@ -12,6 +12,7 @@ import reactor.core.publisher.Mono;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -34,6 +35,9 @@ public class KernelTokenHolder {
 
     @Value("${application.kernel.organization-id:}")
     private String defaultOrgId;
+
+    @Value("${application.kernel.service:FLEET_MANAGEMENT}")
+    private String serviceName;
 
     private static final long REFRESH_MARGIN_SECONDS = 60L;
 
@@ -63,12 +67,11 @@ public class KernelTokenHolder {
                             || discoverResp.data().contexts().isEmpty()) {
                         return Mono.error(new IllegalStateException("discover-contexts échoué pour owner"));
                     }
-                    var ctx = discoverResp.data().contexts().get(0);
-                    UUID orgId = resolveDefaultOrgId();
+                    ContextSelection selection = resolveContextAndOrganization(discoverResp.data().contexts());
                     return kernelClient.selectContext(new KernelAuthApiClient.SelectContextRequest(
                             discoverResp.data().selectionToken(),
-                            ctx.contextId(),
-                            orgId
+                            selection.contextId(),
+                            selection.organizationId()
                     ));
                 })
                 .map(selectResp -> {
@@ -100,6 +103,48 @@ public class KernelTokenHolder {
             return null;
         }
     }
+
+    private ContextSelection resolveContextAndOrganization(List<KernelAuthApiClient.DiscoveredContext> contexts) {
+        UUID configuredOrgId = resolveDefaultOrgId();
+
+        KernelAuthApiClient.DiscoveredContext contextForConfiguredOrg = null;
+        if (configuredOrgId != null) {
+            contextForConfiguredOrg = contexts.stream()
+                    .filter(c -> c.organizations() != null && c.organizations().stream()
+                            .anyMatch(o -> configuredOrgId.equals(o.organizationId())))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        KernelAuthApiClient.DiscoveredContext selectedContext = contextForConfiguredOrg;
+        if (selectedContext == null) {
+            selectedContext = contexts.stream()
+                    .filter(c -> c.organizations() != null && c.organizations().stream()
+                            .anyMatch(o -> serviceName.equalsIgnoreCase(o.service())))
+                    .findFirst()
+                    .orElse(contexts.get(0));
+        }
+
+        UUID selectedOrgId = null;
+        if (selectedContext.organizations() != null && !selectedContext.organizations().isEmpty()) {
+            if (configuredOrgId != null && selectedContext.organizations().stream()
+                    .anyMatch(o -> configuredOrgId.equals(o.organizationId()))) {
+                selectedOrgId = configuredOrgId;
+            } else {
+                selectedOrgId = selectedContext.organizations().stream()
+                        .filter(o -> serviceName.equalsIgnoreCase(o.service()))
+                        .map(KernelAuthApiClient.OrganizationRef::organizationId)
+                        .findFirst()
+                        .orElse(selectedContext.organizations().get(0).organizationId());
+            }
+        } else if (configuredOrgId != null) {
+            selectedOrgId = configuredOrgId;
+        }
+
+        return new ContextSelection(selectedContext.contextId(), selectedOrgId);
+    }
+
+    private record ContextSelection(String contextId, UUID organizationId) {}
 
     private Instant extractExpFromJwt(String token) {
         try {

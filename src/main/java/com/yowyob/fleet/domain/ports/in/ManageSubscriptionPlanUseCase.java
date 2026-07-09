@@ -20,7 +20,7 @@ public interface ManageSubscriptionPlanUseCase {
                              String features) {}
 
     record ApproveSubscriptionCommand(UUID managerId, UUID approvedBy, UUID planId) {}
-    record RejectSubscriptionCommand(UUID managerId, UUID rejectedBy, String reason) {}
+    record RejectSubscriptionCommand(UUID managerId, UUID rejectedBy, String reason, String subject, String message) {}
 
     record PlanFeatureCommand(String key, String label, boolean enabled) {}
 
@@ -32,7 +32,8 @@ public interface ManageSubscriptionPlanUseCase {
     Mono<Void> assignPlanToManager(UUID managerId, UUID planId);
 
     // Workflow approbation
-    Flux<Object> listPendingSubscriptions();
+    Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.PendingSubscriptionDto> listPendingSubscriptions();
+    Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SubscriptionHistoryDto> listSubscriptionHistory();
     Mono<Void> approveSubscription(ApproveSubscriptionCommand command);
     Mono<Void> rejectSubscription(RejectSubscriptionCommand command);
 

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yowyob.fleet.domain.exception.DocumentException;
 import com.yowyob.fleet.domain.ports.out.ExternalFilePort;
+import com.yowyob.fleet.infrastructure.config.KernelCallSupport;
 import com.yowyob.fleet.infrastructure.config.KernelTokenHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.buffer.DataBufferUtils;
@@ -27,6 +28,7 @@ public class KernelFileAdapter implements ExternalFilePort {
 
     private final WebClient kernelWebClient;
     private final KernelTokenHolder kernelTokenHolder;
+    private final KernelCallSupport kernelCallSupport;
     private final ObjectMapper objectMapper;
     private final String tenantId;
     private final UUID organizationId;
@@ -34,11 +36,13 @@ public class KernelFileAdapter implements ExternalFilePort {
     public KernelFileAdapter(
             WebClient kernelWebClient,
             KernelTokenHolder kernelTokenHolder,
+            KernelCallSupport kernelCallSupport,
             ObjectMapper objectMapper,
             String tenantId,
             UUID organizationId) {
         this.kernelWebClient = kernelWebClient;
         this.kernelTokenHolder = kernelTokenHolder;
+        this.kernelCallSupport = kernelCallSupport;
         this.objectMapper = objectMapper;
         this.tenantId = tenantId;
         this.organizationId = organizationId;
@@ -54,7 +58,8 @@ public class KernelFileAdapter implements ExternalFilePort {
         String originalName = file.filename();
         validateFileName(originalName);
 
-        return resolveToken(bearerToken)
+        return kernelCallSupport.run("kernel-file",
+                resolveToken(bearerToken)
                 .flatMap(token -> DataBufferUtils.join(file.content())
                         .flatMap(dataBuffer -> {
                             byte[] bytes = new byte[dataBuffer.readableByteCount()];
@@ -81,7 +86,7 @@ public class KernelFileAdapter implements ExternalFilePort {
                                     .flatMap(this::parseUploadResponse);
                         }))
                 .doOnSuccess(r -> log.info("✅ [KERNEL FILE] Upload OK : {} → {}", originalName, r.kernelFileId()))
-                .onErrorMap(this::wrapError);
+                .onErrorMap(this::wrapError));
     }
 
     @Override

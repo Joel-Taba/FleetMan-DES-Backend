@@ -1,6 +1,7 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
 import com.yowyob.fleet.domain.exception.DomainException;
+import com.yowyob.fleet.infrastructure.adapters.outbound.kernel.exception.KernelException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -84,6 +85,23 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
             "Une valeur fournie ne respecte pas les contraintes du système (ex: Statut invalide, Doublon unique). Vérifiez vos Enums.");
         problem.setTitle("Data Integrity Violation");
+        return problem;
+    }
+
+    @ExceptionHandler(KernelException.class)
+    public ProblemDetail handleKernelException(KernelException ex) {
+        log.error("❌ Kernel error [{}]: {}", ex.getKernelCode(), ex.getMessage());
+        HttpStatus status = switch (ex.getKernelCode()) {
+            case "TENANT_REQUEST_QUOTA_EXCEEDED",
+                 "ORGANIZATION_SERVICE_QUOTA_EXCEEDED" -> HttpStatus.TOO_MANY_REQUESTS;
+            case "ORGANIZATION_SERVICE_NOT_SUBSCRIBED",
+                 "CLIENT_APPLICATION_SERVICE_NOT_ALLOWED" -> HttpStatus.FORBIDDEN;
+            case "ORGANIZATION_CONTEXT_REQUIRED" -> HttpStatus.BAD_REQUEST;
+            default -> HttpStatus.BAD_GATEWAY;
+        };
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, ex.getMessage());
+        problem.setTitle("Kernel Service Error");
+        problem.setProperty("kernelCode", ex.getKernelCode());
         return problem;
     }
 

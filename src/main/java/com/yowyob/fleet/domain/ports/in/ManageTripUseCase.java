@@ -88,6 +88,9 @@ public interface ManageTripUseCase {
     /** Crée un trajet (départ). Réservé au Fleet Manager. */
     Mono<Trip> createTrip(CreateTripCommand command);
 
+    /** Lance effectivement un trajet planifié (SCHEDULED → DEPARTED). */
+    Mono<Trip> startTrip(UUID tripId, UUID managerId);
+
     /** Enregistre le retour d'un trajet à partir de son code. */
     Mono<Trip> registerReturn(RegisterReturnCommand command);
 
@@ -124,6 +127,21 @@ public interface ManageTripUseCase {
 
     /** Liste tous les trajets du manager (filtre optionnel par flotte). */
     Flux<Trip> getManagerTrips(UUID managerId, UUID optionalFleetId);
+
+    /** Liste avec filtres status / vehicleId (côté Manager UI). */
+    default Flux<Trip> getManagerTrips(UUID managerId, UUID optionalFleetId, String status, UUID vehicleId) {
+        Flux<Trip> trips = getManagerTrips(managerId, optionalFleetId);
+        if (status != null && !status.isBlank()) {
+            trips = trips.filter(t -> t.getStatus() != null && status.equalsIgnoreCase(t.getStatus().name()));
+        }
+        if (vehicleId != null) {
+            trips = trips.filter(t -> vehicleId.equals(t.getVehicleId()));
+        }
+        return trips;
+    }
+
+    /** Suppression d'un trajet (SCHEDULED / CANCELLED uniquement). */
+    Mono<Void> deleteTrip(UUID tripId, UUID managerId);
 
     /** Récupère le détail d'un trajet. */
     Mono<Trip> getTripById(UUID tripId);

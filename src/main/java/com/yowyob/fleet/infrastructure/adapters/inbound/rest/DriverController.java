@@ -6,6 +6,8 @@ import com.yowyob.fleet.domain.ports.in.ManageDriverUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverRegistrationRequest;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerDriverCreateRequest;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerDriverUpdateRequest;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.RecruitDriverRequest;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
@@ -40,6 +42,28 @@ public class DriverController {
 
     private UUID getUserId(Authentication auth) { return ((AuthPort.UserDetail) auth.getPrincipal()).id(); }
     private String getToken(String header) { return header.startsWith("Bearer ") ? header.substring(7) : header; }
+
+    @PostMapping("/drivers")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Créer un chauffeur (JSON Manager UI)")
+    public Mono<DriverResponse> createDriver(
+            @RequestBody ManagerDriverCreateRequest request,
+            Authentication auth
+    ) {
+        return driverUseCase.createDriverForManager(request, getUserId(auth));
+    }
+
+    @PutMapping("/drivers/{userId}")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Mettre à jour un chauffeur (JSON Manager UI)")
+    public Mono<DriverResponse> updateDriver(
+            @PathVariable UUID userId,
+            @RequestBody ManagerDriverUpdateRequest request,
+            Authentication auth
+    ) {
+        return driverUseCase.updateDriverForManager(userId, request, getUserId(auth));
+    }
 
     @PostMapping(value = "/fleets/{fleetId}/drivers/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)

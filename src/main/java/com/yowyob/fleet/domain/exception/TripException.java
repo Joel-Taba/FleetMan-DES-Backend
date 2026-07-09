@@ -79,4 +79,20 @@ public class TripException extends DomainException {
             "TRP_008"
         );
     }
+
+    public static TripException forbidden() {
+        return new TripException(
+            "Accès refusé à ce trajet.",
+            HttpStatus.FORBIDDEN,
+            "TRP_009"
+        );
+    }
+
+    public static TripException invalidStartState() {
+        return new TripException(
+            "Seuls les trajets créés peuvent être lancés.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_010"
+        );
+    }
 }

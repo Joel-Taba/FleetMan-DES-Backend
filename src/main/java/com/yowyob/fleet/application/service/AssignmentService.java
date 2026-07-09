@@ -184,6 +184,76 @@ public class AssignmentService implements ManageAssignmentUseCase {
     }
 
     @Override
+    public Mono<Assignment> updateResources(UUID id, UUID vehicleId, UUID driverId) {
+        return assignmentPersistencePort.findById(id)
+                .switchIfEmpty(Mono.error(PlanningException.assignmentNotFound(id)))
+                .flatMap(existing -> {
+                    if (existing.getStatus() != Assignment.Status.PENDING) {
+                        return Mono.error(new IllegalStateException(
+                                "Seule une affectation PENDING peut être réassignée."));
+                    }
+                    UUID nextVehicle = vehicleId != null ? vehicleId : existing.getVehicleId();
+                    UUID nextDriver = driverId != null ? driverId : existing.getDriverId();
+                    return vehiclePersistencePort.getLocalDataById(nextVehicle)
+                            .switchIfEmpty(Mono.error(PlanningException.vehicleNotFound(nextVehicle)))
+                            .flatMap(v -> {
+                                if ("MAINTENANCE".equals(v.status())) {
+                                    return Mono.error(PlanningException.vehicleNotAvailable(nextVehicle));
+                                }
+                                return driverPersistencePort.findById(nextDriver)
+                                        .switchIfEmpty(Mono.error(PlanningException.driverNotFound(nextDriver)));
+                            })
+                            .flatMap(driver -> {
+                                if ("INACTIVE".equals(driver.status())) {
+                                    return Mono.error(PlanningException.driverInactive(nextDriver));
+                                }
+                                return assignmentPersistencePort
+                                        .findConflictingByVehicle(nextVehicle,
+                                                existing.getStartDatetime(), existing.getEndDatetime(), id)
+                                        .hasElements()
+                                        .flatMap(hasVehicleConflict -> {
+                                            if (hasVehicleConflict) {
+                                                return Mono.error(PlanningException.vehicleConflict(
+                                                        nextVehicle,
+                                                        existing.getStartDatetime().toString(),
+                                                        existing.getEndDatetime().toString()));
+                                            }
+                                            return assignmentPersistencePort
+                                                    .findConflictingByDriver(nextDriver,
+                                                            existing.getStartDatetime(), existing.getEndDatetime(), id)
+                                                    .hasElements();
+                                        })
+                                        .flatMap(hasDriverConflict -> {
+                                            if (hasDriverConflict) {
+                                                return Mono.error(PlanningException.driverConflict(
+                                                        nextDriver,
+                                                        existing.getStartDatetime().toString(),
+                                                        existing.getEndDatetime().toString()));
+                                            }
+                                            Assignment updated = new Assignment(
+                                                    existing.getId(),
+                                                    existing.getScheduleId(),
+                                                    existing.getFleetId(),
+                                                    nextVehicle,
+                                                    nextDriver,
+                                                    existing.getMissionId(),
+                                                    existing.getStartDatetime(),
+                                                    existing.getEndDatetime(),
+                                                    existing.getStatus(),
+                                                    existing.getStartLocation(),
+                                                    existing.getEndLocation(),
+                                                    existing.getEstimatedKm(),
+                                                    existing.getActualKm(),
+                                                    existing.getNotes(),
+                                                    existing.getCreatedAt()
+                                            );
+                                            return assignmentPersistencePort.save(updated);
+                                        });
+                            });
+                });
+    }
+
+    @Override
     public Mono<Void> delete(UUID id) {
         return assignmentPersistencePort.existsById(id)
                 .flatMap(exists -> {

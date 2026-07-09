@@ -27,6 +27,9 @@ public class DriverPersistenceAdapter implements DriverPersistencePort {
                     existing.setStatus(driver.status());
                     existing.setAssignedVehicleId(driver.assignedVehicleId());
                     existing.setFleetId(driver.fleetId());
+                    existing.setPhotoUrl(driver.photoUrl());
+                    existing.setKernelActorId(driver.kernelActorId());
+                    existing.markAsExisting();
                     return existing;
                 })
                 .switchIfEmpty(Mono.defer(() -> {

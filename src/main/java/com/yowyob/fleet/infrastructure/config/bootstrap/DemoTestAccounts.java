@@ -61,8 +61,16 @@ public final class DemoTestAccounts {
         map.put("manager@fleetman.cm", findAccount(MANAGER_ID));
         map.put("fleetmanager", findAccount(MANAGER_ID));
         map.put("manager", findAccount(MANAGER_ID));
+        map.put("manager2@fleetman.cm", findAccount(MANAGER_ID));
         map.put("driver", findAccount(DRIVER_ID));
+        map.put("driver1@fleetman.cm", findAccount(DRIVER_ID));
+        map.put("driver1", findAccount(DRIVER_ID));
         return Map.copyOf(map);
+    }
+
+    /** Tous les comptes connus (pour login / reset password en mode fake). */
+    public static List<Account> all() {
+        return ALL;
     }
 
     private static Account findAccount(UUID id) {

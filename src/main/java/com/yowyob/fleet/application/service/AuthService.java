@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,9 @@ public class AuthService implements AuthUseCase {
     private final FleetManagerR2dbcRepository managerRepo;
     private final FleetR2dbcRepository fleetRepo;
     private final ManageDriverUseCase driverUseCase;
+
+    @Value("${application.kernel.tenant-id:}")
+    private String defaultTenantId;
 
     @Override
     public Mono<AuthPort.AuthResponse> login(
@@ -111,9 +115,10 @@ public class AuthService implements AuthUseCase {
             .flatMap(res -> {
                 String token = res.accessToken();
                 UUID userId = res.user().id();
+                boolean hasSessionToken = token != null && !token.isBlank();
 
                 // 1. TENTATIVE PHOTO (NON-BLOQUANTE)
-                Mono<Void> photoFlow = (command.photo() != null)
+                Mono<Void> photoFlow = (command.photo() != null && hasSessionToken)
                     ? this.updateProfilePicture(
                           userId,
                           token,
@@ -127,8 +132,12 @@ public class AuthService implements AuthUseCase {
                     : Mono.empty();
 
                 // 2. CHAINAGE : Photo -> Fetch Final -> Sync Local
+                Mono<AuthPort.UserDetail> userAfterRegistration = hasSessionToken
+                    ? authPort.getUserById(userId, token).defaultIfEmpty(res.user())
+                    : Mono.just(res.user());
+
                 return photoFlow
-                    .then(authPort.getUserById(userId, token))
+                    .then(userAfterRegistration)
                     .flatMap(freshUser ->
                         resolveLocalUser(freshUser)
                             .flatMap(localId -> ensureRoleProfileExistsForLocalId(freshUser, localId))
@@ -197,7 +206,8 @@ public class AuthService implements AuthUseCase {
                             "PENDING-" + localUserId.toString().substring(0, 8),
                             "ACTIVE",
                             null,
-                            ""
+                            "",
+                            null
                         );
                         return driverPort.save(d).then();
                     })
@@ -299,6 +309,9 @@ public class AuthService implements AuthUseCase {
                 local.setPhotoUrl(remote.photoUrl());
                 local.setLastLoginAt(Instant.now());
                 local.setKernelId(remote.id());
+                if (local.getTenantId() == null) {
+                    local.setTenantId(resolveTenantId());
+                }
                 local.setNew(false);
                 return userRepo.save(local).map(saved -> saved.getId());
             })
@@ -317,6 +330,9 @@ public class AuthService implements AuthUseCase {
                             remote.photoUrl() != null ? remote.photoUrl() : existingByEmail.getPhotoUrl());
                         existingByEmail.setLastLoginAt(Instant.now());
                         existingByEmail.setKernelId(remote.id());
+                        if (existingByEmail.getTenantId() == null) {
+                            existingByEmail.setTenantId(resolveTenantId());
+                        }
                         existingByEmail.setNew(false);
                         return userRepo.save(existingByEmail).map(saved -> saved.getId());
                     })
@@ -332,11 +348,24 @@ public class AuthService implements AuthUseCase {
                             .isActive(true)
                             .lastLoginAt(Instant.now())
                             .kernelId(remote.id())
+                            .tenantId(resolveTenantId())
                             .build();
                         n.setNew(true);
                         return userRepo.save(n).map(saved -> saved.getId());
                     }))
             ));
+    }
+
+    private UUID resolveTenantId() {
+        if (defaultTenantId == null || defaultTenantId.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(defaultTenantId);
+        } catch (IllegalArgumentException e) {
+            log.warn("⚠️ Tenant ID invalide dans la configuration: {}", defaultTenantId);
+            return null;
+        }
     }
 
     private Mono<Void> checkUserAccessByLocalId(UUID localUserId) {

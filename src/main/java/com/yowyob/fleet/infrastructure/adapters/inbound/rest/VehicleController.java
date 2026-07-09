@@ -5,6 +5,7 @@ import com.yowyob.fleet.domain.model.VehicleParameters;
 import com.yowyob.fleet.domain.ports.in.ManageVehicleUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.MaintenanceUpdateRequest;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehicleGalleryUpdateRequest;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehicleRequest;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,10 +19,11 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehiclePatchRequest; 
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehiclePatchRequest;
 
-import com.fasterxml.jackson.databind.ObjectMapper; 
+import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -76,8 +78,10 @@ public class VehicleController {
     @GetMapping("/vehicles")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Lister mes véhicules", description = "Récupère les véhicules gérés par le manager connecté. Acteur: Manager.")
-    public Flux<Vehicle> getVehicles(Authentication auth) {
-        return vehicleUseCase.getVehicles(getUserId(auth), false, extractToken(auth));
+    public Flux<Vehicle> getVehicles(
+            @RequestParam(required = false) UUID fleetId,
+            Authentication auth) {
+        return vehicleUseCase.getVehicles(getUserId(auth), false, extractToken(auth), fleetId);
     }
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
@@ -88,16 +92,43 @@ public class VehicleController {
         return vehicleUseCase.getVehicleDetails(vehicleId, extractToken(auth));
     }
 
-    /* 
-    // MÉTHODE EN ATTENTE DE DEBUG (Mise à jour complète)
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @PutMapping("/vehicles/{vehicleId}")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Mise à jour complète (Debug)", description = "Mise à jour totale des infos techniques.")
-    public Mono<Vehicle> update(@PathVariable UUID vehicleId, @Valid @RequestBody VehicleRequest request, Authentication auth) {
-        return vehicleUseCase.updateVehicleInfo(vehicleId, request, extractToken(auth));
+    @Operation(summary = "Mise à jour véhicule (Manager UI)", description = "Accepte le payload partiel ApiVehicle du front.")
+    public Mono<Vehicle> update(
+            @PathVariable UUID vehicleId,
+            @RequestBody Map<String, Object> body,
+            Authentication auth) {
+        Map<String, Object> updates = new HashMap<>(body);
+        updates.values().removeIf(java.util.Objects::isNull);
+        // Compat galerie front → illustrationImages local
+        if (updates.containsKey("galleryUrls") && !updates.containsKey("illustrationImages")) {
+            updates.put("illustrationImages", updates.get("galleryUrls"));
+        }
+        updates.remove("galleryUrls");
+        updates.remove("id");
+        updates.remove("financialParameters");
+        updates.remove("maintenanceParameters");
+        updates.remove("operationalParameters");
+        return vehicleUseCase.patchVehicleInfo(vehicleId, updates, extractToken(auth));
     }
-    */
+
+    @Tag(name = OpenApiConfig.TAG_VHC_PARC)
+    @PutMapping("/vehicles/{vehicleId}/gallery")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Mettre à jour photo + galerie (JSON URLs)")
+    public Mono<Vehicle> updateGallery(
+            @PathVariable UUID vehicleId,
+            @RequestBody VehicleGalleryUpdateRequest request,
+            Authentication auth) {
+        return vehicleUseCase.updateVehicleGallery(
+                vehicleId,
+                request.photoUrl(),
+                request.galleryUrls(),
+                extractToken(auth)
+        );
+    }
 
 @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @PatchMapping("/vehicles/{vehicleId}")

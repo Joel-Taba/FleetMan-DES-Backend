@@ -31,8 +31,10 @@ public class AuthConfig {
             KernelAuthApiClient kernelAuthApiClient,
             KernelAdminApiClient kernelAdminApiClient,
             KernelTokenHolder kernelTokenHolder,
-            @Qualifier("kernelWebClient") WebClient kernelWebClient) {
-        return new KernelAuthAdapter(kernelAuthApiClient, kernelAdminApiClient, kernelTokenHolder, kernelWebClient);
+            @Qualifier("kernelWebClient") WebClient kernelWebClient,
+            KernelCallSupport kernelCallSupport) {
+        return new KernelAuthAdapter(
+                kernelAuthApiClient, kernelAdminApiClient, kernelTokenHolder, kernelWebClient, kernelCallSupport);
     }
 
     /** Mode remote : ancien service d'authentification Pynfi/TraMaSys */

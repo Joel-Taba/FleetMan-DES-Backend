@@ -33,12 +33,19 @@ public class DriverEntity implements Persistable<UUID> {
     @Column("photo_url")
     private String photoUrl;
 
+    @Column("kernel_actor_id")
+    private UUID kernelActorId;
+
     @Transient
     private boolean isNew = false;
 
     // Méthode utilitaire explicite pour forcer l'INSERT
     public void markAsNew() {
         this.isNew = true;
+    }
+
+    public void markAsExisting() {
+        this.isNew = false;
     }
 
     @Override

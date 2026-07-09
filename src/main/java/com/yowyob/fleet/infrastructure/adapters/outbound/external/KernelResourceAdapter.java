@@ -5,8 +5,10 @@ import com.yowyob.fleet.domain.ports.out.ExternalVehiclePort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehicleRequest;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelOrganizationApiClient;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelResourceApiClient;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
+import com.yowyob.fleet.infrastructure.config.KernelCallSupport;
 import com.yowyob.fleet.infrastructure.config.KernelTokenHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -29,8 +31,10 @@ public class KernelResourceAdapter implements ExternalVehiclePort {
     private final KernelResourceApiClient resourceClient;
     private final KernelOrganizationApiClient organizationClient;
     private final VehicleLocalR2dbcRepository vehicleRepository;
+    private final DriverR2dbcRepository driverRepository;
     private final UserLocalR2dbcRepository userRepository;
     private final KernelTokenHolder kernelTokenHolder;
+    private final KernelCallSupport kernelCallSupport;
     private final String tenantId;
     private final UUID defaultOrganizationId;
 
@@ -40,15 +44,19 @@ public class KernelResourceAdapter implements ExternalVehiclePort {
             KernelResourceApiClient resourceClient,
             KernelOrganizationApiClient organizationClient,
             VehicleLocalR2dbcRepository vehicleRepository,
+            DriverR2dbcRepository driverRepository,
             UserLocalR2dbcRepository userRepository,
             KernelTokenHolder kernelTokenHolder,
+            KernelCallSupport kernelCallSupport,
             String tenantId,
             UUID defaultOrganizationId) {
         this.resourceClient = resourceClient;
         this.organizationClient = organizationClient;
         this.vehicleRepository = vehicleRepository;
+        this.driverRepository = driverRepository;
         this.userRepository = userRepository;
         this.kernelTokenHolder = kernelTokenHolder;
+        this.kernelCallSupport = kernelCallSupport;
         this.tenantId = tenantId;
         this.defaultOrganizationId = defaultOrganizationId;
     }
@@ -87,7 +95,8 @@ public class KernelResourceAdapter implements ExternalVehiclePort {
         UUID organizationId = context.organizationId() != null
                 ? context.organizationId() : defaultOrganizationId;
 
-        return resolveToken(token)
+        return kernelCallSupport.run("kernel-resource",
+                resolveToken(token)
                 .flatMap(bearer -> ensureAgency(organizationId, bearer)
                         .flatMap(agencyId -> {
                             String serial = request.vehicleSerialNumber() != null
@@ -111,7 +120,7 @@ public class KernelResourceAdapter implements ExternalVehiclePort {
                 .flatMap(this::mapResourceResponse)
                 .doOnSuccess(v -> log.info("✅ [KERNEL RESOURCE] Ressource créée : {} ({})",
                         v.licensePlate(), v.kernelResourceId()))
-                .onErrorMap(this::wrapError);
+                .onErrorMap(this::wrapError));
     }
 
     @Override
@@ -177,25 +186,32 @@ public class KernelResourceAdapter implements ExternalVehiclePort {
 
     @Override
     public Mono<Void> assignDriverRemote(UUID vehicleId, UUID driverUserId, String token) {
-        return Mono.zip(
+        return kernelCallSupport.run("kernel-resource",
+                Mono.zip(
                         vehicleRepository.findById(vehicleId),
-                        userRepository.findById(driverUserId))
+                        driverRepository.findById(driverUserId))
                 .flatMap(tuple -> {
                     var vehicle = tuple.getT1();
                     var driver = tuple.getT2();
                     UUID resourceId = vehicle.getKernelResourceId() != null
                             ? vehicle.getKernelResourceId() : vehicleId;
-                    UUID assigneeId = driver.getKernelId() != null
-                            ? driver.getKernelId() : driverUserId;
+                    Mono<UUID> assigneeMono = driver.getKernelActorId() != null
+                            ? Mono.just(driver.getKernelActorId())
+                            : userRepository.findById(driverUserId)
+                                    .map(u -> u.getKernelId() != null ? u.getKernelId() : driverUserId)
+                                    .defaultIfEmpty(driverUserId);
                     UUID orgId = defaultOrganizationId;
-                    var body = new KernelResourceApiClient.AssignMaterialResourceRequest("ACTOR", assigneeId);
-                    return resolveToken(token)
-                            .flatMap(bearer -> resourceClient.assignResource(
-                                    bearerHeader(bearer),
-                                    tenantId,
-                                    orgId.toString(),
-                                    resourceId,
-                                    body));
+                    return assigneeMono.flatMap(assigneeIdResolved -> {
+                        var body = new KernelResourceApiClient.AssignMaterialResourceRequest(
+                                "ACTOR", assigneeIdResolved);
+                        return resolveToken(token)
+                                .flatMap(bearer -> resourceClient.assignResource(
+                                        bearerHeader(bearer),
+                                        tenantId,
+                                        orgId.toString(),
+                                        resourceId,
+                                        body));
+                    });
                 })
                 .doOnSuccess(v -> log.info("✅ [KERNEL RESOURCE] Conducteur {} assigné au véhicule {}",
                         driverUserId, vehicleId))
@@ -203,7 +219,7 @@ public class KernelResourceAdapter implements ExternalVehiclePort {
                 .onErrorResume(e -> {
                     log.warn("⚠️ [KERNEL RESOURCE] Assignation conducteur ignorée : {}", e.getMessage());
                     return Mono.empty();
-                });
+                }));
     }
 
     private Mono<UUID> ensureAgency(UUID organizationId, String bearerToken) {

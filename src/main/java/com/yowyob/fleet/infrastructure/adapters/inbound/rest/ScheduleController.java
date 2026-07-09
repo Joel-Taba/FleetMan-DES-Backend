@@ -128,12 +128,26 @@ public class ScheduleController {
         return scheduleUseCase.publish(id).map(ScheduleResponse::from);
     }
 
+    @PatchMapping("/{id}/publish")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Publier un planning (alias PATCH Manager UI)")
+    public Mono<ScheduleResponse> publishPatch(@PathVariable UUID id) {
+        return publish(id);
+    }
+
     @PutMapping("/{id}/archive")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Archiver un planning",
                description = "Archive le planning. Action irréversible.")
     public Mono<ScheduleResponse> archive(@PathVariable UUID id) {
         return scheduleUseCase.archive(id).map(ScheduleResponse::from);
+    }
+
+    @PatchMapping("/{id}/archive")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Archiver un planning (alias PATCH Manager UI)")
+    public Mono<ScheduleResponse> archivePatch(@PathVariable UUID id) {
+        return archive(id);
     }
 
     // ── MISE À JOUR ───────────────────────────────────────────────────────────

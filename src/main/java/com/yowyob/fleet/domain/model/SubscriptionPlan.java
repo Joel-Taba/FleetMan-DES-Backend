@@ -1,5 +1,7 @@
 package com.yowyob.fleet.domain.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -40,6 +42,7 @@ public class SubscriptionPlan {
     public BigDecimal getAnnualPrice() { return annualPrice; }
     public String getCurrency() { return currency; }
     public String getFeatures() { return features; }
+    @JsonProperty("isActive")
     public boolean isActive() { return isActive; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

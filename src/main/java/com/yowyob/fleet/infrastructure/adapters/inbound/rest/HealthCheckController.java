@@ -98,19 +98,39 @@ public class HealthCheckController {
             statisticsPort.countFleetManagers(),
             statisticsPort.countFleets(),
             statisticsPort.countVehicles(),
-            statisticsPort.countDrivers()
+            statisticsPort.countDrivers(),
+            statisticsPort.countActiveAdmins()
         ).map(t -> {
             Map<String, Object> stats = new HashMap<>();
             stats.put("activeManagers", t.getT1());
             stats.put("totalFleets", t.getT2());
             stats.put("managedVehicles", t.getT3());
             stats.put("totalDrivers", t.getT4());
+            stats.put("activeAdmins", t.getT5());
             stats.put("serviceStatus", "All systems operational");
             return stats;
         }).flatMap(stats ->
             redisTemplate.opsForValue().set(STATS_CACHE_KEY, stats, Duration.ofHours(6))
                 .thenReturn(stats)
-        );
+        ).onErrorResume(e -> {
+            // Redis/DB dégradé : renvoyer des stats calculées sans cache
+            return Mono.zip(
+                statisticsPort.countFleetManagers().onErrorReturn(0L),
+                statisticsPort.countFleets().onErrorReturn(0L),
+                statisticsPort.countVehicles().onErrorReturn(0L),
+                statisticsPort.countDrivers().onErrorReturn(0L),
+                statisticsPort.countActiveAdmins().onErrorReturn(0L)
+            ).map(t -> {
+                Map<String, Object> stats = new HashMap<>();
+                stats.put("activeManagers", t.getT1());
+                stats.put("totalFleets", t.getT2());
+                stats.put("managedVehicles", t.getT3());
+                stats.put("totalDrivers", t.getT4());
+                stats.put("activeAdmins", t.getT5());
+                stats.put("serviceStatus", "Degraded");
+                return stats;
+            });
+        });
     }
 
     // --- Helpers de sonde ---

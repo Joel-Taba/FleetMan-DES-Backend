@@ -21,10 +21,14 @@ import com.yowyob.fleet.domain.ports.out.GeofencePersistencePort; // AJOUTER
 import com.yowyob.fleet.domain.ports.out.FleetRepositoryPort;     // AJOUTER
 
 
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.VehicleIllustrationImageEntity;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleIllustrationImageR2dbcRepository;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -52,6 +56,7 @@ public class VehicleService implements ManageVehicleUseCase {
     private final VehicleColorR2dbcRepository colorRepo;
     
     private final OperationalParameterR2dbcRepository operationalRepo;
+    private final VehicleIllustrationImageR2dbcRepository galleryRepo;
     private final PlanLimitGuard planLimitGuard;
 
     // ========================================================================
@@ -118,91 +123,194 @@ public class VehicleService implements ManageVehicleUseCase {
 
     @Override
     public Flux<Vehicle> getVehicles(UUID requesterId, boolean isAdmin, String token) {
-        Flux<Vehicle> localStream = isAdmin ? 
-                localPersistencePort.getAllVehicles() : 
+        return getVehicles(requesterId, isAdmin, token, null);
+    }
+
+    public Flux<Vehicle> getVehicles(UUID requesterId, boolean isAdmin, String token, UUID fleetId) {
+        Flux<Vehicle> localStream = isAdmin ?
+                localPersistencePort.getAllVehicles() :
                 localPersistencePort.getVehiclesByManager(requesterId);
 
+        if (fleetId != null) {
+            localStream = localStream.filter(v -> fleetId.equals(v.fleetId()));
+        }
+
         return localStream.flatMap(v -> getVehicleDetails(v.id(), token)
-                .onErrorResume(e -> Mono.just(v))); 
+                .onErrorResume(e -> Mono.just(v)));
     }
 
     @Override
     @Transactional
     public Mono<Vehicle> createIndependentVehicle(VehicleRequest request, UUID managerId, String token) {
-        return createVehicle(null, request, managerId, token);
+        UUID fleetId = request.fleetId();
+        return createVehicle(fleetId, request, managerId, token);
     }
 
     @Override
     @Transactional
     public Mono<Vehicle> createVehicle(UUID fleetId, VehicleRequest req, UUID managerId, String token) {
-        return planLimitGuard.assertCanCreateVehicle(managerId)
-                .then(Mono.defer(() -> Mono.zip(
-            args -> args, // Combinateur : on retourne le tableau brut
-            vehicleTypeRepo.findById(req.vehicleTypeId()).switchIfEmpty(Mono.error(VehicleException.invalidVehicleType())),
-            mfrRepo.findById(req.manufacturerId()),
-            brandRepo.findById(req.brandId()),
-            modelRepo.findById(req.modelId()),
-            sizeRepo.findById(req.sizeId()),
-            usageRepo.findById(req.usageTypeId()),
-            fuelRepo.findById(req.fuelTypeId()),
-            transRepo.findById(req.transmissionTypeId()),
-            colorRepo.findById(req.colorId())
-        )
-        .cast(Object[].class)
-        .flatMap(args -> {
-            // On récupère les entités par leur index (0 à 8)
-            var typeEntity  = (com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.VehicleTypeEntity) args[0]; // Attention au type si different
-            var brandLabel  = ((com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.resources.BrandEntity) args[2]).getLabel();
-            var modelLabel  = ((com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.resources.VehicleModelEntity) args[3]).getLabel();
-            var fuelLabel   = ((com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.resources.FuelTypeEntity) args[6]).getLabel();
-            var transLabel  = ((com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.resources.TransmissionTypeEntity) args[7]).getLabel();
-            var colorLabel  = ((com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.resources.VehicleColorEntity) args[8]).getLabel();
+        UUID resolvedFleetId = fleetId != null ? fleetId : req.fleetId();
+        boolean lookupMode = req.brandId() != null && req.modelId() != null
+                && req.fuelTypeId() != null && req.transmissionTypeId() != null && req.colorId() != null;
 
-                return resolveRemoteContext(fleetId)
+        Mono<Void> ownership = resolvedFleetId != null
+                ? fleetRepository.existsByIdAndManagerId(resolvedFleetId, managerId)
+                        .filter(Boolean::booleanValue)
+                        .switchIfEmpty(Mono.error(new RuntimeException("Flotte introuvable ou accès refusé.")))
+                        .then()
+                : Mono.empty();
+
+        return planLimitGuard.assertCanCreateVehicle(managerId)
+                .then(ownership)
+                .then(Mono.defer(() -> resolveCreateLabels(req, lookupMode)))
+                .flatMap(labels -> resolveVehicleTypeId(req)
+                        .flatMap(typeId -> resolveRemoteContext(resolvedFleetId)
                 .flatMap(context -> externalVehiclePort.createRemoteVehicle(
-                    req,
-                    token,
-                    brandLabel,
-                    modelLabel,
-                    fuelLabel,
-                    transLabel,
-                    colorLabel,
+                    req, token,
+                    labels.brand(), labels.model(), labels.fuel(), labels.trans(), labels.color(),
                     context
                 ))
                 .flatMap(remote -> {
                     UUID kernelResourceId = remote.kernelResourceId() != null
                             ? remote.kernelResourceId() : remote.id();
                     Vehicle shell = new Vehicle(
-                        remote.id(), fleetId, managerId, null, req.vehicleTypeId(),
-                        req.licensePlate(), remote.vehicleSerialNumber(), brandLabel, modelLabel,
-                        req.manufacturingYear(), transLabel, fuelLabel,
+                        remote.id(), resolvedFleetId, managerId, null, typeId,
+                        req.licensePlate(), remote.vehicleSerialNumber(), labels.brand(), labels.model(),
+                        req.manufacturingYear(), labels.trans(), labels.fuel(),
                         req.tankCapacity(), req.totalSeatNumber(), req.averageFuelConsumption(),
-                        colorLabel, "AVAILABLE", remote.photoUrl(),
+                        labels.color(), "AVAILABLE", remote.photoUrl(),
                         null, null, Collections.emptyList(), null, null, null, null,
                         kernelResourceId);
-                    
                     return localPersistencePort.saveLocalData(shell);
                 })
                 .flatMap(savedLocal -> geofencePort.registerRemoteVehicle(savedLocal)
                          .flatMap(geofenceRemoteId -> {
                             log.info("✅ Véhicule synchronisé Geofence. RemoteID: {}", geofenceRemoteId);
-                            // Mise à jour de l'ID distant localement
                             Vehicle updated = savedLocal.withGeofenceRemoteId(geofenceRemoteId);
                             return localPersistencePort.saveLocalData(updated);
                         })
                         .onErrorResume(e -> {
-                            log.warn("⚠️ Échec partiel Synchro Geofence (Le véhicule est créé mais pas lié au moteur geo): {}", e.getMessage());
+                            log.warn("⚠️ Échec partiel Synchro Geofence: {}", e.getMessage());
                             return Mono.just(savedLocal);
                         })
-                );
-        }))).flatMap(v -> getVehicleDetails(v.id(), token));
+                )))
+                .flatMap(v -> getVehicleDetails(v.id(), token));
+    }
+
+    private record CreateLabels(String brand, String model, String fuel, String trans, String color) {}
+
+    private Mono<CreateLabels> resolveCreateLabels(VehicleRequest req, boolean lookupMode) {
+        if (!lookupMode) {
+            String brand = requireLabel(req.brand(), "brand");
+            String model = requireLabel(req.model(), "model");
+            return Mono.just(new CreateLabels(
+                    brand,
+                    model,
+                    req.fuelType() != null ? req.fuelType() : "Diesel",
+                    req.transmissionType() != null ? req.transmissionType() : "MANUAL",
+                    req.color() != null ? req.color() : "Non spécifié"
+            ));
+        }
+        return Mono.zip(
+                brandRepo.findById(req.brandId()).map(b -> b.getLabel()).switchIfEmpty(Mono.just("Unknown")),
+                modelRepo.findById(req.modelId()).map(m -> m.getLabel()).switchIfEmpty(Mono.just("Unknown")),
+                fuelRepo.findById(req.fuelTypeId()).map(f -> f.getLabel()).switchIfEmpty(Mono.just("Diesel")),
+                transRepo.findById(req.transmissionTypeId()).map(t -> t.getLabel()).switchIfEmpty(Mono.just("MANUAL")),
+                colorRepo.findById(req.colorId()).map(c -> c.getLabel()).switchIfEmpty(Mono.just("Non spécifié"))
+        ).map(t -> new CreateLabels(t.getT1(), t.getT2(), t.getT3(), t.getT4(), t.getT5()));
+    }
+
+    private Mono<UUID> resolveVehicleTypeId(VehicleRequest req) {
+        if (req.vehicleTypeId() != null) {
+            return Mono.just(req.vehicleTypeId());
+        }
+        return vehicleTypeRepo.findAll().next()
+                .map(t -> t.getId())
+                .switchIfEmpty(Mono.error(VehicleException.invalidVehicleType()));
+    }
+
+    private static String requireLabel(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " est obligatoire");
+        }
+        return value.trim();
     }
 
     @Override
     @Transactional
     public Mono<Vehicle> patchVehicleInfo(UUID id, Map<String, Object> updates, String token) {
-        return externalVehiclePort.patchRemoteVehicle(id, updates, token)
-                .flatMap(remote -> syncLocalCache(remote, id));
+        return localPersistencePort.getLocalDataById(id)
+                .switchIfEmpty(Mono.error(VehicleException.notFound(id)))
+                .flatMap(local -> externalVehiclePort.patchRemoteVehicle(id, updates, token)
+                        .flatMap(remote -> syncLocalCache(remote, id))
+                        .switchIfEmpty(Mono.defer(() -> {
+                            Vehicle updated = new Vehicle(
+                                    local.id(), local.fleetId(), local.managerId(), local.currentDriverId(), local.vehicleTypeId(),
+                                    updates.containsKey("licensePlate") ? String.valueOf(updates.get("licensePlate")) : local.licensePlate(),
+                                    updates.containsKey("vehicleSerialNumber") ? String.valueOf(updates.get("vehicleSerialNumber")) : local.vehicleSerialNumber(),
+                                    updates.containsKey("brand") ? String.valueOf(updates.get("brand")) : local.brand(),
+                                    updates.containsKey("model") ? String.valueOf(updates.get("model")) : local.model(),
+                                    updates.containsKey("manufacturingYear") ? toInt(updates.get("manufacturingYear")) : local.manufacturingYear(),
+                                    updates.containsKey("transmissionType") ? String.valueOf(updates.get("transmissionType")) : local.transmissionType(),
+                                    updates.containsKey("fuelType") ? String.valueOf(updates.get("fuelType")) : local.fuelType(),
+                                    local.tankCapacity(), local.totalSeatNumber(), local.averageFuelConsumption(),
+                                    updates.containsKey("color") ? String.valueOf(updates.get("color")) : local.color(),
+                                    updates.containsKey("status") ? String.valueOf(updates.get("status")) : local.status(),
+                                    updates.containsKey("photoUrl") ? (updates.get("photoUrl") == null ? null : String.valueOf(updates.get("photoUrl"))) : local.photoUrl(),
+                                    local.serialNumberPhotoUrl(), local.registrationPhotoUrl(),
+                                    local.illustrationImages(), local.financialParameters(),
+                                    local.maintenanceParameters(), local.operationalParameters(),
+                                    local.geofenceRemoteId(), local.kernelResourceId()
+                            );
+                            UUID fleetIdUpdate = toUuid(updates.get("fleetId"));
+                            if (fleetIdUpdate != null) {
+                                updated = new Vehicle(
+                                        updated.id(), fleetIdUpdate, updated.managerId(), updated.currentDriverId(), updated.vehicleTypeId(),
+                                        updated.licensePlate(), updated.vehicleSerialNumber(), updated.brand(), updated.model(),
+                                        updated.manufacturingYear(), updated.transmissionType(), updated.fuelType(),
+                                        updated.tankCapacity(), updated.totalSeatNumber(), updated.averageFuelConsumption(),
+                                        updated.color(), updated.status(), updated.photoUrl(),
+                                        updated.serialNumberPhotoUrl(), updated.registrationPhotoUrl(),
+                                        updated.illustrationImages(), updated.financialParameters(),
+                                        updated.maintenanceParameters(), updated.operationalParameters(),
+                                        updated.geofenceRemoteId(), updated.kernelResourceId()
+                                );
+                            }
+                            return localPersistencePort.saveLocalData(updated);
+                        })));
+    }
+
+    @Override
+    @Transactional
+    public Mono<Vehicle> updateVehicleGallery(UUID vehicleId, String photoUrl, java.util.List<String> galleryUrls, String token) {
+        Mono<Void> photoUpdate = photoUrl != null
+                ? localPersistencePort.updateVehiclePhotos(vehicleId, photoUrl, null, null)
+                : Mono.empty();
+        Mono<Void> galleryUpdate = galleryUrls != null
+                ? replaceGallery(vehicleId, galleryUrls)
+                : Mono.empty();
+        return photoUpdate.then(galleryUpdate).then(getVehicleDetails(vehicleId, token));
+    }
+
+    private Mono<Void> replaceGallery(UUID vehicleId, java.util.List<String> galleryUrls) {
+        return galleryRepo.findByVehicleId(vehicleId)
+                .flatMap(img -> galleryRepo.deleteById(img.getId()))
+                .then(Flux.fromIterable(galleryUrls == null ? List.of() : galleryUrls)
+                        .filter(url -> url != null && !url.isBlank())
+                        .concatMap(url -> galleryRepo.save(new VehicleIllustrationImageEntity(UUID.randomUUID(), vehicleId, url)))
+                        .then());
+    }
+
+    private static Integer toInt(Object value) {
+        if (value == null) return null;
+        if (value instanceof Number n) return n.intValue();
+        try { return Integer.parseInt(value.toString()); } catch (NumberFormatException e) { return null; }
+    }
+
+    private static UUID toUuid(Object value) {
+        if (value == null) return null;
+        if (value instanceof UUID u) return u;
+        try { return UUID.fromString(value.toString()); } catch (Exception e) { return null; }
     }
 
     @Override
@@ -348,13 +456,22 @@ public class VehicleService implements ManageVehicleUseCase {
                 .flatMap(local -> {
                     Vehicle updated = new Vehicle(
                         local.id(), local.fleetId(), local.managerId(), local.currentDriverId(), local.vehicleTypeId(),
-                        remote.licensePlate(), remote.vehicleSerialNumber(), remote.brand(), remote.model(),
-                        local.manufacturingYear(), remote.transmissionType(), remote.fuelType(),
-                        remote.tankCapacity(), remote.totalSeatNumber(), remote.averageFuelConsumption(),
-                        local.color(), local.status(), remote.photoUrl(),
-                        remote.serialNumberPhotoUrl(), remote.registrationPhotoUrl(),
-                        local.illustrationImages(), local.financialParameters(), 
-                        local.maintenanceParameters(),                         local.operationalParameters(),
+                        remote.licensePlate() != null ? remote.licensePlate() : local.licensePlate(),
+                        remote.vehicleSerialNumber() != null ? remote.vehicleSerialNumber() : local.vehicleSerialNumber(),
+                        remote.brand() != null ? remote.brand() : local.brand(),
+                        remote.model() != null ? remote.model() : local.model(),
+                        local.manufacturingYear(),
+                        remote.transmissionType() != null ? remote.transmissionType() : local.transmissionType(),
+                        remote.fuelType() != null ? remote.fuelType() : local.fuelType(),
+                        remote.tankCapacity() != null ? remote.tankCapacity() : local.tankCapacity(),
+                        remote.totalSeatNumber() != null ? remote.totalSeatNumber() : local.totalSeatNumber(),
+                        remote.averageFuelConsumption() != null ? remote.averageFuelConsumption() : local.averageFuelConsumption(),
+                        local.color(), local.status(),
+                        remote.photoUrl() != null ? remote.photoUrl() : local.photoUrl(),
+                        remote.serialNumberPhotoUrl() != null ? remote.serialNumberPhotoUrl() : local.serialNumberPhotoUrl(),
+                        remote.registrationPhotoUrl() != null ? remote.registrationPhotoUrl() : local.registrationPhotoUrl(),
+                        local.illustrationImages(), local.financialParameters(),
+                        local.maintenanceParameters(), local.operationalParameters(),
                         local.geofenceRemoteId(),
                         local.kernelResourceId()
                     );

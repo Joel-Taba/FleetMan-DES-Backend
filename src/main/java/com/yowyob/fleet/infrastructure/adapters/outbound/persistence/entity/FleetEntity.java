@@ -32,6 +32,9 @@ public class FleetEntity implements Persistable<UUID> {
     @Column("kernel_organization_id")
     private UUID kernelOrganizationId;
 
+    @Column("tenant_id")
+    private UUID tenantId;
+
     @Column("created_at")
     private Instant createdAt;
 

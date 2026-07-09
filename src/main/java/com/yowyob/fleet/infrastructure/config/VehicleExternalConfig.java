@@ -7,6 +7,7 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.external.VehicleApiAdap
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelOrganizationApiClient;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelResourceApiClient;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.VehicleApiClient;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,16 +33,20 @@ public class VehicleExternalConfig {
             KernelResourceApiClient resourceClient,
             KernelOrganizationApiClient organizationClient,
             VehicleLocalR2dbcRepository vehicleRepository,
+            DriverR2dbcRepository driverRepository,
             UserLocalR2dbcRepository userRepository,
             KernelTokenHolder kernelTokenHolder,
+            KernelCallSupport kernelCallSupport,
             @Value("${application.kernel.tenant-id}") String tenantId,
             @Value("${application.kernel.organization-id}") String organizationId) {
         return new KernelResourceAdapter(
                 resourceClient,
                 organizationClient,
                 vehicleRepository,
+                driverRepository,
                 userRepository,
                 kernelTokenHolder,
+                kernelCallSupport,
                 tenantId,
                 UUID.fromString(organizationId));
     }

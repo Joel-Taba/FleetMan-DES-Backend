@@ -16,8 +16,9 @@ public class OrganizationConfig {
     @ConditionalOnProperty(name = "application.auth.mode", havingValue = "kernel")
     public ExternalOrganizationPort kernelOrganizationPort(
             KernelOrganizationApiClient organizationClient,
+            KernelCallSupport kernelCallSupport,
             @Value("${application.kernel.tenant-id}") String tenantId) {
-        return new KernelOrganizationAdapter(organizationClient, tenantId);
+        return new KernelOrganizationAdapter(organizationClient, kernelCallSupport, tenantId);
     }
 
     @Bean

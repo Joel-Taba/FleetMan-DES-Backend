@@ -33,6 +33,7 @@ public interface ManageAssignmentUseCase {
                                            LocalDateTime end,
                                            UUID excludeAssignmentId);
     Mono<Assignment> updateStatus(UUID id, Assignment.Status newStatus, BigDecimal actualKm);
+    Mono<Assignment> updateResources(UUID id, UUID vehicleId, UUID driverId);
     Mono<Void> delete(UUID id);
 
     // ── Records Command ───────────────────────────────────────────────────────

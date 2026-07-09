@@ -110,3 +110,19 @@ databaseChangeLog:
   # 30. Limites plan Starter — environnement de test
   - include:
       file: db/changelog/changes/030-dev-plan-limits.sql
+
+  # 31. Documents de souscription + plan demandé à l'inscription
+  - include:
+      file: db/changelog/changes/031-subscription-documents.sql
+
+  # 32. Paramètres applicatifs (période de grâce globale)
+  - include:
+      file: db/changelog/changes/032-app-settings.sql
+
+  # 33. Intégration Kernel — kernel_actor_id drivers
+  - include:
+      file: db/changelog/changes/033-kernel-actor-id.sql
+
+  # 34. Multi-tenancy — tenant_id sur toutes les tables fleet
+  - include:
+      file: db/changelog/changes/034-tenant-id-all-tables.sql

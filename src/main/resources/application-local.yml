@@ -43,6 +43,11 @@ spring:
   kafka:
     bootstrap-servers: ""
 
+application:
+  kafka:
+    kernel-events:
+      enabled: false
+
 management:
   health:
     redis:

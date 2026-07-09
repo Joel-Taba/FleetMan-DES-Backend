@@ -5,7 +5,9 @@ import com.yowyob.fleet.domain.ports.in.AuthUseCase;
 import com.yowyob.fleet.domain.ports.in.ManageSubscriptionPlanUseCase;
 import com.yowyob.fleet.domain.ports.in.ManageSuperAdminUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ApiResponse;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
+import com.yowyob.fleet.infrastructure.config.security.FleetPermissions;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -43,6 +45,8 @@ public class SuperAdminController {
 
     private final ManageSuperAdminUseCase superAdminUseCase;
     private final ManageSubscriptionPlanUseCase planUseCase;
+    private final com.yowyob.fleet.application.service.AppSettingsService appSettingsService;
+    private final com.yowyob.fleet.application.service.SubscriptionRegistrationService registrationService;
 
     public record CreatePlanRequest(
         @NotBlank String name,
@@ -53,7 +57,8 @@ public class SuperAdminController {
         java.math.BigDecimal monthlyPrice,
         java.math.BigDecimal annualPrice,
         String currency,
-        String features
+        String features,
+        java.util.List<ManageSubscriptionPlanUseCase.PlanFeatureCommand> technicalFeatures
     ) {}
 
     public record UpdatePlanRequest(
@@ -69,7 +74,11 @@ public class SuperAdminController {
 
     public record AssignPlanRequest(@NotNull UUID planId) {}
 
-    public record RejectRequest(@NotBlank String reason) {}
+    public record RejectRequest(
+        @NotBlank String reason,
+        String subject,
+        String message
+    ) {}
 
     public record CreateAdminRequest(
         @NotBlank String username,
@@ -201,7 +210,13 @@ public class SuperAdminController {
                 req.currency(),
                 req.features()
             )
-        );
+        ).flatMap(plan -> {
+            if (req.technicalFeatures() == null || req.technicalFeatures().isEmpty()) {
+                return Mono.just(plan);
+            }
+            return planUseCase.replacePlanFeatures(plan.getId(), req.technicalFeatures())
+                    .thenReturn(plan);
+        });
     }
 
     @GetMapping("/plans")
@@ -251,8 +266,14 @@ public class SuperAdminController {
 
     @GetMapping("/subscriptions/pending")
     @Operation(summary = "Lister les demandes d'inscription en attente")
-    public Flux<Object> listPending() {
+    public Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.PendingSubscriptionDto> listPending() {
         return planUseCase.listPendingSubscriptions();
+    }
+
+    @GetMapping("/subscriptions/history")
+    @Operation(summary = "Historique des demandes approuvées ou rejetées")
+    public Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SubscriptionHistoryDto> listHistory() {
+        return planUseCase.listSubscriptionHistory();
     }
 
     @PatchMapping("/subscriptions/{id}/approve")
@@ -277,7 +298,8 @@ public class SuperAdminController {
 
     @PatchMapping("/subscriptions/{id}/reject")
     @Operation(summary = "Rejeter une inscription de gestionnaire")
-    public Mono<Void> reject(
+    @PreAuthorize("hasRole('FLEET_SUPER_ADMIN') or hasAuthority('" + FleetPermissions.SUBSCRIPTION_MANAGE + "')")
+    public Mono<ApiResponse<java.util.Map<String, String>>> reject(
         @PathVariable UUID id,
         @org.springframework.web.bind.annotation.RequestBody RejectRequest req,
         Authentication auth
@@ -286,9 +308,37 @@ public class SuperAdminController {
             new ManageSubscriptionPlanUseCase.RejectSubscriptionCommand(
                 id,
                 getUserId(auth),
-                req.reason()
+                req.reason(),
+                req.subject(),
+                req.message()
             )
-        );
+        ).thenReturn(ApiResponse.ok(java.util.Map.of("status", "REJECTED", "id", id.toString())));
+    }
+
+    @GetMapping("/subscriptions/{id}/documents")
+    @Operation(summary = "Documents fournis lors de la demande de souscription")
+    public Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SubscriptionDocumentResponse> listSubscriptionDocuments(
+        @PathVariable UUID id
+    ) {
+        return registrationService.listDocuments(id);
+    }
+
+    @GetMapping("/settings/subscription-grace-days")
+    @Operation(summary = "Période de grâce après expiration d'abonnement")
+    public Mono<java.util.Map<String, Integer>> getGraceDays() {
+        return appSettingsService.getSubscriptionGraceDays()
+                .map(days -> java.util.Map.of("graceDays", days));
+    }
+
+    public record GraceDaysRequest(int graceDays) {}
+
+    @PutMapping("/settings/subscription-grace-days")
+    @Operation(summary = "Modifier la période de grâce après expiration")
+    public Mono<java.util.Map<String, Integer>> updateGraceDays(
+        @RequestBody GraceDaysRequest req
+    ) {
+        return appSettingsService.updateSubscriptionGraceDays(req.graceDays())
+                .map(days -> java.util.Map.of("graceDays", days));
     }
 
     @GetMapping("/subscriptions/active")

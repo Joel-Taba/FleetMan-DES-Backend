@@ -6,16 +6,23 @@ import com.yowyob.fleet.domain.ports.in.AuthUseCase;
 import com.yowyob.fleet.domain.ports.in.ManageDriverUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.domain.ports.out.DriverPersistencePort;
+import com.yowyob.fleet.domain.ports.out.ExternalActorPort;
 import com.yowyob.fleet.domain.ports.out.ExternalVehiclePort;
 import com.yowyob.fleet.domain.ports.out.VehiclePersistencePort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverRegistrationRequest;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerDriverCreateRequest;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerDriverUpdateRequest;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.NotificationType;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.UserLocalEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
+import com.yowyob.fleet.infrastructure.config.bootstrap.DemoTestAccounts;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.security.SecurityProperties.User;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -25,8 +32,10 @@ import reactor.core.publisher.Mono;
 import com.yowyob.fleet.domain.ports.out.SendNotificationPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SendNotificationRequest;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -39,10 +48,14 @@ public class DriverService implements ManageDriverUseCase {
     private final AuthPort authPort;
     private final FleetR2dbcRepository fleetRepository;
     private final ExternalVehiclePort externalVehiclePort;
+    private final ExternalActorPort externalActorPort;
     private final UserLocalR2dbcRepository userRepo;
     private final PlanLimitGuard planLimitGuard;
 
     private static final String SERVICE_NAME = "FLEET_MANAGEMENT";
+
+    @Value("${application.kernel.tenant-id:}")
+    private String defaultTenantId;
 
     // --- 1. CRÉATION COMPLÈTE ---
     @Override
@@ -55,16 +68,100 @@ public class DriverService implements ManageDriverUseCase {
                             request.firstName(), request.lastName(), List.of("FLEET_DRIVER"), null);
                     return authPort.registerInRemote(command);
                 }))
-                .flatMap(authRes -> {
+                .flatMap(authRes -> saveDriverWithKernelActor(
+                        fleetId, request, authRes));
+    }
+
+    private Mono<Driver> saveDriverWithKernelActor(
+            UUID fleetId, DriverRegistrationRequest request, AuthPort.AuthResponse authRes) {
+
+        UUID kernelUserId = authRes.user().id();
+        Mono<Optional<UUID>> actorIdMono = fleetRepository.findById(fleetId)
+                .flatMap(fleet -> {
+                    if (!externalActorPort.isEnabled() || fleet.getKernelOrganizationId() == null) {
+                        return Mono.empty();
+                    }
+                    return externalActorPort.provisionDriverActor(
+                            kernelUserId,
+                            request.email(),
+                            request.firstName(),
+                            request.lastName(),
+                            fleet.getKernelOrganizationId(),
+                            "FLEET_DRIVER");
+                })
+                .map(Optional::of)
+                .defaultIfEmpty(Optional.empty());
+
+        return ensureLocalUserSynced(authRes.user(), request)
+                .zipWith(actorIdMono)
+                .flatMap(tuple -> {
+                    UUID localUserId = tuple.getT1();
+                    Optional<UUID> actorIdOpt = tuple.getT2();
                     Driver localDriver = new Driver(
-                            authRes.user().id(),
+                            localUserId,
                             fleetId,
                             request.licenceNumber(),
                             "ACTIVE",
                             null,
-                            null);
+                            authRes.user().photoUrl(),
+                            actorIdOpt.orElse(null));
                     return driverPersistencePort.save(localDriver);
                 });
+    }
+
+    private Mono<UUID> ensureLocalUserSynced(AuthPort.UserDetail remoteUser, DriverRegistrationRequest request) {
+        return userRepo.findByKernelId(remoteUser.id())
+                .switchIfEmpty(userRepo.findById(remoteUser.id()))
+                .flatMap(local -> updateLocalUser(local, remoteUser, request).map(UserLocalEntity::getId))
+                .switchIfEmpty(Mono.defer(() ->
+                        userRepo.findByEmail(request.email())
+                                .flatMap(existing -> updateLocalUser(existing, remoteUser, request).map(UserLocalEntity::getId))
+                                .switchIfEmpty(createLocalUser(remoteUser, request).map(UserLocalEntity::getId))
+                ));
+    }
+
+    private Mono<UserLocalEntity> updateLocalUser(UserLocalEntity local, AuthPort.UserDetail remoteUser, DriverRegistrationRequest request) {
+        local.setUsername(remoteUser.username() != null ? remoteUser.username() : request.username());
+        local.setEmail(request.email());
+        local.setFirstName(request.firstName());
+        local.setLastName(request.lastName());
+        local.setPhotoUrl(remoteUser.photoUrl());
+        local.setKernelId(remoteUser.id());
+        local.setLastLoginAt(Instant.now());
+        if (local.getTenantId() == null) {
+            local.setTenantId(resolveTenantId());
+        }
+        local.setNewRecord(false);
+        return userRepo.save(local);
+    }
+
+    private Mono<UserLocalEntity> createLocalUser(AuthPort.UserDetail remoteUser, DriverRegistrationRequest request) {
+        UserLocalEntity created = UserLocalEntity.builder()
+                .id(remoteUser.id())
+                .username(remoteUser.username() != null ? remoteUser.username() : request.username())
+                .email(request.email())
+                .firstName(request.firstName())
+                .lastName(request.lastName())
+                .photoUrl(remoteUser.photoUrl())
+                .isActive(true)
+                .lastLoginAt(Instant.now())
+                .kernelId(remoteUser.id())
+                .tenantId(resolveTenantId())
+                .build();
+        created.setNewRecord(true);
+        return userRepo.save(created);
+    }
+
+    private UUID resolveTenantId() {
+        if (defaultTenantId == null || defaultTenantId.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(defaultTenantId);
+        } catch (IllegalArgumentException e) {
+            log.warn("⚠️ Tenant ID invalide dans la configuration: {}", defaultTenantId);
+            return null;
+        }
     }
 
     // --- 2. RECRUTEMENT ---
@@ -176,11 +273,7 @@ public class DriverService implements ManageDriverUseCase {
                     );
                     return authPort.registerInRemote(cmd);
                 }))
-                .flatMap(authRes -> {
-                    // 2. Profil local
-                    Driver d = new Driver(authRes.user().id(), fleetId, request.licenceNumber(), "ACTIVE", null, authRes.user().photoUrl());
-                    return driverPersistencePort.save(d);
-                });
+                .flatMap(authRes -> saveDriverWithKernelActor(fleetId, request, authRes));
     }
 
     public Flux<Driver> getDriversWithFilters(UUID fleetId, Boolean isAssigned, UUID requesterId) {
@@ -263,5 +356,88 @@ private Mono<Void> updateVehicleLink(UUID vehicleId, UUID driverId) {
                         return Mono.error(new AccessDeniedException("Cette flotte ne vous appartient pas."));
                     return Mono.empty();
                 });
+    }
+
+    @Override
+    public Mono<DriverResponse> createDriverForManager(ManagerDriverCreateRequest request, UUID managerId) {
+        String first = request.firstName().trim();
+        String last = request.lastName().trim();
+        String baseUsername = (first + "." + last)
+                .toLowerCase()
+                .replaceAll("[^a-z0-9.]", "")
+                + "." + UUID.randomUUID().toString().substring(0, 6);
+        String email = (request.email() != null && !request.email().isBlank())
+                ? request.email().trim()
+                : baseUsername + "@fleetman.local";
+        String phone = (request.phone() != null && !request.phone().isBlank())
+                ? request.phone().trim()
+                : "+237600000000";
+        DriverRegistrationRequest registration = new DriverRegistrationRequest(
+                baseUsername,
+                DemoTestAccounts.DEMO_PASSWORD,
+                email,
+                phone,
+                first,
+                last,
+                request.licenceNumber().trim()
+        );
+        return registerDriver(request.fleetId(), registration, managerId)
+                .flatMap(d -> getDriverEnriched(d.userId()));
+    }
+
+    @Override
+    public Mono<DriverResponse> updateDriverForManager(UUID userId, ManagerDriverUpdateRequest request, UUID managerId) {
+        return driverPersistencePort.findById(userId)
+                .switchIfEmpty(Mono.error(new RuntimeException("Conducteur introuvable")))
+                .flatMap(driver -> {
+                    Mono<Void> ownership = driver.fleetId() != null
+                            ? checkFleetOwnership(driver.fleetId(), managerId)
+                            : Mono.empty();
+                    return ownership.then(Mono.defer(() -> {
+                        Mono<Void> fleetMove = Mono.empty();
+                        if (request.fleetId() != null && !request.fleetId().equals(driver.fleetId())) {
+                            fleetMove = checkFleetOwnership(request.fleetId(), managerId)
+                                    .then(driverPersistencePort.updateFleetAssignment(userId, request.fleetId()));
+                        }
+                        Driver next = new Driver(
+                                driver.userId(),
+                                request.fleetId() != null ? request.fleetId() : driver.fleetId(),
+                                request.licenceNumber() != null ? request.licenceNumber() : driver.licenceNumber(),
+                                request.status() != null ? request.status() : driver.status(),
+                                driver.assignedVehicleId(),
+                                request.photoUrl() != null ? request.photoUrl() : driver.photoUrl(),
+                                driver.kernelActorId()
+                        );
+                        Mono<Void> profileUpdate = needsProfileUpdate(request)
+                                ? authPort.updateUserProfile(userId, "fake-token",
+                                        new AuthUseCase.UpdateProfileCommand(
+                                                request.firstName(),
+                                                request.lastName(),
+                                                request.phone(),
+                                                request.email()
+                                        )).then(syncLocalUserNames(userId, request))
+                                : Mono.empty();
+                        return fleetMove
+                                .then(driverPersistencePort.save(next))
+                                .then(profileUpdate)
+                                .then(getDriverEnriched(userId));
+                    }));
+                });
+    }
+
+    private boolean needsProfileUpdate(ManagerDriverUpdateRequest request) {
+        return request.firstName() != null || request.lastName() != null
+                || request.email() != null || request.phone() != null;
+    }
+
+    private Mono<Void> syncLocalUserNames(UUID userId, ManagerDriverUpdateRequest request) {
+        return userRepo.findById(userId)
+                .flatMap(user -> {
+                    if (request.firstName() != null) user.setFirstName(request.firstName());
+                    if (request.lastName() != null) user.setLastName(request.lastName());
+                    if (request.email() != null) user.setEmail(request.email());
+                    user.setNewRecord(false);
+                    return userRepo.save(user);
+                }).then();
     }
 }

@@ -24,4 +24,13 @@ public interface ManageDriverUseCase {
     Mono<Void> assignVehicle(UUID userId, UUID vehicleId, UUID requesterId, String token);
     Mono<Void> unassignVehicle(UUID userId, UUID requesterId);
     Mono<Void> removeDriverFromFleet(UUID fleetId, UUID driverId, UUID requesterId);
+
+    Mono<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> createDriverForManager(
+            com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerDriverCreateRequest request,
+            UUID managerId);
+
+    Mono<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> updateDriverForManager(
+            UUID userId,
+            com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerDriverUpdateRequest request,
+            UUID managerId);
 }

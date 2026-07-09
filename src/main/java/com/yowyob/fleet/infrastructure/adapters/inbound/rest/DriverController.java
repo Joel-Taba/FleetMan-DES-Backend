@@ -14,7 +14,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -48,7 +47,7 @@ public class DriverController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Créer un chauffeur (JSON Manager UI)")
     public Mono<DriverResponse> createDriver(
-            @RequestBody ManagerDriverCreateRequest request,
+            @org.springframework.web.bind.annotation.RequestBody ManagerDriverCreateRequest request,
             Authentication auth
     ) {
         return driverUseCase.createDriverForManager(request, getUserId(auth));
@@ -59,7 +58,7 @@ public class DriverController {
     @Operation(summary = "Mettre à jour un chauffeur (JSON Manager UI)")
     public Mono<DriverResponse> updateDriver(
             @PathVariable UUID userId,
-            @RequestBody ManagerDriverUpdateRequest request,
+            @org.springframework.web.bind.annotation.RequestBody ManagerDriverUpdateRequest request,
             Authentication auth
     ) {
         return driverUseCase.updateDriverForManager(userId, request, getUserId(auth));

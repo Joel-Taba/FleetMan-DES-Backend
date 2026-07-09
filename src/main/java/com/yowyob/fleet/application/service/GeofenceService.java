@@ -198,6 +198,10 @@ private Flux<Map<String, Object>> getFilteredRemoteZones(UUID managerId, String 
                             // Nettoyage de l'ID distant (certains moteurs ajoutent des guillemets)
                             String remoteId = remoteIdObj.toString().toLowerCase().replace("\"", "").trim();
                             return authorizedIds.contains(remoteId);
+                        })
+                        .onErrorResume(ex -> {
+                            log.warn("⚠️ Moteur geofence indisponible, retour liste vide: {}", ex.getMessage());
+                            return Flux.empty();
                         });
             });
 }

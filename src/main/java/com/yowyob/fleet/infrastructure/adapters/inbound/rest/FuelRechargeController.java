@@ -52,7 +52,7 @@ public class FuelRechargeController {
                         request.price(),
                         request.longitude(),
                         request.latitude(),
-                        request.stationName(),
+                        normalizeStationName(request.stationName()),
                         request.vehicleId(),
                         request.driverId()
                 );
@@ -137,7 +137,7 @@ public class FuelRechargeController {
                         request.price(),
                         request.longitude(),
                         request.latitude(),
-                        request.stationName(),
+                        normalizeStationName(request.stationName()),
                         request.driverId()
                 );
         return fuelRechargeUseCase.update(cmd).map(FuelRechargeResponse::from);
@@ -161,4 +161,15 @@ public class FuelRechargeController {
             BigDecimal totalQuantityLiters,
             BigDecimal totalCost
     ) {}
+
+    private FuelRecharge.StationName normalizeStationName(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return FuelRecharge.StationName.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return FuelRecharge.StationName.OTHER;
+        }
+    }
 }

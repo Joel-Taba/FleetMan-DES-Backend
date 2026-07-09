@@ -196,7 +196,7 @@ public class SuperAdminController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Créer un plan tarifaire")
     public Mono<SubscriptionPlan> createPlan(
-        @Valid @RequestBody CreatePlanRequest req
+        @Valid @org.springframework.web.bind.annotation.RequestBody CreatePlanRequest req
     ) {
         return planUseCase.createPlan(
             new ManageSubscriptionPlanUseCase.CreatePlanCommand(
@@ -229,7 +229,7 @@ public class SuperAdminController {
     @Operation(summary = "Modifier un plan")
     public Mono<SubscriptionPlan> updatePlan(
         @PathVariable UUID id,
-        @Valid @RequestBody UpdatePlanRequest req
+        @Valid @org.springframework.web.bind.annotation.RequestBody UpdatePlanRequest req
     ) {
         return planUseCase.updatePlan(
             id,
@@ -257,7 +257,7 @@ public class SuperAdminController {
     @Operation(summary = "Affecter un plan à un gestionnaire")
     public Mono<Void> assignPlan(
         @PathVariable UUID id,
-        @RequestBody AssignPlanRequest req
+        @org.springframework.web.bind.annotation.RequestBody AssignPlanRequest req
     ) {
         return planUseCase.assignPlanToManager(id, req.planId());
     }
@@ -335,7 +335,7 @@ public class SuperAdminController {
     @PutMapping("/settings/subscription-grace-days")
     @Operation(summary = "Modifier la période de grâce après expiration")
     public Mono<java.util.Map<String, Integer>> updateGraceDays(
-        @RequestBody GraceDaysRequest req
+        @org.springframework.web.bind.annotation.RequestBody GraceDaysRequest req
     ) {
         return appSettingsService.updateSubscriptionGraceDays(req.graceDays())
                 .map(days -> java.util.Map.of("graceDays", days));
@@ -361,7 +361,7 @@ public class SuperAdminController {
     @Operation(summary = "Remplacer les fonctionnalités d'un plan")
     public Mono<Void> updatePlanFeatures(
         @PathVariable UUID id,
-        @RequestBody PlanFeatureUpdateRequest req
+        @org.springframework.web.bind.annotation.RequestBody PlanFeatureUpdateRequest req
     ) {
         return planUseCase.replacePlanFeatures(id, req.features());
     }

@@ -50,7 +50,7 @@ public class TripController {
     public record CreateTripRequest(
         @NotNull UUID vehicleId,
         @NotNull UUID driverId,
-        @NotNull UUID fleetId,
+        UUID fleetId,
         @NotNull LocalDate startDate,
         @NotNull LocalTime startTime,
         String departureLocation,

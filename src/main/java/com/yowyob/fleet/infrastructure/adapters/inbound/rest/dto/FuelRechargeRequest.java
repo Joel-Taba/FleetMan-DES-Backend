@@ -31,7 +31,7 @@ public record FuelRechargeRequest(
 
         @Schema(description = "Nom de la station-service (optionnel)", example = "TOTAL",
                 allowableValues = {"TOTAL", "SHELL", "OILIBYA", "CAMRAIL", "OTHER"})
-        FuelRecharge.StationName stationName,
+        String stationName,
 
         @Schema(description = "Longitude GPS de la station (optionnel)", example = "11.5021")
         Double longitude,

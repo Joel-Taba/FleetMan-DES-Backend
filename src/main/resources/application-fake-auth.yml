@@ -12,6 +12,7 @@ application:
     mode: fake
   external:
     vehicle-mode: fake
+    geofence-mode: fake
   file:
     mode: local
   frontend:

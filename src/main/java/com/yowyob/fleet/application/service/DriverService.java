@@ -360,6 +360,9 @@ private Mono<Void> updateVehicleLink(UUID vehicleId, UUID driverId) {
 
     @Override
     public Mono<DriverResponse> createDriverForManager(ManagerDriverCreateRequest request, UUID managerId) {
+        if (request.firstName() == null || request.lastName() == null || request.licenceNumber() == null) {
+            return Mono.error(new IllegalArgumentException("firstName, lastName et licenceNumber sont obligatoires"));
+        }
         String first = request.firstName().trim();
         String last = request.lastName().trim();
         String baseUsername = (first + "." + last)

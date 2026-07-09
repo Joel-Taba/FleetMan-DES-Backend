@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -66,26 +67,54 @@ public class TripService implements ManageTripUseCase {
                 return Mono.error(TripException.vehicleOccupied());
             }
 
+            UUID fleetId = cmd.fleetId() != null ? cmd.fleetId() : vehicle.getFleetId();
+            if (fleetId == null) {
+                return Mono.error(new IllegalArgumentException("fleetId introuvable pour ce véhicule"));
+            }
+            CreateTripCommand resolvedCmd = new CreateTripCommand(
+                    cmd.vehicleId(),
+                    cmd.driverId(),
+                    fleetId,
+                    cmd.managerId(),
+                    cmd.startDate(),
+                    cmd.startTime(),
+                    cmd.departureLocation(),
+                    cmd.departureLat(),
+                    cmd.departureLng(),
+                    cmd.departureKmIndex(),
+                    cmd.departureFuelIndex(),
+                    cmd.missionObject(),
+                    cmd.missionCost(),
+                    cmd.missionCostCurrency(),
+                    cmd.rateType(),
+                    cmd.scheduledReturnDatetime(),
+                    cmd.details()
+            );
+
             return assertNoActiveTripForDriver(cmd.driverId(), null)
                 .then(assertNoActiveTripForVehicle(cmd.vehicleId(), null))
-                .then(
-                    db
-                        .sql("SELECT fleet.generate_trip_code() AS code")
-                        .map(row -> row.get("code", String.class))
-                        .one()
-                )
-                .flatMap(tripCode -> {
-                    TripEntity entity = buildTripEntity(tripCode, cmd);
-
-                    return tripRepository
-                        .save(entity)
-                        .flatMap(saved ->
-                            saveDetails(saved.getId(), cmd.details()).then(
-                                loadTripWithDetails(saved.getId())
-                            )
-                        );
-                });
+                .then(saveNewTrip(resolvedCmd));
         });
+    }
+
+    private Mono<Trip> saveNewTrip(CreateTripCommand cmd) {
+        return generateTripCode()
+                .flatMap(tripCode -> persistTrip(tripCode, cmd))
+                .onErrorResume(DuplicateKeyException.class, ex -> generateTripCode()
+                        .flatMap(tripCode -> persistTrip(tripCode, cmd)));
+    }
+
+    private Mono<String> generateTripCode() {
+        return db.sql("SELECT fleet.generate_trip_code() AS code")
+                .map(row -> row.get("code", String.class))
+                .one();
+    }
+
+    private Mono<Trip> persistTrip(String tripCode, CreateTripCommand cmd) {
+        TripEntity entity = buildTripEntity(tripCode, cmd);
+        return tripRepository.save(entity)
+                .flatMap(saved -> saveDetails(saved.getId(), cmd.details())
+                        .then(loadTripWithDetails(saved.getId())));
     }
 
     // ── Lancement effectif d'un trajet planifié ───────────────────────────────

@@ -19,16 +19,35 @@ import java.util.UUID;
 @Slf4j
 public class FakeAuthAdapter implements AuthPort {
 
+    private static final java.util.Map<String, DemoTestAccounts.Account> registeredAccounts = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<UUID, DemoTestAccounts.Account> registeredAccountsById = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<String, String> registeredPasswords = new java.util.concurrent.ConcurrentHashMap<>();
+
     @Override
     public Mono<AuthResponse> login(String identifier, String password) {
         log.info("🛠 MODE FAKE AUTH : Login pour {}", identifier);
         return Mono.defer(() -> {
-            var account = DemoTestAccounts.findByIdentifier(identifier);
-            if (account.isEmpty() || !DemoTestAccounts.isDemoPassword(password)) {
-                return Mono.error(AuthException.invalidCredentials());
+            String normId = identifier.trim().toLowerCase();
+            var accountOpt = DemoTestAccounts.findByIdentifier(identifier);
+            if (accountOpt.isPresent()) {
+                if (!DemoTestAccounts.isDemoPassword(password)) {
+                    return Mono.error(AuthException.invalidCredentials());
+                }
+                var acc = accountOpt.get();
+                return Mono.just(new AuthResponse(tokenFor(acc), "fake-refresh-token", toUserDetail(acc)));
             }
-            Account acc = account.get();
-            return Mono.just(new AuthResponse(tokenFor(acc), "fake-refresh-token", toUserDetail(acc)));
+
+            // Vérification des comptes enregistrés dynamiquement
+            var dynamicAcc = registeredAccounts.get(normId);
+            if (dynamicAcc != null) {
+                String expectedPassword = registeredPasswords.get(normId);
+                if (expectedPassword != null && expectedPassword.equals(password)) {
+                    return Mono.just(new AuthResponse("fake-token-" + dynamicAcc.email(), "fake-refresh-token",
+                            toUserDetail(dynamicAcc)));
+                }
+            }
+
+            return Mono.error(AuthException.invalidCredentials());
         });
     }
 
@@ -39,25 +58,40 @@ public class FakeAuthAdapter implements AuthPort {
 
     @Override
     public Mono<UserDetail> getUserById(UUID userId, String token) {
-        return DemoTestAccounts.findById(userId)
-                .map(acc -> Mono.just(toUserDetail(acc)))
-                .orElseGet(() -> Mono.just(resolveUserFromToken(token)));
+        var staticAcc = DemoTestAccounts.findById(userId);
+        if (staticAcc.isPresent()) {
+            return Mono.just(toUserDetail(staticAcc.get()));
+        }
+        var dynamicAcc = registeredAccountsById.get(userId);
+        if (dynamicAcc != null) {
+            return Mono.just(toUserDetail(dynamicAcc));
+        }
+        return Mono.just(resolveUserFromToken(token));
     }
 
     private UserDetail resolveUserFromToken(String token) {
         String clean = token.replace("Bearer ", "").trim();
-        String suffix = clean.replace("fake-token-", "");
-        return DemoTestAccounts.findByIdentifier(suffix)
-                .or(() -> DemoTestAccounts.findById(UUID.nameUUIDFromBytes(suffix.getBytes())))
-                .map(this::toUserDetail)
-                .orElseGet(() -> toUserDetail(DemoTestAccounts.findByIdentifier("superadmin@fleetman.cm").orElseThrow()));
+        String suffix = clean.replace("fake-token-", "").trim().toLowerCase();
+
+        var staticAcc = DemoTestAccounts.findByIdentifier(suffix)
+                .or(() -> DemoTestAccounts.findById(UUID.nameUUIDFromBytes(suffix.getBytes())));
+        if (staticAcc.isPresent()) {
+            return this.toUserDetail(staticAcc.get());
+        }
+
+        var dynamicAcc = registeredAccounts.get(suffix);
+        if (dynamicAcc != null) {
+            return this.toUserDetail(dynamicAcc);
+        }
+
+        return toUserDetail(DemoTestAccounts.findByIdentifier("superadmin@fleetman.cm").orElseThrow());
     }
 
-    private String tokenFor(Account account) {
+    private String tokenFor(DemoTestAccounts.Account account) {
         return "fake-token-" + account.email();
     }
 
-    private UserDetail toUserDetail(Account account) {
+    private UserDetail toUserDetail(DemoTestAccounts.Account account) {
         return new UserDetail(
                 account.id(),
                 account.username(),
@@ -73,8 +107,7 @@ public class FakeAuthAdapter implements AuthPort {
                 null,
                 null,
                 true,
-                null
-        );
+                null);
     }
 
     @Override
@@ -84,8 +117,20 @@ public class FakeAuthAdapter implements AuthPort {
                 newUserId, command.username(), command.email(), command.phone(),
                 command.firstName(), command.lastName(), "FLEET_MANAGEMENT",
                 command.roles(), List.of("fleet:read", "fleet:write"),
-                "https://i.pravatar.cc/150?u=" + newUserId, null, null, null, true, null
-        );
+                "https://i.pravatar.cc/150?u=" + newUserId, null, null, null, true, null);
+
+        DemoTestAccounts.Account newAcc = new DemoTestAccounts.Account(
+                newUserId, command.username(), command.email(),
+                command.firstName(), command.lastName(), command.roles());
+
+        registeredAccounts.put(command.username().toLowerCase().trim(), newAcc);
+        registeredAccounts.put(command.email().toLowerCase().trim(), newAcc);
+        registeredAccountsById.put(newUserId, newAcc);
+        if (command.password() != null) {
+            registeredPasswords.put(command.username().toLowerCase().trim(), command.password());
+            registeredPasswords.put(command.email().toLowerCase().trim(), command.password());
+        }
+
         return Mono.just(new AuthResponse("fake-token-" + command.email(), "fake-refresh", newUser));
     }
 
@@ -93,8 +138,7 @@ public class FakeAuthAdapter implements AuthPort {
     public Flux<UserDetail> getUsersByService(String serviceName, String token) {
         return Flux.just(
                 toUserDetail(DemoTestAccounts.findByIdentifier("manager@fleetman.cm").orElseThrow()),
-                toUserDetail(DemoTestAccounts.findByIdentifier("admin@fleetman.cm").orElseThrow())
-        );
+                toUserDetail(DemoTestAccounts.findByIdentifier("admin@fleetman.cm").orElseThrow()));
     }
 
     @Override

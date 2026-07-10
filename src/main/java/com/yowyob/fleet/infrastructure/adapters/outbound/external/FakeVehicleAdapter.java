@@ -31,7 +31,17 @@ public class FakeVehicleAdapter implements ExternalVehiclePort {
             String brandLabel, String modelLabel, String fuelLabel,
             String transLabel, String colorLabel) {
         log.info("🛠 [FAKE VEHICLE] createRemoteVehicle: plate={}", request.licensePlate());
-        return Mono.empty();
+        // Retourner un véhicule simulé avec un UUID généré pour que le flux de création
+        // fonctionne
+        Vehicle fakeVehicle = new Vehicle(
+                UUID.randomUUID(), null, null, null, request.vehicleTypeId(),
+                request.licensePlate(), "VIN-FAKE-" + UUID.randomUUID().toString().substring(0, 8),
+                brandLabel, modelLabel, request.manufacturingYear(),
+                transLabel, fuelLabel, request.tankCapacity(),
+                request.totalSeatNumber(), request.averageFuelConsumption(),
+                colorLabel, "AVAILABLE", null, null, null,
+                Collections.emptyList(), null, null, null, null);
+        return Mono.just(fakeVehicle);
     }
 
     @Override
@@ -45,7 +55,29 @@ public class FakeVehicleAdapter implements ExternalVehiclePort {
     @Override
     public Mono<Vehicle> patchRemoteVehicle(UUID vehicleId, Map<String, Object> updates, String token) {
         log.info("🛠 [FAKE VEHICLE] patchRemoteVehicle: id={}", vehicleId);
-        return Mono.empty();
+        Vehicle fakeVehicle = new Vehicle(
+                vehicleId, null, null, null, null,
+                updates.containsKey("licensePlate") ? updates.get("licensePlate").toString() : null,
+                updates.containsKey("vehicleSerialNumber") ? updates.get("vehicleSerialNumber").toString() : null,
+                updates.containsKey("brand") ? updates.get("brand").toString() : null,
+                updates.containsKey("model") ? updates.get("model").toString() : null,
+                updates.containsKey("manufacturingYear")
+                        ? Double.valueOf(updates.get("manufacturingYear").toString()).intValue()
+                        : null,
+                updates.containsKey("transmissionType") ? updates.get("transmissionType").toString() : null,
+                updates.containsKey("fuelType") ? updates.get("fuelType").toString() : null,
+                updates.containsKey("tankCapacity") ? Double.valueOf(updates.get("tankCapacity").toString()) : null,
+                updates.containsKey("totalSeatNumber")
+                        ? Double.valueOf(updates.get("totalSeatNumber").toString()).intValue()
+                        : null,
+                updates.containsKey("averageFuelConsumption")
+                        ? Double.valueOf(updates.get("averageFuelConsumption").toString())
+                        : null,
+                updates.containsKey("color") ? updates.get("color").toString() : null,
+                updates.containsKey("status") ? updates.get("status").toString() : null,
+                updates.containsKey("photoUrl") ? updates.get("photoUrl").toString() : null,
+                null, null, Collections.emptyList(), null, null, null, null);
+        return Mono.just(fakeVehicle);
     }
 
     @Override

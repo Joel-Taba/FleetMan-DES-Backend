@@ -82,3 +82,7 @@ databaseChangeLog:
   # 22. Plans Tarifaires et Workflow Approbation Souscriptions
   - include:
       file: db/changelog/changes/022-subscription-plans.sql
+
+  # 23. Ajout de kernel_id sur la table users
+  - include:
+      file: db/changelog/changes/023-add-kernel-id-to-users.sql

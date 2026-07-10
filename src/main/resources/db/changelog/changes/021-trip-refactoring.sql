@@ -1,9 +1,9 @@
 --liquibase formatted sql
---changeset fleet-trip:trip-refactoring-v1 splitStatements:true
-
+--changeset fleet-trip:trip-refactoring-seq-v1 splitStatements:true
 -- 1. Séquence pour les codes TRJ-YYYY-NNNN
 CREATE SEQUENCE IF NOT EXISTS fleet.trip_code_seq START 1;
 
+--changeset fleet-trip:trip-refactoring-func-v1 splitStatements:false
 -- 2. Fonction de génération du code de trajet
 CREATE OR REPLACE FUNCTION fleet.generate_trip_code()
 RETURNS VARCHAR AS $$
@@ -11,6 +11,8 @@ BEGIN
     RETURN 'TRJ-' || TO_CHAR(NOW(), 'YYYY') || '-' || LPAD(nextval('fleet.trip_code_seq')::TEXT, 4, '0');
 END;
 $$ LANGUAGE plpgsql;
+
+--changeset fleet-trip:trip-refactoring-tables-v1 splitStatements:true
 
 -- 3. Ajout des nouvelles colonnes sur fleet.trips
 ALTER TABLE fleet.trips ADD COLUMN IF NOT EXISTS trip_code        VARCHAR(30) UNIQUE;

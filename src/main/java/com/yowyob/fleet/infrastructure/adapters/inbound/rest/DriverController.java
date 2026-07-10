@@ -12,7 +12,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -38,26 +37,29 @@ public class DriverController {
 
     private final ManageDriverUseCase driverUseCase;
 
-    private UUID getUserId(Authentication auth) { return ((AuthPort.UserDetail) auth.getPrincipal()).id(); }
-    private String getToken(String header) { return header.startsWith("Bearer ") ? header.substring(7) : header; }
+    private UUID getUserId(Authentication auth) {
+        return ((AuthPort.UserDetail) auth.getPrincipal()).id();
+    }
+
+    private String getToken(String header) {
+        return header.startsWith("Bearer ") ? header.substring(7) : header;
+    }
 
     @PostMapping(value = "/fleets/{fleetId}/drivers/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(
-        summary = "Créer un nouveau Chauffeur",
-        description = "Crée le compte Auth + Profil local + Photo de profil."
-    )
+    @Operation(summary = "Créer un nouveau Chauffeur", description = "Crée le compte Auth + Profil local + Photo de profil.")
     public Mono<Driver> register(
             @PathVariable UUID fleetId,
             @RequestPart("user") DriverRegistrationRequest request,
             @RequestPart(value = "file", required = false) Part filePart,
-            Authentication auth
-    )  {
+            Authentication auth) {
         return processFile(filePart)
                 .flatMap(photo -> driverUseCase.registerDriverWithPhoto(fleetId, request, getUserId(auth), photo))
-                // On utilise defer pour s'assurer que l'appel sans photo n'est créé que si nécessaire
-                .switchIfEmpty(Mono.defer(() -> driverUseCase.registerDriverWithPhoto(fleetId, request, getUserId(auth), null)));
+                // On utilise defer pour s'assurer que l'appel sans photo n'est créé que si
+                // nécessaire
+                .switchIfEmpty(Mono
+                        .defer(() -> driverUseCase.registerDriverWithPhoto(fleetId, request, getUserId(auth), null)));
     }
 
     @GetMapping("/drivers")
@@ -65,8 +67,7 @@ public class DriverController {
     public Flux<DriverResponse> list(
             @RequestParam(required = false) UUID fleetId,
             @RequestParam(required = false) Boolean isAssigned,
-            Authentication auth
-    ) {
+            Authentication auth) {
         return driverUseCase.getDriversEnriched(fleetId, isAssigned, getUserId(auth));
     }
 
@@ -83,8 +84,8 @@ public class DriverController {
     }
 
     @PostMapping("/drivers/{userId}/assign-vehicle")
-    public Mono<Void> assign(@PathVariable UUID userId, @RequestBody VehicleAssignRequest req, 
-                             @RequestHeader(HttpHeaders.AUTHORIZATION) String authHeader, Authentication auth) {
+    public Mono<Void> assign(@PathVariable UUID userId, @RequestBody VehicleAssignRequest req,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authHeader, Authentication auth) {
         return driverUseCase.assignVehicle(userId, req.vehicleId(), getUserId(auth), getToken(authHeader));
     }
 
@@ -94,16 +95,18 @@ public class DriverController {
     }
 
     private Mono<AuthUseCase.FileContent> processFile(Part fp) {
-        if (fp == null) return Mono.empty();
+        if (fp == null)
+            return Mono.empty();
         return DataBufferUtils.join(fp.content()).map(db -> {
             byte[] bytes = new byte[db.readableByteCount()];
             db.read(bytes);
             DataBufferUtils.release(db);
             return new AuthUseCase.FileContent(
-                (fp instanceof FilePart f) ? f.filename() : "driver_pic",
-                fp.headers().getContentType().toString(), bytes);
+                    (fp instanceof FilePart f) ? f.filename() : "driver_pic",
+                    fp.headers().getContentType().toString(), bytes);
         });
     }
 
-    public record VehicleAssignRequest(UUID vehicleId) {}
+    public record VehicleAssignRequest(UUID vehicleId) {
+    }
 }

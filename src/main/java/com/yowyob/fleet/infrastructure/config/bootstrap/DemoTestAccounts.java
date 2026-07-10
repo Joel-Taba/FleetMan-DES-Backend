@@ -19,24 +19,38 @@ public final class DemoTestAccounts {
             String email,
             String firstName,
             String lastName,
-            List<String> roles
-    ) {}
+            List<String> roles) {
+    }
 
     public static final UUID SUPER_ADMIN_ID = UUID.fromString("a0000001-0000-4000-8000-000000000001");
-    public static final UUID ADMIN_ID       = UUID.fromString("a0000002-0000-4000-8000-000000000002");
-    public static final UUID MANAGER_ID     = UUID.fromString("a0000003-0000-4000-8000-000000000003");
-    public static final UUID DRIVER_ID      = UUID.fromString("a0000004-0000-4000-8000-000000000004");
+    public static final UUID ADMIN_ID = UUID.fromString("a0000002-0000-4000-8000-000000000002");
+    public static final UUID MANAGER_ID = UUID.fromString("a0000003-0000-4000-8000-000000000003");
+    public static final UUID DRIVER_ID = UUID.fromString("a0000004-0000-4000-8000-000000000004");
+
+    // Nehemie seed accounts (matching seed_data_custom.sql UUIDs)
+    public static final UUID NEHEMIE_ID = UUID.fromString("311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2");
+    public static final UUID MARC_ID = UUID.fromString("2c5dae3d-82d5-46d3-cbd3-3c4d5e6f7a8b");
+    public static final UUID PAUL_ID = UUID.fromString("4d3c4b5a-6b7c-8d9e-0f1a-2b3c4d5e6f7a");
+    public static final UUID SAMUEL_ID = UUID.fromString("8f5b8e9d-0c1b-2a3b-4c5d-6e7f8a9b0c1d");
 
     private static final List<Account> ALL = List.of(
-            new Account(SUPER_ADMIN_ID, "superadmin", "superadmin@fleetman.cm", "Jean", "Super", List.of("FLEET_SUPER_ADMIN", "FLEET_ADMIN")),
+            new Account(SUPER_ADMIN_ID, "superadmin", "superadmin@fleetman.cm", "Jean", "Super",
+                    List.of("FLEET_SUPER_ADMIN", "FLEET_ADMIN")),
             new Account(ADMIN_ID, "fleetadmin", "admin@fleetman.cm", "Marie", "Admin", List.of("FLEET_ADMIN")),
             new Account(MANAGER_ID, "fleetmanager", "manager@fleetman.cm", "Paul", "Manager", List.of("FLEET_MANAGER")),
-            new Account(DRIVER_ID, "fleetdriver", "driver@fleetman.cm", "André", "Mbarga", List.of("FLEET_DRIVER"))
-    );
+            new Account(DRIVER_ID, "fleetdriver", "driver@fleetman.cm", "André", "Mbarga", List.of("FLEET_DRIVER")),
+            // Nehemie test accounts
+            new Account(NEHEMIE_ID, "Nehemie", "nehemie@fleetman.cm", "Nehemie", "Nkolo", List.of("FLEET_MANAGER")),
+            new Account(NEHEMIE_ID, "NehemieGmail", "nehemie@gmail.com", "Nehemie", "Nkolo", List.of("FLEET_MANAGER")),
+            new Account(MARC_ID, "MarcDriver", "marc.driver@fleetman.cm", "Marc", "Eyango", List.of("FLEET_DRIVER")),
+            new Account(PAUL_ID, "PaulDriver", "paul.driver@fleetman.cm", "Paul", "Essomba", List.of("FLEET_DRIVER")),
+            new Account(SAMUEL_ID, "SamuelDriver", "samuel.driver@fleetman.cm", "Samuel", "Tchakounte",
+                    List.of("FLEET_DRIVER")));
 
     private static final Map<String, Account> BY_IDENTIFIER = buildIndex();
 
-    private DemoTestAccounts() {}
+    private DemoTestAccounts() {
+    }
 
     private static Map<String, Account> buildIndex() {
         var map = new java.util.HashMap<String, Account>();
@@ -60,6 +74,6 @@ public final class DemoTestAccounts {
     }
 
     public static boolean isDemoPassword(String password) {
-        return DEMO_PASSWORD.equals(password);
+        return DEMO_PASSWORD.equals(password) || "Nehemie@123".equals(password);
     }
 }

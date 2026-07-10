@@ -49,3 +49,9 @@ management:
       enabled: false
     kafka:
       enabled: false
+
+application:
+  external:
+    geofence-mode: fake
+    vehicle-mode: fake
+    payment-mode: fake

@@ -18,9 +18,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehiclePatchRequest; 
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehiclePatchRequest;
 
-import com.fasterxml.jackson.databind.ObjectMapper; 
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.Map;
 import java.util.UUID;
@@ -58,23 +58,24 @@ public class VehicleController {
         return vehicleUseCase.createIndependentVehicle(request, getUserId(auth), extractToken(auth));
     }
 
-    
     // @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     // @PostMapping("/fleets/{fleetId}/vehicles/{vehicleId}")
     // @ResponseStatus(HttpStatus.NO_CONTENT)
     // @PreAuthorize("hasRole('FLEET_MANAGER')")
-    // @Operation(summary = "Assigner un véhicule à une flotte", description = "Assigne le véhicule et l'ajoute automatiquement à toutes les zones de geofencing de cette flotte.")
+    // @Operation(summary = "Assigner un véhicule à une flotte", description =
+    // "Assigne le véhicule et l'ajoute automatiquement à toutes les zones de
+    // geofencing de cette flotte.")
     // public Mono<Void> assignToFleet(
-    //         @PathVariable UUID fleetId, 
-    //         @PathVariable UUID vehicleId, 
-    //         Authentication auth) {
-    //     return vehicleUseCase.assignVehicleToFleet(fleetId, vehicleId, getUserId(auth));
+    // @PathVariable UUID fleetId,
+    // @PathVariable UUID vehicleId,
+    // Authentication auth) {
+    // return vehicleUseCase.assignVehicleToFleet(fleetId, vehicleId,
+    // getUserId(auth));
     // }
-
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @GetMapping("/vehicles")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
     @Operation(summary = "Lister mes véhicules", description = "Récupère les véhicules gérés par le manager connecté. Acteur: Manager.")
     public Flux<Vehicle> getVehicles(Authentication auth) {
         return vehicleUseCase.getVehicles(getUserId(auth), false, extractToken(auth));
@@ -82,37 +83,44 @@ public class VehicleController {
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @GetMapping("/vehicles/{vehicleId}")
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_DRIVER')")
     @Operation(summary = "Détails complets d'un véhicule", description = "Agrégation Identité + Finance + Maintenance + Opérationnel. Acteur: Manager/Admin.")
     public Mono<Vehicle> getVehicle(@PathVariable UUID vehicleId, Authentication auth) {
         return vehicleUseCase.getVehicleDetails(vehicleId, extractToken(auth));
     }
 
-    /* 
-    // MÉTHODE EN ATTENTE DE DEBUG (Mise à jour complète)
-    @Tag(name = OpenApiConfig.TAG_VHC_PARC)
-    @PutMapping("/vehicles/{vehicleId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Mise à jour complète (Debug)", description = "Mise à jour totale des infos techniques.")
-    public Mono<Vehicle> update(@PathVariable UUID vehicleId, @Valid @RequestBody VehicleRequest request, Authentication auth) {
-        return vehicleUseCase.updateVehicleInfo(vehicleId, request, extractToken(auth));
-    }
-    */
+    /*
+     * // MÉTHODE EN ATTENTE DE DEBUG (Mise à jour complète)
+     * 
+     * @Tag(name = OpenApiConfig.TAG_VHC_PARC)
+     * 
+     * @PutMapping("/vehicles/{vehicleId}")
+     * 
+     * @PreAuthorize("hasRole('FLEET_MANAGER')")
+     * 
+     * @Operation(summary = "Mise à jour complète (Debug)", description =
+     * "Mise à jour totale des infos techniques.")
+     * public Mono<Vehicle> update(@PathVariable UUID vehicleId, @Valid @RequestBody
+     * VehicleRequest request, Authentication auth) {
+     * return vehicleUseCase.updateVehicleInfo(vehicleId, request,
+     * extractToken(auth));
+     * }
+     */
 
-@Tag(name = OpenApiConfig.TAG_VHC_PARC)
+    @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @PatchMapping("/vehicles/{vehicleId}")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Mise à jour partielle (Admin/Correction)", description = "Permet de corriger une immatriculation ou un VIN.")
     public Mono<Vehicle> patch(
-            @PathVariable UUID vehicleId, 
+            @PathVariable UUID vehicleId,
             @RequestBody VehiclePatchRequest request, // Utilisation du DTO documenté
             Authentication auth) {
-        
+
         // Conversion du Record en Map<String, Object> en excluant les nulls
         // Le service attend une Map pour savoir quels champs EXACTEMENT ont été envoyés
         @SuppressWarnings("unchecked")
         Map<String, Object> updates = objectMapper.convertValue(request, Map.class);
-        
+
         // Nettoyage des nulls pour ne pas écraser des données existantes
         updates.values().removeIf(java.util.Objects::isNull);
 
@@ -123,30 +131,29 @@ public class VehicleController {
     @PutMapping("/vehicles/{vehicleId}/financial-parameters")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Paramètres Financiers", description = "Mise à jour Assurance, Coût/KM, Achat. Acteur: Manager.")
-    public Mono<Vehicle> updateFinancial(@PathVariable UUID vehicleId, @RequestBody VehicleParameters.Financial params, Authentication auth) {
+    public Mono<Vehicle> updateFinancial(@PathVariable UUID vehicleId, @RequestBody VehicleParameters.Financial params,
+            Authentication auth) {
         return vehicleUseCase.updateFinancialParameters(vehicleId, params, extractToken(auth));
     }
 
-@Tag(name = OpenApiConfig.TAG_VHC_PARC)
+    @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @PutMapping("/vehicles/{vehicleId}/maintenance-parameters")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Paramètres Maintenance", description = "Mise à jour des statuts techniques.")
     public Mono<Vehicle> updateMaintenance(
-            @PathVariable UUID vehicleId, 
-            @RequestBody MaintenanceUpdateRequest request, 
+            @PathVariable UUID vehicleId,
+            @RequestBody MaintenanceUpdateRequest request,
             Authentication auth) {
-        
+
         VehicleParameters.Maintenance params = new VehicleParameters.Maintenance(
-            request.lastMaintenanceDate(),
-            request.nextMaintenanceDue(),
-            request.engineStatus(),
-            request.batteryHealth(),
-            request.maintenanceStatus()
-        );
+                request.lastMaintenanceDate(),
+                request.nextMaintenanceDue(),
+                request.engineStatus(),
+                request.batteryHealth(),
+                request.maintenanceStatus());
 
         return vehicleUseCase.updateMaintenanceParameters(vehicleId, params, extractToken(auth));
     }
-
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @DeleteMapping("/vehicles/{vehicleId}")
@@ -183,24 +190,23 @@ public class VehicleController {
 
     @Tag(name = OpenApiConfig.TAG_VHC_LOOKUP)
     @GetMapping("/vehicles/lookup/{resource}")
-    @Operation(
-    summary = "Listes de référence", 
-    description = "Récupère une liste de choix spécifique depuis la base souveraine. " +
-                      "\n\n**Ressources disponibles ({resource}) :** " +
-                      "\n- `vehicle-types` : Catégories globales (BUS, CAR, etc.)" +
-                      "\n- `manufacturers` : Constructeurs industriels" +
-                      "\n- `brands` : Marques commerciales" +
-                      "\n- `models` : Modèles de véhicules" +
-                      "\n- `sizes` : Gabarits / Tailles" +
-                      "\n- `usages` : Types d'usage (Taxi, VIP, etc.)" +
-                      "\n- `fuel-types` : Types d'énergie" +
-                      "\n- `transmissions` : Types de boîtes de vitesse" +
-                      "\n- `colors` : Catalogue des couleurs autorisées" +
-                      "\n\n**Acteur :** Tous (Public/Manager)."
-)
+    @Operation(summary = "Listes de référence", description = "Récupère une liste de choix spécifique depuis la base souveraine. "
+            +
+            "\n\n**Ressources disponibles ({resource}) :** " +
+            "\n- `vehicle-types` : Catégories globales (BUS, CAR, etc.)" +
+            "\n- `manufacturers` : Constructeurs industriels" +
+            "\n- `brands` : Marques commerciales" +
+            "\n- `models` : Modèles de véhicules" +
+            "\n- `sizes` : Gabarits / Tailles" +
+            "\n- `usages` : Types d'usage (Taxi, VIP, etc.)" +
+            "\n- `fuel-types` : Types d'énergie" +
+            "\n- `transmissions` : Types de boîtes de vitesse" +
+            "\n- `colors` : Catalogue des couleurs autorisées" +
+            "\n\n**Acteur :** Tous (Public/Manager).")
     public Flux<Map<String, Object>> getLookup(@PathVariable String resource) {
         return vehicleUseCase.getLocalLookupData(resource);
     }
+
     @Tag(name = OpenApiConfig.TAG_VHC_LOOKUP)
     @GetMapping("/vehicles/resources/all")
     @Operation(summary = "Catalogue complet", description = "Récupère les 9 référentiels en un seul appel. Idéal pour initialiser les formulaires.")

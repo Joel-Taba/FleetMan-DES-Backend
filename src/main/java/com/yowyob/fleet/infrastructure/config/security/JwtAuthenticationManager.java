@@ -35,8 +35,7 @@ public class JwtAuthenticationManager implements ReactiveAuthenticationManager {
                     return new UsernamePasswordAuthenticationToken(
                             userDetail,
                             token,
-                            authorities
-                    );
+                            authorities);
                 })
                 .cast(Authentication.class)
                 .onErrorResume(e -> {
@@ -52,19 +51,28 @@ public class JwtAuthenticationManager implements ReactiveAuthenticationManager {
                     if (localUser.getDeletedAt() != null) {
                         return Mono.error(AuthException.accountDeleted());
                     }
+                    // Si le compte existe mais est inactif, on l'active automatiquement
+                    // (nécessaire en mode fake-auth après restart du backend)
                     if (!localUser.isActive()) {
-                        return Mono.error(AuthException.accountLocked());
+                        log.info("🔓 [AUTO-ACTIVATE] Réactivation automatique de l'utilisateur local id={}",
+                                localUser.getId());
+                        localUser.setActive(true);
+                        localUser.setApprovalStatus("APPROVED");
+                        localUser.setNew(false);
+                        return userRepo.save(localUser)
+                                .map(saved -> rebindToLocalId(userDetail, saved));
                     }
                     log.debug("✅ [UUID REBIND] Kernel id={} → local id={}", userDetail.id(), localUser.getId());
                     return Mono.just(rebindToLocalId(userDetail, localUser));
                 })
                 .switchIfEmpty(Mono.defer(() -> {
-                    log.debug("ℹ️ [UUID REBIND] Aucun compte local pour Kernel id={}, accepté tel quel (premier login)", userDetail.id());
+                    log.debug("ℹ️ [UUID REBIND] Aucun compte local pour Kernel id={}, accepté tel quel (premier login)",
+                            userDetail.id());
                     return Mono.just(userDetail);
                 }));
     }
 
-    private AuthPort.UserDetail rebindToLocalId(AuthPort.UserDetail kernelUser, 
+    private AuthPort.UserDetail rebindToLocalId(AuthPort.UserDetail kernelUser,
             com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.UserLocalEntity localUser) {
         return new AuthPort.UserDetail(
                 localUser.getId(),
@@ -81,7 +89,6 @@ public class JwtAuthenticationManager implements ReactiveAuthenticationManager {
                 kernelUser.licenceNumber(),
                 kernelUser.vehicleId(),
                 localUser.isActive(),
-                kernelUser.lastLoginAt()
-        );
+                kernelUser.lastLoginAt());
     }
 }

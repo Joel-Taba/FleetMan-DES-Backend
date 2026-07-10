@@ -20,7 +20,7 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import reactor.core.publisher.Mono;
 
 import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.reactive.CorsConfigurationSource;  // Important : package .reactive
+import org.springframework.web.cors.reactive.CorsConfigurationSource; // Important : package .reactive
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -34,75 +34,89 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 @Slf4j
 public class SecurityConfig {
 
-    private final JwtAuthenticationManager authenticationManager;
-    private final BearerTokenServerAuthenticationConverter authenticationConverter;
+        private final JwtAuthenticationManager authenticationManager;
+        private final BearerTokenServerAuthenticationConverter authenticationConverter;
 
-    @Bean
-    public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
+        @Bean
+        public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
 
-        AuthenticationWebFilter jwtFilter = new AuthenticationWebFilter(authenticationManager);
-        jwtFilter.setServerAuthenticationConverter(authenticationConverter);
+                AuthenticationWebFilter jwtFilter = new AuthenticationWebFilter(authenticationManager);
+                jwtFilter.setServerAuthenticationConverter(authenticationConverter);
 
-        jwtFilter.setRequiresAuthenticationMatcher(
-                ServerWebExchangeMatchers.pathMatchers("/api/v1/**")
-                        .and(ServerWebExchangeMatchers.pathMatchers("/api/v1/files/**").negate())
-        );
+                org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher apiMatcher = ServerWebExchangeMatchers
+                                .pathMatchers("/api/v1/**");
+                org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher filesMatcher = ServerWebExchangeMatchers
+                                .pathMatchers("/api/v1/files/**");
 
-        return http
-                // 1. ACTIVATION DU CORS ICI
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                
-                .csrf(ServerHttpSecurity.CsrfSpec::disable)
-                .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
-                .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
-                .authenticationManager(authenticationManager)
+                jwtFilter.setRequiresAuthenticationMatcher(exchange -> apiMatcher.matches(exchange)
+                                .flatMap(apiMatch -> {
+                                        if (apiMatch.isMatch()) {
+                                                return filesMatcher.matches(exchange)
+                                                                .flatMap(filesMatch -> filesMatch.isMatch()
+                                                                                ? org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher.MatchResult
+                                                                                                .notMatch()
+                                                                                : Mono.just(apiMatch));
+                                        }
+                                        return Mono.just(apiMatch);
+                                }));
 
-                .exceptionHandling(handling -> handling
-                        .authenticationEntryPoint((exchange, e) ->
-                                Mono.fromRunnable(() -> exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED)))
-                        .accessDeniedHandler((exchange, e) ->
-                                Mono.fromRunnable(() -> exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN)))
-                )
+                return http
+                                // 1. ACTIVATION DU CORS ICI
+                                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
-                .authorizeExchange(exchanges -> exchanges
-                        // A. ROUTES PUBLIQUES
-                        .pathMatchers(
-                                "/v3/api-docs/**",
-                                "/swagger-ui/**",
-                                "/swagger-ui.html",
-                                "/webjars/**",
-                                "/actuator/**",
-                                "/api/v1/health/**",
-                                "/api/v1/auth/**"
-                        ).permitAll()
-                        .pathMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/files/**").permitAll()
-                        // B. OPTIONS (Indispensable pour le pre-flight CORS)
-                        .pathMatchers(org.springframework.http.HttpMethod.OPTIONS).permitAll()
-                        .anyExchange().authenticated()
-                )
-                .addFilterAt(jwtFilter, SecurityWebFiltersOrder.AUTHENTICATION)
-                .build();
-    }
+                                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                                .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
+                                .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
+                                .authenticationManager(authenticationManager)
 
-    // 2. DÉFINITION DE LA CONFIGURATION CORS
-    @Bean
-    CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        
-        // Autoriser toutes les origines (Pour le dev local sur réseau mobile/wifi)
-        configuration.setAllowedOriginPatterns(List.of("*")); 
-        
-        // Autoriser toutes les méthodes
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        
-        // Autoriser tous les headers (notamment Authorization)
-        configuration.setAllowedHeaders(List.of("*"));
-        
-        // Autoriser l'envoi de cookies/credentials (si besoin)
-        configuration.setAllowCredentials(true);
+                                .exceptionHandling(handling -> handling
+                                                .authenticationEntryPoint((exchange, e) -> Mono.fromRunnable(
+                                                                () -> exchange.getResponse().setStatusCode(
+                                                                                HttpStatus.UNAUTHORIZED)))
+                                                .accessDeniedHandler((exchange,
+                                                                e) -> Mono.fromRunnable(() -> exchange.getResponse()
+                                                                                .setStatusCode(HttpStatus.FORBIDDEN))))
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
-    }
+                                .authorizeExchange(exchanges -> exchanges
+                                                // A. ROUTES PUBLIQUES
+                                                .pathMatchers(
+                                                                "/v3/api-docs/**",
+                                                                "/swagger-ui/**",
+                                                                "/swagger-ui.html",
+                                                                "/webjars/**",
+                                                                "/actuator/**",
+                                                                "/api/v1/health/**",
+                                                                "/api/v1/auth/**")
+                                                .permitAll()
+                                                .pathMatchers(org.springframework.http.HttpMethod.GET,
+                                                                "/api/v1/files/**")
+                                                .permitAll()
+                                                // B. OPTIONS (Indispensable pour le pre-flight CORS)
+                                                .pathMatchers(org.springframework.http.HttpMethod.OPTIONS).permitAll()
+                                                .anyExchange().authenticated())
+                                .addFilterAt(jwtFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+                                .build();
+        }
+
+        // 2. DÉFINITION DE LA CONFIGURATION CORS
+        @Bean
+        CorsConfigurationSource corsConfigurationSource() {
+                CorsConfiguration configuration = new CorsConfiguration();
+
+                // Autoriser toutes les origines (Pour le dev local sur réseau mobile/wifi)
+                configuration.setAllowedOriginPatterns(List.of("*"));
+
+                // Autoriser toutes les méthodes
+                configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+
+                // Autoriser tous les headers (notamment Authorization)
+                configuration.setAllowedHeaders(List.of("*"));
+
+                // Autoriser l'envoi de cookies/credentials (si besoin)
+                configuration.setAllowCredentials(true);
+
+                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+                source.registerCorsConfiguration("/**", configuration);
+                return source;
+        }
 }

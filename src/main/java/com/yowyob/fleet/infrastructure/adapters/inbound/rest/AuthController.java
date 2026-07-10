@@ -27,8 +27,7 @@ public class AuthController {
     private final AuthPort authPort;
 
     @PostMapping("/login")
-    @Operation(summary = "Connexion utilisateur",
-               description = "Flow Kernel 2 étapes : discover-contexts puis select-context. Retourne JWT RS256.")
+    @Operation(summary = "Connexion utilisateur", description = "Flow Kernel 2 étapes : discover-contexts puis select-context. Retourne JWT RS256.")
     public Mono<AuthPort.AuthResponse> login(
             @org.springframework.web.bind.annotation.RequestBody LoginRequest request) {
         return authUseCase.login(request.identifier(), request.password());
@@ -42,8 +41,7 @@ public class AuthController {
     }
 
     @PostMapping(value = "/register", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @Operation(summary = "Inscription utilisateur",
-               description = "Crée un compte via le Kernel RT-Comops. Retourne les tokens d'accès.")
+    @Operation(summary = "Inscription utilisateur", description = "Crée un compte via le Kernel RT-Comops. Retourne les tokens d'accès.")
     public Mono<AuthPort.AuthResponse> register(
             @org.springframework.web.bind.annotation.RequestBody RegisterRequest dto) {
         var command = new AuthUseCase.RegisterCommand(
@@ -53,8 +51,7 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
-    @Operation(summary = "Mot de passe oublié",
-               description = "Envoie un email de réinitialisation via le Kernel.")
+    @Operation(summary = "Mot de passe oublié", description = "Envoie un email de réinitialisation via le Kernel.")
     public Mono<Void> forgotPassword(
             @org.springframework.web.bind.annotation.RequestBody ForgotPasswordRequest request) {
         log.info("🔑 Forgot password request for: {}", request.email());
@@ -83,25 +80,23 @@ public class AuthController {
     }
 
     @PostMapping("/discover-contexts")
-    @Operation(summary = "Découvrir les contextes (multi-tenant)",
-               description = "Étape 1 du flow Kernel : retourne les tenants et organisations accessibles. Le navigateur n'envoie jamais les clés Kernel — elles restent côté serveur.")
+    @Operation(summary = "Découvrir les contextes (multi-tenant)", description = "Étape 1 du flow Kernel : retourne les tenants et organisations accessibles. Le navigateur n'envoie jamais les clés Kernel — elles restent côté serveur.")
     public Mono<DiscoverContextsResponse> discoverContexts(
             @org.springframework.web.bind.annotation.RequestBody DiscoverContextsRequest request) {
         log.info("🔍 discover-contexts pour: {}", request.principal());
         if (authPort instanceof KernelAuthAdapter kernelAdapter) {
             return kernelAdapter.discoverContexts(request.principal(), request.password());
         }
-        // Mode fake : retourne un contexte unique simulé
+        // Mode fake : retourne un contexte unique simulé contenant l'identifiant pour
+        // select-context
         return Mono.just(new DiscoverContextsResponse(
-                "fake-selection-token",
+                "fake-selection-token:" + request.principal(),
                 900L,
-                List.of(new ContextItem("ctx-fake", null, null, null, List.of()))
-        ));
+                List.of(new ContextItem("ctx-fake", null, null, null, List.of()))));
     }
 
     @PostMapping("/select-context")
-    @Operation(summary = "Sélectionner un contexte (multi-tenant)",
-               description = "Étape 2 du flow Kernel : finalise le login pour le contexte choisi. Retourne le JWT + tenantId + organizationId.")
+    @Operation(summary = "Sélectionner un contexte (multi-tenant)", description = "Étape 2 du flow Kernel : finalise le login pour le contexte choisi. Retourne le JWT + tenantId + organizationId.")
     public Mono<AuthPort.AuthResponse> selectContext(
             @org.springframework.web.bind.annotation.RequestBody SelectContextRequest request) {
         log.info("✅ select-context: contextId={} orgId={}", request.contextId(), request.organizationId());
@@ -109,29 +104,45 @@ public class AuthController {
             return kernelAdapter.selectContext(request.selectionToken(), request.contextId(), request.organizationId());
         }
         // Mode fake : simuler un login direct
-        return authUseCase.login("fake@user.com", "fake");
+        String email = "admin@fleetman.cm";
+        if (request.selectionToken() != null && request.selectionToken().contains(":")) {
+            email = request.selectionToken().substring(request.selectionToken().indexOf(":") + 1);
+        }
+        String password = email.contains("nehemie") ? "Nehemie@123" : "FleetMan2026!";
+        return authUseCase.login(email, password);
     }
 
     // ── Records internes ───────────────────────────────────────────────────────
 
-    public record TokenRefreshRequest(String refreshToken) {}
-    public record ForgotPasswordRequest(String email) {}
-    public record ResetPasswordRequest(String resetToken, String newPassword) {}
+    public record TokenRefreshRequest(String refreshToken) {
+    }
 
-    public record DiscoverContextsRequest(String principal, String password) {}
-    public record SelectContextRequest(String selectionToken, String contextId, java.util.UUID organizationId) {}
+    public record ForgotPasswordRequest(String email) {
+    }
+
+    public record ResetPasswordRequest(String resetToken, String newPassword) {
+    }
+
+    public record DiscoverContextsRequest(String principal, String password) {
+    }
+
+    public record SelectContextRequest(String selectionToken, String contextId, java.util.UUID organizationId) {
+    }
 
     public record DiscoverContextsResponse(
             String selectionToken,
             Long expiresInSeconds,
-            java.util.List<ContextItem> contexts) {}
+            java.util.List<ContextItem> contexts) {
+    }
 
     public record ContextItem(
             String contextId,
             java.util.UUID tenantId,
             java.util.UUID userId,
             java.util.UUID actorId,
-            java.util.List<OrgItem> organizations) {}
+            java.util.List<OrgItem> organizations) {
+    }
 
-    public record OrgItem(java.util.UUID organizationId, String shortName, String service) {}
+    public record OrgItem(java.util.UUID organizationId, String shortName, String service) {
+    }
 }

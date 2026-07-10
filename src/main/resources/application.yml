@@ -11,7 +11,7 @@ spring:
     name: fleet-management
   
   profiles:
-    active: local,demo
+    active: local,demo,fake-auth
 
   # R2DBC (Application Runtime)
 

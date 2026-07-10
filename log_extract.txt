@@ -1,0 +1,150 @@
+2026-07-09T03:14:37.571+01:00 DEBUG 22684 --- [fleet-management] [     parallel-9] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/actuator/**', method=null}
+2026-07-09T03:14:37.571+01:00 DEBUG 22684 --- [fleet-management] [     parallel-9] athPatternParserServerWebExchangeMatcher : Request 'POST /api/v1/auth/login' doesn't match 'null /actuator/**'
+2026-07-09T03:14:37.571+01:00 DEBUG 22684 --- [fleet-management] [     parallel-9] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/api/v1/health/**', method=null}
+2026-07-09T03:14:37.571+01:00 DEBUG 22684 --- [fleet-management] [     parallel-9] athPatternParserServerWebExchangeMatcher : Request 'POST /api/v1/auth/login' doesn't match 'null /api/v1/health/**'
+2026-07-09T03:14:37.571+01:00 DEBUG 22684 --- [fleet-management] [     parallel-9] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/api/v1/auth/**', method=null}
+2026-07-09T03:14:37.571+01:00 DEBUG 22684 --- [fleet-management] [     parallel-9] athPatternParserServerWebExchangeMatcher : Checking match of request : '/api/v1/auth/login'; against '/api/v1/auth/**'
+2026-07-09T03:14:37.571+01:00 DEBUG 22684 --- [fleet-management] [     parallel-9] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : matched
+2026-07-09T03:14:37.573+01:00 DEBUG 22684 --- [fleet-management] [     parallel-9] a.DelegatingReactiveAuthorizationManager : Checking authorization on '/api/v1/auth/login' using org.springframework.security.config.web.server.ServerHttpSecurity$AuthorizeExchangeSpec$Access$$Lambda/0x000001d941902860@42d3dab
+2026-07-09T03:14:37.573+01:00 DEBUG 22684 --- [fleet-management] [     parallel-9] o.s.s.w.s.a.AuthorizationWebFilter       : Authorization successful
+2026-07-09T03:14:37.575+01:00  INFO 22684 --- [fleet-management] [ctor-http-nio-2] c.y.f.i.a.o.external.FakeAuthAdapter     : 🛠 MODE FAKE AUTH : Login pour baduser
+2026-07-09T03:14:37.577+01:00  WARN 22684 --- [fleet-management] [ctor-http-nio-2] c.y.f.i.a.i.rest.GlobalExceptionHandler  : ⚠️ Business Exception [AUTH_001] : Identifiants ou mot de passe incorrects.
+2026-07-09T03:20:46.614+01:00 DEBUG 22684 --- [fleet-management] [ctor-http-nio-3] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/api/v1/**', method=null}
+2026-07-09T03:20:46.615+01:00 DEBUG 22684 --- [fleet-management] [ctor-http-nio-3] athPatternParserServerWebExchangeMatcher : Checking match of request : '/api/v1/auth/register'; against '/api/v1/**'
+2026-07-09T03:20:46.616+01:00 DEBUG 22684 --- [fleet-management] [ctor-http-nio-3] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : matched
+2026-07-09T03:20:46.617+01:00 DEBUG 22684 --- [fleet-management] [ctor-http-nio-3] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/api/v1/files/**', method=null}
+2026-07-09T03:20:46.617+01:00 DEBUG 22684 --- [fleet-management] [ctor-http-nio-3] athPatternParserServerWebExchangeMatcher : Request 'POST /api/v1/auth/register' doesn't match 'null /api/v1/files/**'
+2026-07-09T03:20:46.617+01:00 DEBUG 22684 --- [fleet-management] [ctor-http-nio-3] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : No matches found
+2026-07-09T03:20:46.622+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/logout', method=POST}
+2026-07-09T03:20:46.622+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'POST /api/v1/auth/register' doesn't match 'POST /logout'
+2026-07-09T03:20:46.622+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : No matches found
+2026-07-09T03:20:46.623+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/v3/api-docs/**', method=null}
+2026-07-09T03:20:46.623+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'POST /api/v1/auth/register' doesn't match 'null /v3/api-docs/**'
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/swagger-ui/**', method=null}
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'POST /api/v1/auth/register' doesn't match 'null /swagger-ui/**'
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/swagger-ui.html', method=null}
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'POST /api/v1/auth/register' doesn't match 'null /swagger-ui.html'
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/webjars/**', method=null}
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'POST /api/v1/auth/register' doesn't match 'null /webjars/**'
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/actuator/**', method=null}
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'POST /api/v1/auth/register' doesn't match 'null /actuator/**'
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/api/v1/health/**', method=null}
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'POST /api/v1/auth/register' doesn't match 'null /api/v1/health/**'
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/api/v1/auth/**', method=null}
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Checking match of request : '/api/v1/auth/register'; against '/api/v1/auth/**'
+2026-07-09T03:20:46.624+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : matched
+2026-07-09T03:20:46.625+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] a.DelegatingReactiveAuthorizationManager : Checking authorization on '/api/v1/auth/register' using org.springframework.security.config.web.server.ServerHttpSecurity$AuthorizeExchangeSpec$Access$$Lambda/0x000001d941902860@42d3dab
+2026-07-09T03:20:46.625+01:00 DEBUG 22684 --- [fleet-management] [    parallel-11] o.s.s.w.s.a.AuthorizationWebFilter       : Authorization successful
+2026-07-09T03:20:46.849+01:00 ERROR 22684 --- [fleet-management] [actor-tcp-nio-3] c.y.f.i.a.i.rest.GlobalExceptionHandler  : 💥 Critical error caught : 
+
+org.springframework.r2dbc.BadSqlGrammarException: executeMany; bad SQL grammar [SELECT fleet.users.id, fleet.users.username, fleet.users.email, fleet.users.first_name, fleet.users.last_name, fleet.users.photo_url, fleet.users.is_active, fleet.users.last_login_at, fleet.users.deleted_at, fleet.users.approval_status, fleet.users.rejection_reason, fleet.users.approved_by, fleet.users.approved_at, fleet.users.kernel_id FROM fleet.users WHERE fleet.users.kernel_id = $1]
+	at org.springframework.r2dbc.connection.ConnectionFactoryUtils.convertR2dbcException(ConnectionFactoryUtils.java:253)
+	Suppressed: reactor.core.publisher.FluxOnAssembly$OnAssemblyException: 
+Error has been observed at the following site(s):
+	*__checkpoint ⇢ Handler com.yowyob.fleet.infrastructure.adapters.inbound.rest.AuthController#register(RegisterRequest) [DispatcherHandler]
+Original Stack Trace:
+		at org.springframework.r2dbc.connection.ConnectionFactoryUtils.convertR2dbcException(ConnectionFactoryUtils.java:253)
+		at org.springframework.r2dbc.core.DefaultDatabaseClient.lambda$inConnectionMany$8(DefaultDatabaseClient.java:156)
+		at reactor.core.publisher.Flux.lambda$onErrorMap$28(Flux.java:7302)
+		at reactor.core.publisher.Flux.lambda$onErrorResume$29(Flux.java:7355)
+		at reactor.core.publisher.FluxOnErrorResume$ResumeSubscriber.onError(FluxOnErrorResume.java:94)
+		at reactor.core.publisher.FluxUsingWhen$UsingWhenSubscriber.deferredError(FluxUsingWhen.java:403)
+		at reactor.core.publisher.FluxUsingWhen$RollbackInner.onComplete(FluxUsingWhen.java:480)
+		at reactor.core.publisher.Operators$MultiSubscriptionSubscriber.onComplete(Operators.java:2231)
+		at reactor.core.publisher.FluxPeek$PeekSubscriber.onComplete(FluxPeek.java:260)
+		at reactor.core.publisher.Operators$MultiSubscriptionSubscriber.onComplete(Operators.java:2231)
+		at reactor.core.publisher.MonoIgnoreThen$ThenIgnoreMain.onComplete(MonoIgnoreThen.java:210)
+		at reactor.core.publisher.MonoIgnoreThen$ThenIgnoreMain.onComplete(MonoIgnoreThen.java:210)
+		at reactor.pool.SimpleDequePool.maybeRecycleAndDrain(SimpleDequePool.java:540)
+		at reactor.pool.SimpleDequePool$QueuePoolRecyclerInner.onComplete(SimpleDequePool.java:770)
+		at reactor.core.publisher.Operators.complete(Operators.java:137)
+		at reactor.core.publisher.MonoEmpty.subscribe(MonoEmpty.java:46)
+		at reactor.core.publisher.Mono.subscribe(Mono.java:4568)
+		at reactor.pool.SimpleDequePool$QueuePoolRecyclerMono.subscribe(SimpleDequePool.java:882)
+		at reactor.core.publisher.MonoDefer.subscribe(MonoDefer.java:53)
+		at reactor.core.publisher.MonoIgnoreThen$ThenIgnoreMain.subscribeNext(MonoIgnoreThen.java:241)
+		at reactor.core.publisher.MonoIgnoreThen$ThenIgnoreMain.onComplete(MonoIgnoreThen.java:204)
+		at reactor.core.publisher.FluxPeek$PeekSubscriber.onComplete(FluxPeek.java:260)
+		at reactor.core.publisher.Operators.complete(Operators.java:137)
+		at reactor.core.publisher.MonoEmpty.subscribe(MonoEmpty.java:46)
+		at reactor.core.publisher.Mono.subscribe(Mono.java:4568)
+		at reactor.core.publisher.MonoIgnoreThen$ThenIgnoreMain.subscribeNext(MonoIgnoreThen.java:265)
+		at reactor.core.publisher.MonoIgnoreThen.subscribe(MonoIgnoreThen.java:51)
+		at reactor.core.publisher.MonoDefer.subscribe(MonoDefer.java:53)
+		at reactor.core.publisher.MonoIgnoreThen$ThenIgnoreMain.subscribeNext(MonoIgnoreThen.java:241)
+		at reactor.core.publisher.MonoIgnoreThen$ThenIgnoreMain.onComplete(MonoIgnoreThen.java:204)
+		at reactor.core.publisher.MonoIgnoreElements$IgnoreElementsSubscriber.onComplete(MonoIgnoreElements.java:89)
+		at reactor.core.publisher.FluxHandleFuseable$HandleFuseableSubscriber.onComplete(FluxHandleFuseable.java:239)
+		at reactor.core.publisher.MonoSupplier$MonoSupplierSubscription.request(MonoSupplier.java:148)
+		at reactor.core.publisher.FluxHandleFuseable$HandleFuseableSubscriber.request(FluxHandleFuseable.java:260)
+		at reactor.core.publisher.MonoIgnoreElements$IgnoreElementsSubscriber.onSubscribe(MonoIgnoreElements.java:72)
+		at reactor.core.publisher.FluxHandleFuseable$HandleFuseableSubscriber.onSubscribe(FluxHandleFuseable.java:164)
+		at reactor.core.publisher.MonoSupplier.subscribe(MonoSupplier.java:48)
+		at reactor.core.publisher.Mono.subscribe(Mono.java:4568)
+		at reactor.core.publisher.MonoIgnoreThen$ThenIgnoreMain.subscribeNext(MonoIgnoreThen.java:265)
+		at reactor.core.publisher.MonoIgnoreThen.subscribe(MonoIgnoreThen.java:51)
+		at reactor.core.publisher.InternalMonoOperator.subscribe(InternalMonoOperator.java:76)
+		at reactor.core.publisher.MonoDefer.subscribe(MonoDefer.java:53)
+		at reactor.core.publisher.Mono.subscribe(Mono.java:4568)
+		at reactor.core.publisher.FluxOnErrorResume$ResumeSubscriber.onError(FluxOnErrorResume.java:103)
+		at reactor.core.publisher.MonoIgnoreElements$IgnoreElementsSubscriber.onError(MonoIgnoreElements.java:84)
+		at reactor.core.publisher.FluxMap$MapSubscriber.onError(FluxMap.java:134)
+		at reactor.core.publisher.FluxFilter$FilterSubscriber.onError(FluxFilter.java:157)
+		at reactor.core.publisher.FluxFilter$FilterConditionalSubscriber.onError(FluxFilter.java:291)
+		at reactor.core.publisher.FluxMap$MapConditionalSubscriber.onError(FluxMap.java:265)
+		at reactor.core.publisher.Operators.error(Operators.java:198)
+		at reactor.core.publisher.MonoError.subscribe(MonoError.java:53)
+		at reactor.core.publisher.MonoDeferContextual.subscribe(MonoDeferContextual.java:55)
+		at reactor.core.publisher.InternalMonoOperator.subscribe(InternalMonoOperator.java:76)
+		at reactor.core.publisher.MonoDefer.subscribe(MonoDefer.java:53)
+		at reactor.core.publisher.Mono.subscribe(Mono.java:4568)
+		at reactor.core.publisher.FluxUsingWhen$UsingWhenSubscriber.onError(FluxUsingWhen.java:368)
+		at reactor.core.publisher.FluxFlatMap$FlatMapMain.checkTerminated(FluxFlatMap.java:846)
+		at reactor.core.publisher.FluxFlatMap$FlatMapMain.drainLoop(FluxFlatMap.java:612)
+		at reactor.core.publisher.FluxFlatMap$FlatMapMain.drain(FluxFlatMap.java:592)
+		at reactor.core.publisher.FluxFlatMap$FlatMapMain.innerError(FluxFlatMap.java:867)
+		at reactor.core.publisher.FluxFlatMap$FlatMapInner.onError(FluxFlatMap.java:994)
+		at reactor.core.publisher.FluxHandle$HandleSubscriber.onError(FluxHandle.java:213)
+		at reactor.core.publisher.MonoFlatMapMany$FlatMapManyInner.onError(MonoFlatMapMany.java:256)
+		at reactor.core.publisher.FluxHandleFuseable$HandleFuseableSubscriber.onNext(FluxHandleFuseable.java:201)
+		at reactor.core.publisher.FluxFilterFuseable$FilterFuseableConditionalSubscriber.onNext(FluxFilterFuseable.java:337)
+		at reactor.core.publisher.FluxContextWrite$ContextWriteSubscriber.onNext(FluxContextWrite.java:107)
+		at reactor.core.publisher.FluxPeekFuseable$PeekConditionalSubscriber.onNext(FluxPeekFuseable.java:854)
+		at reactor.core.publisher.FluxPeekFuseable$PeekConditionalSubscriber.onNext(FluxPeekFuseable.java:854)
+		at io.r2dbc.postgresql.util.FluxDiscardOnCancel$FluxDiscardOnCancelSubscriber.onNext(FluxDiscardOnCancel.java:91)
+		at reactor.core.publisher.FluxDoFinally$DoFinallySubscriber.onNext(FluxDoFinally.java:113)
+		at reactor.core.publisher.FluxHandle$HandleSubscriber.onNext(FluxHandle.java:129)
+		at reactor.core.publisher.FluxCreate$BufferAsyncSink.drain(FluxCreate.java:880)
+		at reactor.core.publisher.FluxCreate$BufferAsyncSink.next(FluxCreate.java:805)
+		at reactor.core.publisher.FluxCreate$SerializedFluxSink.next(FluxCreate.java:163)
+		at io.r2dbc.postgresql.client.ReactorNettyClient$Conversation.emit(ReactorNettyClient.java:684)
+		at io.r2dbc.postgresql.client.ReactorNettyClient$BackendMessageSubscriber.emit(ReactorNettyClient.java:936)
+		at io.r2dbc.postgresql.client.ReactorNettyClient$BackendMessageSubscriber.onNext(ReactorNettyClient.java:810)
+		at io.r2dbc.postgresql.client.ReactorNettyClient$BackendMessageSubscriber.onNext(ReactorNettyClient.java:716)
+		at reactor.core.publisher.FluxHandle$HandleSubscriber.onNext(FluxHandle.java:129)
+		at reactor.core.publisher.FluxPeekFuseable$PeekConditionalSubscriber.onNext(FluxPeekFuseable.java:854)
+		at reactor.core.publisher.FluxMap$MapConditionalSubscriber.onNext(FluxMap.java:224)
+		at reactor.core.publisher.FluxMap$MapConditionalSubscriber.onNext(FluxMap.java:224)
+		at reactor.netty.channel.FluxReceive.drainReceiver(FluxReceive.java:294)
+		at reactor.netty.channel.FluxReceive.onInboundNext(FluxReceive.java:403)
+		at reactor.netty.channel.ChannelOperations.onInboundNext(ChannelOperations.java:426)
+		at reactor.netty.channel.ChannelOperationsHandler.channelRead(ChannelOperationsHandler.java:114)
+		at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:444)
+		at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:420)
+		at io.netty.channel.AbstractChannelHandlerContext.fireChannelRead(AbstractChannelHandlerContext.java:412)
+		at io.netty.handler.codec.ByteToMessageDecoder.fireChannelRead(ByteToMessageDecoder.java:346)
+		at io.netty.handler.codec.ByteToMessageDecoder.channelRead(ByteToMessageDecoder.java:318)
+		at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:444)
+		at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:420)
+		at io.netty.channel.AbstractChannelHandlerContext.fireChannelRead(AbstractChannelHandlerContext.java:412)
+		at io.netty.channel.DefaultChannelPipeline$HeadContext.channelRead(DefaultChannelPipeline.java:1407)
+		at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:440)
+		at io.netty.channel.AbstractChannelHandlerContext.invokeChannelRead(AbstractChannelHandlerContext.java:420)
+		at io.netty.channel.DefaultChannelPipeline.fireChannelRead(DefaultChannelPipeline.java:918)
+		at io.netty.channel.nio.AbstractNioByteChannel$NioByteUnsafe.read(AbstractNioByteChannel.java:166)
+		at io.netty.channel.nio.NioEventLoop.processSelectedKey(NioEventLoop.java:788)
+		at io.netty.channel.nio.NioEventLoop.processSelectedKeysOptimized(NioEventLoop.java:724)
+		at io.netty.channel.nio.NioEventLoop.processSelectedKeys(NioEventLoop.java:650)
+		at io.netty.channel.nio.NioEventLoop.run(NioEventLoop.java:562)
+		at io.netty.util.concurrent.SingleThreadEventExecutor$4.run(SingleThreadEventExecutor.java:994)
+		at io.netty.util.internal.ThreadExecutorMap$2.run(ThreadExecutorMap.java:74)

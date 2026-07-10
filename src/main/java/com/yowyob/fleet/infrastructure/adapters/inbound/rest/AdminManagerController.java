@@ -33,14 +33,17 @@ public class AdminManagerController {
     }
 
     @GetMapping("/managers")
+    @PreAuthorize("hasAnyRole('FLEET_ADMIN', 'FLEET_SUPER_ADMIN', 'FLEET_MANAGER')")
     @Operation(summary = "Lister les Fleet Managers")
-    public Flux<AuthPort.UserDetail> list(@Parameter(hidden = true) @RequestHeader(HttpHeaders.AUTHORIZATION) String t) {
+    public Flux<AuthPort.UserDetail> list(
+            @Parameter(hidden = true) @RequestHeader(HttpHeaders.AUTHORIZATION) String t) {
         return adminUseCase.listFleetManagers(t);
     }
 
     @GetMapping("/managers/{id}")
     @Operation(summary = "Détails d'un Fleet Manager")
-    public Mono<AuthPort.UserDetail> getOne(@PathVariable UUID id, @Parameter(hidden = true) @RequestHeader(HttpHeaders.AUTHORIZATION) String t, Authentication auth) {
+    public Mono<AuthPort.UserDetail> getOne(@PathVariable UUID id,
+            @Parameter(hidden = true) @RequestHeader(HttpHeaders.AUTHORIZATION) String t, Authentication auth) {
         return adminUseCase.getManagerDetails(id, t, isSuper(auth));
     }
 

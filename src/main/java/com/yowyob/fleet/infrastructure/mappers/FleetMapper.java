@@ -17,21 +17,23 @@ public interface FleetMapper {
 
     // Domain -> Entity
     // Les champs id, name, managerId sont mappés automatiquement car mêmes noms
-    @Mapping(target = "phoneNumber", source = "phoneNumber") 
+    @Mapping(target = "phoneNumber", source = "phoneNumber")
     FleetEntity toEntity(Fleet domain);
-    
+
     // Entity -> Domain
     @Mapping(target = "vehicleCount", ignore = true) // Ce champ est calculé, pas dans l'entité
     Fleet toDomain(FleetEntity entity);
 
     // Request -> Domain
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "createdAt", ignore = true) // C'était "creationDate" avant, erreur ici
+    @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "vehicleCount", ignore = true)
+    @Mapping(target = "managerId", source = "managerId")
     Fleet toDomain(FleetRequest request);
 
     // Domain -> Response
-    // On mappe createdAt (Instant) vers creationDate (LocalDate) pour la réponse JSON
+    // On mappe createdAt (Instant) vers creationDate (LocalDate) pour la réponse
+    // JSON
     @Mapping(target = "creationDate", source = "createdAt")
     @Mapping(target = "managerUserId", source = "managerId")
     FleetResponse toResponse(Fleet domain);

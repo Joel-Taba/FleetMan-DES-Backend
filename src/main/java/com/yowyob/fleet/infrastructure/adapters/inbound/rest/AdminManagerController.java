@@ -23,7 +23,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Tag(name = OpenApiConfig.TAG_ADMIN_MANAGERS)
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasAnyRole('FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+@PreAuthorize("hasAnyRole('FLEET_ADMIN', 'FLEET_SUPER_ADMIN', 'FLEET_MANAGER')")
 public class AdminManagerController {
 
     private final ManageAdminUseCase adminUseCase;
@@ -41,6 +41,7 @@ public class AdminManagerController {
     }
 
     @GetMapping("/managers/{id}")
+    @PreAuthorize("hasAnyRole('FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Détails d'un Fleet Manager")
     public Mono<AuthPort.UserDetail> getOne(@PathVariable UUID id,
             @Parameter(hidden = true) @RequestHeader(HttpHeaders.AUTHORIZATION) String t, Authentication auth) {
@@ -48,6 +49,7 @@ public class AdminManagerController {
     }
 
     @PatchMapping("/managers/{id}/toggle")
+    @PreAuthorize("hasAnyRole('FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Activer/Désactiver un Fleet Manager")
     public Mono<Void> toggle(@PathVariable UUID id, Authentication auth) {
         AuthPort.UserDetail currentUser = (AuthPort.UserDetail) auth.getPrincipal();

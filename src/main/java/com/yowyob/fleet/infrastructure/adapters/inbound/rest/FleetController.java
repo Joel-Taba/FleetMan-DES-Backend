@@ -26,7 +26,8 @@ import java.util.UUID;
 @RequestMapping("/api/v1/fleets")
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasRole('FLEET_MANAGER')") // Souveraineté : Seul le Manager accède à ses flottes
+@PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')") // Souveraineté : Le Manager ou l'Admin
+                                                                                 // accède à ses flottes
 public class FleetController {
 
     private final ManageFleetUseCase fleetUseCase;

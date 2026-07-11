@@ -34,24 +34,23 @@ public class FleetManagerController {
     }
 
     @GetMapping("/me")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Détails de mon entreprise", description = "Profil complet incluant le nombre réel de flottes.")
     public Mono<FleetManagerResponse> getMyManagerProfile(
             @Parameter(hidden = true) @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
-            Authentication auth
-    ) {
+            Authentication auth) {
         return managerUseCase.getManagerDetails(getUserId(auth), token);
     }
 
     @GetMapping("/kpis")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Tableau de bord (KPIs)", description = "Statistiques clés pour l'écran d'accueil du manager.")
     public Mono<ManagerKpiResponse> getMyKpis(Authentication auth) {
         return managerUseCase.getManagerKpis(getUserId(auth));
     }
 
     @PutMapping("/me/company")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Mettre à jour mon nom d'entreprise")
     public Mono<Void> updateMyCompany(@Valid @RequestBody UpdateManagerRequest request, Authentication auth) {
         return managerUseCase.updateManagerCompany(getUserId(auth), request.companyName());

@@ -22,6 +22,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Tag(name = OpenApiConfig.TAG_ALERT_EVENTS)
 @SecurityRequirement(name = "bearerAuth")
+@PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
 public class AlertEventController {
 
     private final ManageAlertRuleUseCase useCase;
@@ -31,31 +32,24 @@ public class AlertEventController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Toutes mes notifications",
-               description = "Retourne les 100 dernières notifications (lues et non lues) du manager connecté, triées par date décroissante.")
+    @Operation(summary = "Toutes mes notifications", description = "Retourne les 100 dernières notifications (lues et non lues) du manager connecté, triées par date décroissante.")
     public Flux<AlertEventResponse> listAll(Authentication auth) {
         return useCase.getAllEvents(getUserId(auth)).map(AlertEventResponse::from);
     }
 
     @GetMapping("/unread")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Notifications non lues",
-               description = "Retourne uniquement les notifications non lues du manager. Utilisé pour afficher le contenu du panneau de notifications dans le header.")
+    @Operation(summary = "Notifications non lues", description = "Retourne uniquement les notifications non lues du manager. Utilisé pour afficher le contenu du panneau de notifications dans le header.")
     public Flux<AlertEventResponse> getUnread(Authentication auth) {
         return useCase.getUnreadEvents(getUserId(auth)).map(AlertEventResponse::from);
     }
 
     @GetMapping("/count-unread")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Nombre de notifications non lues",
-               description = "Retourne le compteur de notifications non lues. Utilisé pour le badge rouge dans le header de l'application.")
+    @Operation(summary = "Nombre de notifications non lues", description = "Retourne le compteur de notifications non lues. Utilisé pour le badge rouge dans le header de l'application.")
     public Mono<UnreadCountDto> countUnread(Authentication auth) {
         return useCase.countUnread(getUserId(auth)).map(UnreadCountDto::new);
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Détail d'une notification")
     public Mono<AlertEventResponse> getById(
             @Parameter(description = "ID de la notification") @PathVariable UUID id) {
@@ -63,26 +57,20 @@ public class AlertEventController {
     }
 
     @PatchMapping("/{id}/read")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Marquer comme lue",
-               description = "Marque une notification spécifique comme lue (UNREAD → READ).")
+    @Operation(summary = "Marquer comme lue", description = "Marque une notification spécifique comme lue (UNREAD → READ).")
     public Mono<AlertEventResponse> markAsRead(
             @Parameter(description = "ID de la notification") @PathVariable UUID id) {
         return useCase.markAsRead(id).map(AlertEventResponse::from);
     }
 
     @PatchMapping("/read-all")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Tout marquer comme lu",
-               description = "Marque toutes les notifications non lues du manager comme lues. Retourne le nombre de notifications marquées.")
+    @Operation(summary = "Tout marquer comme lu", description = "Marque toutes les notifications non lues du manager comme lues. Retourne le nombre de notifications marquées.")
     public Mono<MarkedCountDto> markAllAsRead(Authentication auth) {
         return useCase.markAllAsRead(getUserId(auth)).map(MarkedCountDto::new);
     }
 
     @PatchMapping("/{id}/dismiss")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Ignorer une notification",
-               description = "Masque une notification sans la supprimer (UNREAD → DISMISSED).")
+    @Operation(summary = "Ignorer une notification", description = "Masque une notification sans la supprimer (UNREAD → DISMISSED).")
     public Mono<AlertEventResponse> dismiss(
             @Parameter(description = "ID de la notification") @PathVariable UUID id) {
         return useCase.dismiss(id).map(AlertEventResponse::from);
@@ -90,6 +78,9 @@ public class AlertEventController {
 
     // ── DTOs internes ─────────────────────────────────────────────────────────
 
-    record UnreadCountDto(long count) {}
-    record MarkedCountDto(long markedCount) {}
+    record UnreadCountDto(long count) {
+    }
+
+    record MarkedCountDto(long markedCount) {
+    }
 }

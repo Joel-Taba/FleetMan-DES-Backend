@@ -75,7 +75,11 @@ public class AuthController {
     @GetMapping("/me")
     @Operation(summary = "Profil de l'utilisateur connecté")
     public Mono<AuthPort.UserDetail> me(
-            @RequestHeader("Authorization") String token) {
+            @RequestHeader(value = "Authorization", required = false) String token) {
+        if (token == null || token.isBlank()) {
+            return Mono.error(new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED, "Missing authorization header"));
+        }
         return authPort.getUserProfile(token);
     }
 
@@ -100,15 +104,17 @@ public class AuthController {
     public Mono<AuthPort.AuthResponse> selectContext(
             @org.springframework.web.bind.annotation.RequestBody SelectContextRequest request) {
         log.info("✅ select-context: contextId={} orgId={}", request.contextId(), request.organizationId());
-        if (authPort instanceof KernelAuthAdapter kernelAdapter) {
-            return kernelAdapter.selectContext(request.selectionToken(), request.contextId(), request.organizationId());
-        }
         // Mode fake : simuler un login direct
         String email = "admin@fleetman.cm";
         if (request.selectionToken() != null && request.selectionToken().contains(":")) {
             email = request.selectionToken().substring(request.selectionToken().indexOf(":") + 1);
         }
-        String password = email.contains("nehemie") ? "Nehemie@123" : "FleetMan2026!";
+        String password = "FleetMan2026!";
+        if (email.contains("nehemie")) {
+            password = "Nehemie@123";
+        } else if (email.contains("frank")) {
+            password = "Frank@123";
+        }
         return authUseCase.login(email, password);
     }
 

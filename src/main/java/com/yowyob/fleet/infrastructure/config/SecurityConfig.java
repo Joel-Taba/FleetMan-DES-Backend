@@ -43,8 +43,13 @@ public class SecurityConfig {
                 AuthenticationWebFilter jwtFilter = new AuthenticationWebFilter(authenticationManager);
                 jwtFilter.setServerAuthenticationConverter(authenticationConverter);
 
-                org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher apiMatcher = ServerWebExchangeMatchers
-                                .pathMatchers("/api/v1/**");
+                org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher apiMatcher = exchange -> {
+                        if (exchange.getRequest().getMethod() == org.springframework.http.HttpMethod.OPTIONS) {
+                                return org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher.MatchResult
+                                                .notMatch();
+                        }
+                        return ServerWebExchangeMatchers.pathMatchers("/api/v1/**").matches(exchange);
+                };
                 org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher filesMatcher = ServerWebExchangeMatchers
                                 .pathMatchers("/api/v1/files/**");
 

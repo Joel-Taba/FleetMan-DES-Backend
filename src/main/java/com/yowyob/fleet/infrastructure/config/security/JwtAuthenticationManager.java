@@ -3,6 +3,8 @@ package com.yowyob.fleet.infrastructure.config.security;
 import com.yowyob.fleet.domain.exception.AuthException;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.ReactiveAuthenticationManager;
@@ -21,6 +23,8 @@ public class JwtAuthenticationManager implements ReactiveAuthenticationManager {
 
     private final AuthPort authPort;
     private final UserLocalR2dbcRepository userRepo;
+    private final DriverR2dbcRepository driverRepo;
+    private final VehicleLocalR2dbcRepository vehicleLocalRepo;
 
     @Override
     public Mono<Authentication> authenticate(Authentication authentication) {
@@ -51,8 +55,6 @@ public class JwtAuthenticationManager implements ReactiveAuthenticationManager {
                     if (localUser.getDeletedAt() != null) {
                         return Mono.error(AuthException.accountDeleted());
                     }
-                    // Si le compte existe mais est inactif, on l'active automatiquement
-                    // (nécessaire en mode fake-auth après restart du backend)
                     if (!localUser.isActive()) {
                         log.info("🔓 [AUTO-ACTIVATE] Réactivation automatique de l'utilisateur local id={}",
                                 localUser.getId());
@@ -64,6 +66,38 @@ public class JwtAuthenticationManager implements ReactiveAuthenticationManager {
                     }
                     log.debug("✅ [UUID REBIND] Kernel id={} → local id={}", userDetail.id(), localUser.getId());
                     return Mono.just(rebindToLocalId(userDetail, localUser));
+                })
+                .flatMap(rebound -> {
+                    if (rebound.roles().contains("FLEET_DRIVER")) {
+                        return vehicleLocalRepo.findByCurrentDriverId(rebound.id())
+                                .map(v -> v.getId().toString())
+                                .next()
+                                .flatMap(vId -> Mono.just(new AuthPort.UserDetail(
+                                        rebound.id(), rebound.username(), rebound.email(), rebound.phone(),
+                                        rebound.firstName(), rebound.lastName(), rebound.service(),
+                                        rebound.roles(), rebound.permissions(), rebound.photoUrl(),
+                                        rebound.companyName(), rebound.licenceNumber(),
+                                        vId,
+                                        rebound.isActive(), rebound.lastLoginAt())))
+                                .switchIfEmpty(Mono.defer(() -> {
+                                    return driverRepo.findById(rebound.id())
+                                            .map(driver -> {
+                                                if (driver.getAssignedVehicleId() != null) {
+                                                    return new AuthPort.UserDetail(
+                                                            rebound.id(), rebound.username(), rebound.email(),
+                                                            rebound.phone(),
+                                                            rebound.firstName(), rebound.lastName(), rebound.service(),
+                                                            rebound.roles(), rebound.permissions(), rebound.photoUrl(),
+                                                            rebound.companyName(), rebound.licenceNumber(),
+                                                            driver.getAssignedVehicleId().toString(),
+                                                            rebound.isActive(), rebound.lastLoginAt());
+                                                }
+                                                return rebound;
+                                            })
+                                            .defaultIfEmpty(rebound);
+                                }));
+                    }
+                    return Mono.just(rebound);
                 })
                 .switchIfEmpty(Mono.defer(() -> {
                     log.debug("ℹ️ [UUID REBIND] Aucun compte local pour Kernel id={}, accepté tel quel (premier login)",

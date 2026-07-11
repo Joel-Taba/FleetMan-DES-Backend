@@ -43,26 +43,23 @@ public class IncidentController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
-    @Operation(summary = "Déclarer un incident",
-               description = "Enregistre un incident terrain. Publie une alerte prioritaire si la sévérité est HIGH ou CRITICAL.")
+    @Operation(summary = "Déclarer un incident", description = "Enregistre un incident terrain. Publie une alerte prioritaire si la sévérité est HIGH ou CRITICAL.")
     public Mono<IncidentResponse> create(
             @Valid @RequestBody IncidentRequest request,
             Authentication auth) {
 
-        ManageIncidentUseCase.CreateIncidentCommand cmd =
-                new ManageIncidentUseCase.CreateIncidentCommand(
-                        request.type(),
-                        request.description(),
-                        request.severity(),
-                        request.cost(),
-                        request.longitude(),
-                        request.latitude(),
-                        request.witnessName(),
-                        request.witnessContact(),
-                        request.reportedBy(),
-                        request.vehicleId(),
-                        request.driverId()
-                );
+        ManageIncidentUseCase.CreateIncidentCommand cmd = new ManageIncidentUseCase.CreateIncidentCommand(
+                request.type(),
+                request.description(),
+                request.severity(),
+                request.cost(),
+                request.longitude(),
+                request.latitude(),
+                request.witnessName(),
+                request.witnessContact(),
+                request.reportedBy(),
+                request.vehicleId(),
+                request.driverId());
         return incidentUseCase.createIncident(cmd).map(IncidentResponse::from);
     }
 
@@ -70,8 +67,7 @@ public class IncidentController {
 
     @GetMapping
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Lister mes incidents",
-               description = "Retourne tous les incidents des véhicules gérés par le manager connecté.")
+    @Operation(summary = "Lister mes incidents", description = "Retourne tous les incidents des véhicules gérés par le manager connecté.")
     public Flux<IncidentResponse> listAll(Authentication auth) {
         return incidentUseCase.getAllByManager(getUserId(auth)).map(IncidentResponse::from);
     }
@@ -93,7 +89,7 @@ public class IncidentController {
     }
 
     @GetMapping("/driver/{driverId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
     @Operation(summary = "Incidents d'un chauffeur")
     public Flux<IncidentResponse> getByDriver(
             @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId) {
@@ -102,30 +98,28 @@ public class IncidentController {
 
     @GetMapping("/open")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Incidents ouverts",
-               description = "Retourne uniquement les incidents en statut REPORTED ou UNDER_INVESTIGATION. Utile pour le tableau de bord.")
+    @Operation(summary = "Incidents ouverts", description = "Retourne uniquement les incidents en statut REPORTED ou UNDER_INVESTIGATION. Utile pour le tableau de bord.")
     public Flux<IncidentResponse> getOpen(Authentication auth) {
         return incidentUseCase.getOpenIncidents(getUserId(auth)).map(IncidentResponse::from);
     }
 
     @GetMapping("/filter")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Filtrer les incidents",
-               description = "Filtre par type, sévérité ou statut. Fournir un seul paramètre à la fois.")
+    @Operation(summary = "Filtrer les incidents", description = "Filtre par type, sévérité ou statut. Fournir un seul paramètre à la fois.")
     public Flux<IncidentResponse> filter(
-            @Parameter(description = "Filtrer par type", example = "ACCIDENT")
-            @RequestParam(required = false) Incident.Type type,
-            @Parameter(description = "Filtrer par sévérité", example = "HIGH")
-            @RequestParam(required = false) Incident.Severity severity,
-            @Parameter(description = "Filtrer par statut", example = "RESOLVED")
-            @RequestParam(required = false) Incident.Status status,
+            @Parameter(description = "Filtrer par type", example = "ACCIDENT") @RequestParam(required = false) Incident.Type type,
+            @Parameter(description = "Filtrer par sévérité", example = "HIGH") @RequestParam(required = false) Incident.Severity severity,
+            @Parameter(description = "Filtrer par statut", example = "RESOLVED") @RequestParam(required = false) Incident.Status status,
             Authentication auth) {
 
         UUID managerId = getUserId(auth);
 
-        if (type != null)     return incidentUseCase.getByType(type, managerId).map(IncidentResponse::from);
-        if (severity != null) return incidentUseCase.getBySeverity(severity, managerId).map(IncidentResponse::from);
-        if (status != null)   return incidentUseCase.getByStatus(status, managerId).map(IncidentResponse::from);
+        if (type != null)
+            return incidentUseCase.getByType(type, managerId).map(IncidentResponse::from);
+        if (severity != null)
+            return incidentUseCase.getBySeverity(severity, managerId).map(IncidentResponse::from);
+        if (status != null)
+            return incidentUseCase.getByStatus(status, managerId).map(IncidentResponse::from);
 
         return incidentUseCase.getAllByManager(managerId).map(IncidentResponse::from);
     }
@@ -134,10 +128,8 @@ public class IncidentController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Incidents par plage de dates")
     public Flux<IncidentResponse> getByDateRange(
-            @Parameter(description = "Date de début (ISO 8601)", example = "2026-01-01T00:00:00")
-            @RequestParam LocalDateTime start,
-            @Parameter(description = "Date de fin (ISO 8601)", example = "2026-12-31T23:59:59")
-            @RequestParam LocalDateTime end,
+            @Parameter(description = "Date de début (ISO 8601)", example = "2026-01-01T00:00:00") @RequestParam LocalDateTime start,
+            @Parameter(description = "Date de fin (ISO 8601)", example = "2026-12-31T23:59:59") @RequestParam LocalDateTime end,
             Authentication auth) {
         return incidentUseCase.getByDateRange(start, end, getUserId(auth)).map(IncidentResponse::from);
     }
@@ -146,8 +138,7 @@ public class IncidentController {
 
     @GetMapping("/vehicle/{vehicleId}/cost")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Coût total des incidents d'un véhicule",
-               description = "Retourne la somme des coûts de tous les incidents pour un véhicule donné.")
+    @Operation(summary = "Coût total des incidents d'un véhicule", description = "Retourne la somme des coûts de tous les incidents pour un véhicule donné.")
     public Mono<BigDecimal> getTotalCostByVehicle(
             @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
         return incidentUseCase.getTotalCostByVehicleId(vehicleId);
@@ -157,33 +148,29 @@ public class IncidentController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Mettre à jour un incident",
-               description = "Met à jour les informations d'un incident (description, coût, témoins, numéros officiels). Interdit sur un incident CLOSED.")
+    @Operation(summary = "Mettre à jour un incident", description = "Met à jour les informations d'un incident (description, coût, témoins, numéros officiels). Interdit sur un incident CLOSED.")
     public Mono<IncidentResponse> update(
             @Parameter(description = "ID de l'incident") @PathVariable UUID id,
             @Valid @RequestBody IncidentUpdateRequest request) {
 
-        ManageIncidentUseCase.UpdateIncidentCommand cmd =
-                new ManageIncidentUseCase.UpdateIncidentCommand(
-                        id,
-                        request.description(),
-                        request.severity(),
-                        request.cost(),
-                        request.report(),
-                        request.witnessName(),
-                        request.witnessContact(),
-                        request.policeReportNumber(),
-                        request.insuranceClaimNumber(),
-                        request.longitude(),
-                        request.latitude()
-                );
+        ManageIncidentUseCase.UpdateIncidentCommand cmd = new ManageIncidentUseCase.UpdateIncidentCommand(
+                id,
+                request.description(),
+                request.severity(),
+                request.cost(),
+                request.report(),
+                request.witnessName(),
+                request.witnessContact(),
+                request.policeReportNumber(),
+                request.insuranceClaimNumber(),
+                request.longitude(),
+                request.latitude());
         return incidentUseCase.update(cmd).map(IncidentResponse::from);
     }
 
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Changer le statut d'un incident",
-               description = "Fait avancer l'incident dans son cycle de vie : REPORTED → UNDER_INVESTIGATION → RESOLVED → CLOSED.")
+    @Operation(summary = "Changer le statut d'un incident", description = "Fait avancer l'incident dans son cycle de vie : REPORTED → UNDER_INVESTIGATION → RESOLVED → CLOSED.")
     public Mono<IncidentResponse> updateStatus(
             @Parameter(description = "ID de l'incident") @PathVariable UUID id,
             @Valid @RequestBody IncidentStatusRequest request) {

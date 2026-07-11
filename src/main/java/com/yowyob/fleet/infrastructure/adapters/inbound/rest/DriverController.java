@@ -5,6 +5,7 @@ import com.yowyob.fleet.domain.ports.in.AuthUseCase;
 import com.yowyob.fleet.domain.ports.in.ManageDriverUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverRegistrationRequest;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.UpdateDriverRequest;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.RecruitDriverRequest;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
@@ -47,19 +48,35 @@ public class DriverController {
 
     @PostMapping(value = "/fleets/{fleetId}/drivers/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Créer un nouveau Chauffeur", description = "Crée le compte Auth + Profil local + Photo de profil.")
     public Mono<Driver> register(
             @PathVariable UUID fleetId,
-            @RequestPart("user") DriverRegistrationRequest request,
+            @RequestPart("user") Part userPart,
             @RequestPart(value = "file", required = false) Part filePart,
             Authentication auth) {
-        return processFile(filePart)
-                .flatMap(photo -> driverUseCase.registerDriverWithPhoto(fleetId, request, getUserId(auth), photo))
-                // On utilise defer pour s'assurer que l'appel sans photo n'est créé que si
-                // nécessaire
-                .switchIfEmpty(Mono
-                        .defer(() -> driverUseCase.registerDriverWithPhoto(fleetId, request, getUserId(auth), null)));
+        return DataBufferUtils.join(userPart.content())
+                .map(dataBuffer -> {
+                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                    dataBuffer.read(bytes);
+                    DataBufferUtils.release(dataBuffer);
+                    return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                })
+                .flatMap(json -> {
+                    try {
+                        DriverRegistrationRequest request = new com.fasterxml.jackson.databind.ObjectMapper()
+                                .readValue(json, DriverRegistrationRequest.class);
+                        return Mono.just(request);
+                    } catch (Exception e) {
+                        return Mono.error(new IllegalArgumentException(
+                                "Format de données utilisateur invalide dans le champ user : " + e.getMessage()));
+                    }
+                })
+                .flatMap(request -> processFile(filePart)
+                        .flatMap(photo -> driverUseCase.registerDriverWithPhoto(fleetId, request, getUserId(auth),
+                                photo))
+                        .switchIfEmpty(Mono.defer(
+                                () -> driverUseCase.registerDriverWithPhoto(fleetId, request, getUserId(auth), null))));
     }
 
     @GetMapping("/drivers")
@@ -77,6 +94,17 @@ public class DriverController {
         return driverUseCase.getDriverEnriched(userId);
     }
 
+    @PutMapping("/drivers/{userId}")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Mettre à jour les informations d'un chauffeur")
+    public Mono<Driver> update(
+            @PathVariable UUID userId,
+            @RequestBody UpdateDriverRequest request,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authHeader,
+            Authentication auth) {
+        return driverUseCase.updateDriver(userId, request, getUserId(auth), getToken(authHeader));
+    }
+
     @GetMapping("/drivers/search")
     @Operation(summary = "Rechercher un chauffeur par email ou username")
     public Mono<Driver> search(@RequestParam String identifier) {
@@ -90,7 +118,13 @@ public class DriverController {
     }
 
     @PostMapping("/drivers/{userId}/unassign-vehicle")
-    public Mono<Void> unassign(@PathVariable UUID userId, Authentication auth) {
+    public Mono<Void> unassign(
+            @PathVariable UUID userId,
+            @RequestParam(required = false) UUID vehicleId,
+            Authentication auth) {
+        if (vehicleId != null) {
+            return driverUseCase.unassignSpecificVehicle(userId, vehicleId, getUserId(auth));
+        }
         return driverUseCase.unassignVehicle(userId, getUserId(auth));
     }
 

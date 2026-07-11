@@ -32,6 +32,7 @@ public final class DemoTestAccounts {
     public static final UUID MARC_ID = UUID.fromString("2c5dae3d-82d5-46d3-cbd3-3c4d5e6f7a8b");
     public static final UUID PAUL_ID = UUID.fromString("4d3c4b5a-6b7c-8d9e-0f1a-2b3c4d5e6f7a");
     public static final UUID SAMUEL_ID = UUID.fromString("8f5b8e9d-0c1b-2a3b-4c5d-6e7f8a9b0c1d");
+    public static final UUID FRANK_ID = UUID.fromString("de7432fd-f4ad-472b-993f-18f1f17129aa");
 
     private static final List<Account> ALL = List.of(
             new Account(SUPER_ADMIN_ID, "superadmin", "superadmin@fleetman.cm", "Jean", "Super",
@@ -45,7 +46,8 @@ public final class DemoTestAccounts {
             new Account(MARC_ID, "MarcDriver", "marc.driver@fleetman.cm", "Marc", "Eyango", List.of("FLEET_DRIVER")),
             new Account(PAUL_ID, "PaulDriver", "paul.driver@fleetman.cm", "Paul", "Essomba", List.of("FLEET_DRIVER")),
             new Account(SAMUEL_ID, "SamuelDriver", "samuel.driver@fleetman.cm", "Samuel", "Tchakounte",
-                    List.of("FLEET_DRIVER")));
+                    List.of("FLEET_DRIVER")),
+            new Account(FRANK_ID, "Frank", "Frank@gmail.com", "Frank", "Driver", List.of("FLEET_DRIVER")));
 
     private static final Map<String, Account> BY_IDENTIFIER = buildIndex();
 
@@ -73,7 +75,12 @@ public final class DemoTestAccounts {
         return ALL.stream().filter(a -> a.id().equals(id)).findFirst();
     }
 
+    public static List<Account> getAll() {
+        return ALL;
+    }
+
     public static boolean isDemoPassword(String password) {
-        return DEMO_PASSWORD.equals(password) || "Nehemie@123".equals(password);
+        return DEMO_PASSWORD.equals(password) || "Nehemie@123".equals(password) || "Frank@123".equals(password)
+                || "Fank@123".equals(password);
     }
 }

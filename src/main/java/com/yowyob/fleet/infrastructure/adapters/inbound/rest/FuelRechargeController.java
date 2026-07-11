@@ -41,21 +41,18 @@ public class FuelRechargeController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER')")
-    @Operation(summary = "Enregistrer une recharge de carburant",
-               description = "Enregistre un plein de carburant et met à jour automatiquement le niveau de carburant du véhicule.")
+    @Operation(summary = "Enregistrer une recharge de carburant", description = "Enregistre un plein de carburant et met à jour automatiquement le niveau de carburant du véhicule.")
     public Mono<FuelRechargeResponse> create(
             @Valid @RequestBody FuelRechargeRequest request) {
 
-        ManageFuelRechargeUseCase.CreateFuelRechargeCommand cmd =
-                new ManageFuelRechargeUseCase.CreateFuelRechargeCommand(
-                        request.quantity(),
-                        request.price(),
-                        request.longitude(),
-                        request.latitude(),
-                        request.stationName(),
-                        request.vehicleId(),
-                        request.driverId()
-                );
+        ManageFuelRechargeUseCase.CreateFuelRechargeCommand cmd = new ManageFuelRechargeUseCase.CreateFuelRechargeCommand(
+                request.quantity(),
+                request.price(),
+                request.longitude(),
+                request.latitude(),
+                request.stationName(),
+                request.vehicleId(),
+                request.driverId());
         return fuelRechargeUseCase.createFuelRecharge(cmd).map(FuelRechargeResponse::from);
     }
 
@@ -63,8 +60,7 @@ public class FuelRechargeController {
 
     @GetMapping
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Lister mes recharges",
-               description = "Retourne toutes les recharges des véhicules gérés par le manager connecté.")
+    @Operation(summary = "Lister mes recharges", description = "Retourne toutes les recharges des véhicules gérés par le manager connecté.")
     public Flux<FuelRechargeResponse> listAll(Authentication auth) {
         return fuelRechargeUseCase.getAllByManager(getUserId(auth)).map(FuelRechargeResponse::from);
     }
@@ -79,15 +75,14 @@ public class FuelRechargeController {
 
     @GetMapping("/vehicle/{vehicleId}")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Recharges d'un véhicule",
-               description = "Retourne l'historique complet des recharges pour un véhicule donné.")
+    @Operation(summary = "Recharges d'un véhicule", description = "Retourne l'historique complet des recharges pour un véhicule donné.")
     public Flux<FuelRechargeResponse> getByVehicle(
             @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
         return fuelRechargeUseCase.getByVehicleId(vehicleId).map(FuelRechargeResponse::from);
     }
 
     @GetMapping("/driver/{driverId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
     @Operation(summary = "Recharges d'un chauffeur")
     public Flux<FuelRechargeResponse> getByDriver(
             @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId) {
@@ -98,10 +93,8 @@ public class FuelRechargeController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Recharges par plage de dates")
     public Flux<FuelRechargeResponse> getByDateRange(
-            @Parameter(description = "Date de début (ISO 8601)", example = "2026-01-01T00:00:00")
-            @RequestParam LocalDateTime start,
-            @Parameter(description = "Date de fin (ISO 8601)", example = "2026-12-31T23:59:59")
-            @RequestParam LocalDateTime end,
+            @Parameter(description = "Date de début (ISO 8601)", example = "2026-01-01T00:00:00") @RequestParam LocalDateTime start,
+            @Parameter(description = "Date de fin (ISO 8601)", example = "2026-12-31T23:59:59") @RequestParam LocalDateTime end,
             Authentication auth) {
         return fuelRechargeUseCase.getByDateRange(start, end, getUserId(auth)).map(FuelRechargeResponse::from);
     }
@@ -110,15 +103,14 @@ public class FuelRechargeController {
 
     @GetMapping("/vehicle/{vehicleId}/stats")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Statistiques carburant d'un véhicule",
-               description = "Retourne la consommation totale (litres) et le coût total des recharges pour un véhicule.")
+    @Operation(summary = "Statistiques carburant d'un véhicule", description = "Retourne la consommation totale (litres) et le coût total des recharges pour un véhicule.")
     public Mono<FuelStatsResponse> getVehicleFuelStats(
             @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
 
         return Mono.zip(
                 fuelRechargeUseCase.getTotalQuantityByVehicleId(vehicleId),
-                fuelRechargeUseCase.getTotalCostByVehicleId(vehicleId)
-        ).map(tuple -> new FuelStatsResponse(vehicleId, tuple.getT1(), tuple.getT2()));
+                fuelRechargeUseCase.getTotalCostByVehicleId(vehicleId))
+                .map(tuple -> new FuelStatsResponse(vehicleId, tuple.getT1(), tuple.getT2()));
     }
 
     // ── MISE À JOUR ───────────────────────────────────────────────────────────
@@ -130,16 +122,14 @@ public class FuelRechargeController {
             @Parameter(description = "ID de la recharge") @PathVariable UUID id,
             @Valid @RequestBody FuelRechargeRequest request) {
 
-        ManageFuelRechargeUseCase.UpdateFuelRechargeCommand cmd =
-                new ManageFuelRechargeUseCase.UpdateFuelRechargeCommand(
-                        id,
-                        request.quantity(),
-                        request.price(),
-                        request.longitude(),
-                        request.latitude(),
-                        request.stationName(),
-                        request.driverId()
-                );
+        ManageFuelRechargeUseCase.UpdateFuelRechargeCommand cmd = new ManageFuelRechargeUseCase.UpdateFuelRechargeCommand(
+                id,
+                request.quantity(),
+                request.price(),
+                request.longitude(),
+                request.latitude(),
+                request.stationName(),
+                request.driverId());
         return fuelRechargeUseCase.update(cmd).map(FuelRechargeResponse::from);
     }
 
@@ -159,6 +149,6 @@ public class FuelRechargeController {
     record FuelStatsResponse(
             UUID vehicleId,
             BigDecimal totalQuantityLiters,
-            BigDecimal totalCost
-    ) {}
+            BigDecimal totalCost) {
+    }
 }

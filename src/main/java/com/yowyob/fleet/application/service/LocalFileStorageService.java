@@ -20,10 +20,19 @@ public class LocalFileStorageService {
     private final Path uploadRoot;
 
     public LocalFileStorageService(
-            @Value("${fleetman.uploads.dir:uploads}") String uploadDir
-    ) throws IOException {
-        this.uploadRoot = Path.of(uploadDir).toAbsolutePath().normalize();
-        Files.createDirectories(uploadRoot);
+            @Value("${fleetman.uploads.dir:uploads}") String uploadDir) throws IOException {
+        Path root;
+        try {
+            root = Path.of(uploadDir).toAbsolutePath().normalize();
+            Files.createDirectories(root);
+        } catch (Exception e) {
+            log.warn("Failed to create upload directory at {}, falling back to system temporary directory", uploadDir,
+                    e);
+            root = Path.of(System.getProperty("java.io.tmpdir")).resolve("uploads").toAbsolutePath().normalize();
+            Files.createDirectories(root);
+        }
+        this.uploadRoot = root;
+        log.info("Initialized LocalFileStorageService with upload root: {}", this.uploadRoot);
     }
 
     public Mono<StoredFile> store(FilePart filePart, String category) {
@@ -32,7 +41,8 @@ public class LocalFileStorageService {
         String storedName = category + "-" + UUID.randomUUID() + ext;
         Path target = uploadRoot.resolve(storedName);
 
-        return DataBufferUtils.write(filePart.content(), target, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
+        return DataBufferUtils
+                .write(filePart.content(), target, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
                 .then(Mono.fromCallable(() -> {
                     String mime = filePart.headers().getContentType() != null
                             ? filePart.headers().getContentType().toString()
@@ -43,8 +53,7 @@ public class LocalFileStorageService {
                             "/api/v1/files/" + storedName,
                             originalName,
                             mime,
-                            size
-                    );
+                            size);
                 }));
     }
 
@@ -61,6 +70,6 @@ public class LocalFileStorageService {
             String publicUrl,
             String originalName,
             String mimeType,
-            long sizeBytes
-    ) {}
+            long sizeBytes) {
+    }
 }

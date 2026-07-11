@@ -17,7 +17,7 @@ spring:
 
   r2dbc:
     url: ${SPRING_R2DBC_URL:r2dbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:fleetmanBD}}
-    username: ${SPRING_R2DBC_USERNAME:${DB_USER:fleet_admin}}
+    username: ${SPRING_R2DBC_USERNAME:${DB_USERNAME:fleet_admin}}
     password: ${SPRING_R2DBC_PASSWORD:${DB_PASSWORD:fleet_password}}
     pool:
       enabled: true
@@ -29,7 +29,7 @@ spring:
   # JDBC (Liquibase Migration)
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:fleetmanBD}}
-    username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:fleet_admin}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USERNAME:fleet_admin}}
     password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:fleet_password}}
     driver-class-name: org.postgresql.Driver
 

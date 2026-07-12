@@ -45,7 +45,7 @@ public final class DemoTestAccounts {
             new Account(DRIVER_ID, "fleetdriver", "driver@fleetman.cm", "André", "Mbarga", List.of("FLEET_DRIVER")),
             // Nehemie test accounts
             new Account(NEHEMIE_ID, "Nehemie", "nehemie@fleetman.cm", "Nehemie", "Nkolo", List.of("FLEET_MANAGER")),
-            new Account(NEHEMIE_ADMIN_ID, "NehemieGmail", "nehemie@gmail.com", "Nehemie", "Admin",
+            new Account(NEHEMIE_ADMIN_ID, "NehemieGmail", "ewane@gmail.com", "Nehemie", "Admin",
                     List.of("FLEET_ADMIN")),
             new Account(TURING_MANAGER_ID, "TuringManager", "turing@gmail.com", "Alan", "Turing",
                     List.of("FLEET_MANAGER")),

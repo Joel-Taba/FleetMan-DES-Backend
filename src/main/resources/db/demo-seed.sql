@@ -8,7 +8,7 @@ VALUES
   ('a0000002-0000-4000-8000-000000000002', 'fleetadmin', 'admin@fleetman.cm', 'Marie', 'Admin', true),
   ('a0000003-0000-4000-8000-000000000003', 'fleetmanager', 'manager@fleetman.cm', 'Paul', 'Manager', true),
   ('a0000004-0000-4000-8000-000000000004', 'fleetdriver', 'driver@fleetman.cm', 'André', 'Mbarga', true),
-  ('a0000000-0000-4000-8000-000000000101', 'NehemieAdmin', 'nehemie@gmail.com', 'Nehemie', 'Admin', true),
+  ('a0000000-0000-4000-8000-000000000101', 'NehemieAdmin', 'ewane@gmail.com', 'Nehemie', 'Admin', true),
   ('a0000000-0000-4000-8000-000000000102', 'TuringManager', 'turing@gmail.com', 'Alan', 'Turing', true)
 ON CONFLICT (id) DO NOTHING;
 

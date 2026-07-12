@@ -51,8 +51,14 @@ public class FleetManagerController {
 
     @PutMapping("/me/company")
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
-    @Operation(summary = "Mettre à jour mon nom d'entreprise")
+    @Operation(summary = "Mettre à jour les informations de mon entreprise")
     public Mono<Void> updateMyCompany(@Valid @RequestBody UpdateManagerRequest request, Authentication auth) {
-        return managerUseCase.updateManagerCompany(getUserId(auth), request.companyName());
+        return managerUseCase.updateManagerCompany(
+                getUserId(auth),
+                request.companyName(),
+                request.phone(),
+                request.address(),
+                request.city(),
+                request.logoUrl());
     }
 }

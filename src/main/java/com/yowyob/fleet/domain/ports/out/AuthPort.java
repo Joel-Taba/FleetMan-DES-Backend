@@ -45,6 +45,21 @@ public interface AuthPort {
             String firstName, String lastName, String service,
             List<String> roles, List<String> permissions,
             String photoUrl, String companyName, String licenceNumber, String vehicleId, boolean isActive,
-            java.time.Instant lastLoginAt) {
+            java.time.Instant lastLoginAt,
+            String companyPhone,
+            String companyAddress,
+            String companyCity,
+            String companyLogoUrl) {
+
+        public UserDetail(
+                UUID id, String username, String email, String phone,
+                String firstName, String lastName, String service,
+                List<String> roles, List<String> permissions,
+                String photoUrl, String companyName, String licenceNumber, String vehicleId, boolean isActive,
+                java.time.Instant lastLoginAt) {
+            this(id, username, email, phone, firstName, lastName, service, roles, permissions, photoUrl, companyName,
+                    licenceNumber, vehicleId, isActive, lastLoginAt, null, null, null, null);
+        }
     }
+
 }

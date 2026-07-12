@@ -16,13 +16,25 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class FleetManagerEntity implements Persistable<UUID> {
-    
+
     @Id
     @Column("user_id")
     private UUID userId;
 
     @Column("company_name")
     private String companyName;
+
+    @Column("phone")
+    private String phone;
+
+    @Column("address")
+    private String address;
+
+    @Column("city")
+    private String city;
+
+    @Column("logo_url")
+    private String logoUrl;
 
     @Transient // Ce champ n'est pas en base, il sert à la logique R2DBC
     private boolean isNew = false;

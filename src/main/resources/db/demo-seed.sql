@@ -13,10 +13,11 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- 2. Manager + flottes
-INSERT INTO fleet.fleet_managers (user_id, company_name)
+INSERT INTO fleet.fleet_managers (user_id, company_name, phone, address, city, logo_url)
 VALUES 
-  ('a0000003-0000-4000-8000-000000000003', 'Transport Express CM'),
-  ('a0000000-0000-4000-8000-000000000102', 'AXE CAPITAL')
+  ('a0000003-0000-4000-8000-000000000003', 'Transport Express CM', '+237677000003', 'Rue de Nanga Eboko', 'Yaoundé', 'https://i.pravatar.cc/150?u=transport'),
+  ('a0000000-0000-4000-8000-000000000101', 'AXE CAPITAL',  '+237699999999', 'Axe Capital HQ, Boulevard de la Liberté', 'Douala', 'https://i.pravatar.cc/150?u=axe'),
+  ('a0000000-0000-4000-8000-000000000102', 'AXE CAPITAL',  '+237699999999', 'Axe Capital HQ, Boulevard de la Liberté', 'Douala', 'https://i.pravatar.cc/150?u=axe')
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO fleet.fleets (id, manager_id, name, phone_number)

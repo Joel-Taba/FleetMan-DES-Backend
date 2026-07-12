@@ -95,4 +95,9 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/025-seed-vehicle-lookups.sql
 
+  # 26. Ajout des champs de l'organisation
+  - include:
+      file: db/changelog/changes/026-add-org-fields.sql
+
+
 

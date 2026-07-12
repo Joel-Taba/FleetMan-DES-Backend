@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.Instant;
 import java.util.UUID;
 
 @Slf4j
@@ -23,14 +22,28 @@ public class AdminService implements ManageAdminUseCase {
 
     private final AuthPort authPort;
     private final UserLocalR2dbcRepository userRepo;
-    private final FleetManagerR2dbcRepository managerRepo;
     private final FleetManagerPersistencePort managerPersistencePort;
 
     @Override
     public Flux<AuthPort.UserDetail> listFleetManagers(String token) {
-        return authPort.getUsersByService("FLEET_MANAGEMENT", token)
-                .filter(u -> u.roles().contains("FLEET_MANAGER"))
-                .flatMap(remote -> syncIdentityAndRepairProfile(remote));
+        return authPort.getUserProfile(token)
+                .flatMapMany(currentUser -> {
+                    boolean isSuper = currentUser.roles() != null && currentUser.roles().contains("FLEET_SUPER_ADMIN");
+                    if (isSuper) {
+                        return authPort.getUsersByService("FLEET_MANAGEMENT", token)
+                                .flatMap(remote -> syncIdentityAndRepairProfile(remote));
+                    }
+                    return managerPersistencePort.getCompanyName(currentUser.id())
+                            .flatMapMany(currentCompany -> {
+                                if (currentCompany == null || currentCompany.isEmpty()) {
+                                    return Flux.empty();
+                                }
+                                return authPort.getUsersByService("FLEET_MANAGEMENT", token)
+                                        .flatMap(remote -> syncIdentityAndRepairProfile(remote))
+                                        .filter(enriched -> enriched.companyName() != null &&
+                                                currentCompany.equalsIgnoreCase(enriched.companyName()));
+                            });
+                });
     }
 
     @Override
@@ -87,18 +100,17 @@ public class AdminService implements ManageAdminUseCase {
                     n.setNewRecord(true);
                     return userRepo.save(n);
                 }))
-                .flatMap(localUser -> 
-                    managerPersistencePort.createProfile(remote.id(), "Société de " + remote.lastName())
+                .flatMap(localUser -> managerPersistencePort
+                        .createProfile(remote.id(), "Société de " + remote.lastName())
                         .onErrorResume(e -> Mono.empty())
                         .then(managerPersistencePort.getCompanyName(remote.id()))
                         .map(company -> new AuthPort.UserDetail(
                                 remote.id(), remote.username(), remote.email(), remote.phone(),
                                 remote.firstName(), remote.lastName(), remote.service(),
-                                remote.roles(), remote.permissions(), remote.photoUrl(), 
-                                company, null, null, 
-                                localUser.isActive(),      // <--- À l'intérieur des parenthèses
+                                remote.roles(), remote.permissions(), remote.photoUrl(),
+                                company, null, null,
+                                localUser.isActive(), // <--- À l'intérieur des parenthèses
                                 localUser.getLastLoginAt() // <--- À l'intérieur des parenthèses
-                        ))
-                );
+                        )));
     }
 }

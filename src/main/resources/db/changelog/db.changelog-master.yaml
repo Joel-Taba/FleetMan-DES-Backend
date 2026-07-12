@@ -91,3 +91,8 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/024-seed-axe-capital.sql
 
+  # 25. Seed des tables de référence de véhicules pour la production et le mode fake
+  - include:
+      file: db/changelog/changes/025-seed-vehicle-lookups.sql
+
+

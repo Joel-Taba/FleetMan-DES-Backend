@@ -10,3 +10,8 @@
 application:
   auth:
     mode: fake
+  external:
+    geofence-mode: fake
+    vehicle-mode: fake
+    payment-mode: fake
+

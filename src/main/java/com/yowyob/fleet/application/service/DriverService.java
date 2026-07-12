@@ -223,29 +223,34 @@ public class DriverService implements ManageDriverUseCase {
     }
 
     public Flux<Driver> getDriversWithFilters(UUID fleetId, Boolean isAssigned, UUID requesterId) {
-        String reqStr = requesterId.toString();
-        boolean isAdmin = reqStr.equals("311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2")
-                || reqStr.equals("a0000002-0000-4000-8000-000000000002")
-                || reqStr.equals("a0000001-0000-4000-8000-000000000001");
+        Flux<Driver> drivers = driverPersistencePort.findAllBySameCompanyAsUser(requesterId)
+                .switchIfEmpty(Flux.defer(() -> {
+                    String reqStr = requesterId.toString();
+                    boolean isAdmin = reqStr.equals("311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2")
+                            || reqStr.equals("a0000002-0000-4000-8000-000000000002")
+                            || reqStr.equals("a0000001-0000-4000-8000-000000000001")
+                            || reqStr.equals("a0000000-0000-4000-8000-000000000101");
+                    if (isAdmin) {
+                        return (fleetId != null) ? driverPersistencePort.findAllByFleetId(fleetId)
+                                : driverPersistencePort.findAll();
+                    } else {
+                        if (fleetId != null) {
+                            return checkFleetOwnership(fleetId, requesterId)
+                                    .thenMany(driverPersistencePort.findAllByFleetId(fleetId));
+                        } else {
+                            return fleetRepository.findAllByManagerId(requesterId)
+                                    .map(com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.FleetEntity::getId)
+                                    .collectList()
+                                    .flatMapMany(fleetIds -> driverPersistencePort.findAll()
+                                            .filter(d -> d.fleetId() != null && fleetIds.contains(d.fleetId())));
+                        }
+                    }
+                }));
 
-        Flux<Driver> drivers;
-        if (isAdmin) {
-            drivers = (fleetId != null) ? driverPersistencePort.findAllByFleetId(fleetId)
-                    : driverPersistencePort.findAll();
-        } else {
-            if (fleetId != null) {
-                drivers = checkFleetOwnership(fleetId, requesterId)
-                        .thenMany(driverPersistencePort.findAllByFleetId(fleetId));
-            } else {
-                drivers = fleetRepository.findAllByManagerId(requesterId)
-                        .map(com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.FleetEntity::getId)
-                        .collectList()
-                        .flatMapMany(fleetIds -> driverPersistencePort.findAll()
-                                .filter(d -> d.fleetId() != null && fleetIds.contains(d.fleetId())));
-            }
+        if (fleetId != null) {
+            drivers = drivers.filter(d -> fleetId.equals(d.fleetId()));
         }
 
-        // Filtre applicatif sur l'assignation
         if (isAssigned != null) {
             drivers = drivers.filter(d -> (isAssigned ? d.assignedVehicleId() != null : d.assignedVehicleId() == null));
         }

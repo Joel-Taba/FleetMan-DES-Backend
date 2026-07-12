@@ -68,15 +68,38 @@ public class FleetService implements ManageFleetUseCase {
     public Mono<Fleet> getFleetById(UUID id, UUID requesterId, boolean isAdmin) {
         return repository.findById(id)
                 .switchIfEmpty(Mono.error(FleetException.notFound(id)))
-                .filter(f -> isAdmin || f.getManagerId().equals(requesterId))
-                .switchIfEmpty(Mono.error(FleetException.accessDenied()))
+                .flatMap(f -> {
+                    if (f.getManagerId().equals(requesterId)) {
+                        return Mono.just(f);
+                    }
+                    return repository.shareSameCompany(f.getManagerId(), requesterId)
+                            .flatMap(share -> {
+                                if (share) {
+                                    return Mono.just(f);
+                                }
+                                String reqStr = requesterId.toString();
+                                boolean systemAllowed = reqStr.equals("311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2")
+                                        || reqStr.equals("a0000002-0000-4000-8000-000000000002")
+                                        || reqStr.equals("a0000001-0000-4000-8000-000000000001")
+                                        || reqStr.equals("a0000000-0000-4000-8000-000000000101"); // Nehemie Admin Seed
+                                                                                                  // ID
+                                if (systemAllowed) {
+                                    return Mono.just(f);
+                                }
+                                return Mono.error(FleetException.accessDenied());
+                            });
+                })
                 .map(mapper::toDomain);
     }
 
     @Override
     public Flux<Fleet> getFleets(UUID requesterId, boolean isAdmin) {
-        return isAdmin ? repository.findAll().map(mapper::toDomain)
-                : repository.findAllByManagerId(requesterId).map(mapper::toDomain);
+        if (isAdmin) {
+            return repository.findAllBySameCompanyAsUser(requesterId)
+                    .switchIfEmpty(Flux.defer(() -> repository.findAll()))
+                    .map(mapper::toDomain);
+        }
+        return repository.findAllByManagerId(requesterId).map(mapper::toDomain);
     }
 
     @Override
@@ -84,16 +107,25 @@ public class FleetService implements ManageFleetUseCase {
     public Mono<Fleet> updateFleet(UUID id, Fleet fleet, UUID requesterId, boolean isAdmin) {
         return repository.findById(id)
                 .switchIfEmpty(Mono.error(FleetException.notFound(id)))
-                .filter(f -> isAdmin || f.getManagerId().equals(requesterId))
                 .flatMap(existing -> {
-                    existing.setName(fleet.name());
-                    existing.setPhoneNumber(fleet.phoneNumber());
-                    // Permettre le changement du gestionnaire
-                    if (fleet.managerId() != null) {
-                        existing.setManagerId(fleet.managerId());
+                    Mono<Boolean> hasAccess = Mono.just(existing.getManagerId().equals(requesterId));
+                    if (!existing.getManagerId().equals(requesterId)) {
+                        hasAccess = repository.shareSameCompany(existing.getManagerId(), requesterId)
+                                .map(share -> share
+                                        || requesterId.toString().equals("a0000001-0000-4000-8000-000000000001"));
                     }
-                    existing.setNew(false);
-                    return repository.save(existing);
+                    return hasAccess.flatMap(allowed -> {
+                        if (!allowed) {
+                            return Mono.error(FleetException.accessDenied());
+                        }
+                        existing.setName(fleet.name());
+                        existing.setPhoneNumber(fleet.phoneNumber());
+                        if (fleet.managerId() != null) {
+                            existing.setManagerId(fleet.managerId());
+                        }
+                        existing.setNew(false);
+                        return repository.save(existing);
+                    });
                 }).map(mapper::toDomain);
     }
 
@@ -102,16 +134,26 @@ public class FleetService implements ManageFleetUseCase {
     public Mono<Void> deleteFleet(UUID id, UUID requesterId, boolean isAdmin) {
         return repository.findById(id)
                 .switchIfEmpty(Mono.error(FleetException.notFound(id)))
-                .filter(f -> isAdmin || f.getManagerId().equals(requesterId))
-                .flatMap(fleet ->
-                // Sécurité : Vérifier si la flotte est vide
-                Mono.zip(vehicleRepo.countByFleetId(id), driverRepo.countByFleetId(id))
-                        .flatMap(tuple -> {
-                            if (tuple.getT1() > 0 || tuple.getT2() > 0) {
-                                return Mono.error(FleetException.cannotDeleteNotEmpty());
-                            }
-                            return repository.delete(fleet);
-                        }));
+                .flatMap(existing -> {
+                    Mono<Boolean> hasAccess = Mono.just(existing.getManagerId().equals(requesterId));
+                    if (!existing.getManagerId().equals(requesterId)) {
+                        hasAccess = repository.shareSameCompany(existing.getManagerId(), requesterId)
+                                .map(share -> share
+                                        || requesterId.toString().equals("a0000001-0000-4000-8000-000000000001"));
+                    }
+                    return hasAccess.flatMap(allowed -> {
+                        if (!allowed) {
+                            return Mono.error(FleetException.accessDenied());
+                        }
+                        return Mono.zip(vehicleRepo.countByFleetId(id), driverRepo.countByFleetId(id))
+                                .flatMap(tuple -> {
+                                    if (tuple.getT1() > 0 || tuple.getT2() > 0) {
+                                        return Mono.error(FleetException.cannotDeleteNotEmpty());
+                                    }
+                                    return repository.delete(existing);
+                                });
+                    });
+                });
     }
 
     @Override
@@ -139,11 +181,18 @@ public class FleetService implements ManageFleetUseCase {
                     boolean allowed = fleet.getManagerId().equals(requesterId)
                             || reqStr.equals("311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2") // Nehemie
                             || reqStr.equals("a0000002-0000-4000-8000-000000000002") // Marie Admin
-                            || reqStr.equals("a0000001-0000-4000-8000-000000000001"); // Jean SuperAdmin
-                    if (!allowed) {
-                        return Mono.error(FleetException.accessDenied());
+                            || reqStr.equals("a0000001-0000-4000-8000-000000000001") // Jean SuperAdmin
+                            || reqStr.equals("a0000000-0000-4000-8000-000000000101"); // Nehemie Admin Seed ID
+                    if (allowed) {
+                        return Mono.empty();
                     }
-                    return Mono.empty();
+                    return repository.shareSameCompany(fleet.getManagerId(), requesterId)
+                            .flatMap(share -> {
+                                if (share) {
+                                    return Mono.empty();
+                                }
+                                return Mono.error(FleetException.accessDenied());
+                            });
                 });
     }
 

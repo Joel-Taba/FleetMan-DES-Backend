@@ -32,10 +32,11 @@ public class VehiclePersistenceAdapter implements VehiclePersistencePort {
         return vehicleRepo.existsById(vehicle.id())
                 .flatMap(exists -> {
                     VehicleLocalEntity vEntity = mapper.toVehicleEntity(vehicle);
-                    vEntity.setNew(!exists); 
+                    vEntity.setNew(!exists);
                     return vehicleRepo.save(vEntity);
                 })
-                // Correction : On transforme l'erreur technique SQL en erreur métier explicite (409)
+                // Correction : On transforme l'erreur technique SQL en erreur métier explicite
+                // (409)
                 .onErrorMap(DataIntegrityViolationException.class, e -> VehicleException.plateConflict())
                 .flatMap(savedV -> saveParameters(vehicle, savedV.getId()))
                 .flatMap(savedV -> getLocalDataById(savedV.getId()));
@@ -43,27 +44,36 @@ public class VehiclePersistenceAdapter implements VehiclePersistencePort {
 
     private Mono<VehicleLocalEntity> saveParameters(Vehicle vehicle, UUID vehicleId) {
         FinancialParameterEntity fin = mapper.toFinancialEntity(vehicle);
-        if (fin.getId() == null) { 
-            fin.setId(UUID.randomUUID()); 
-            fin.setNew(true); 
+        if (fin.getId() == null) {
+            fin.setId(UUID.randomUUID());
+            fin.setNew(true);
         }
         fin.setVehicleId(vehicleId);
 
         MaintenanceParameterEntity maint = mapper.toMaintenanceEntity(vehicle);
-        if (maint.getId() == null) { 
-            maint.setId(UUID.randomUUID()); 
-            maint.setNew(true); 
+        if (maint.getId() == null) {
+            maint.setId(UUID.randomUUID());
+            maint.setNew(true);
         }
         maint.setVehicleId(vehicleId);
 
         return Mono.zip(
                 financialRepo.findByVehicleId(vehicleId)
-                    .map(existing -> { fin.setId(existing.getId()); fin.setNew(false); return fin; })
-                    .defaultIfEmpty(fin).flatMap(financialRepo::save),
+                        .map(existing -> {
+                            fin.setId(existing.getId());
+                            fin.setNew(false);
+                            return fin;
+                        })
+                        .defaultIfEmpty(fin).flatMap(financialRepo::save),
                 maintenanceRepo.findByVehicleId(vehicleId)
-                    .map(existing -> { maint.setId(existing.getId()); maint.setNew(false); return maint; })
-                    .defaultIfEmpty(maint).flatMap(maintenanceRepo::save)
-        ).thenReturn(new VehicleLocalEntity(vehicleId, null, null, null, null, null, null, null, null, null, null, null,null, null, null, false));
+                        .map(existing -> {
+                            maint.setId(existing.getId());
+                            maint.setNew(false);
+                            return maint;
+                        })
+                        .defaultIfEmpty(maint).flatMap(maintenanceRepo::save))
+                .thenReturn(new VehicleLocalEntity(vehicleId, null, null, null, null, null, null, null, null, null,
+                        null, null, null, null, null, false));
     }
 
     @Override
@@ -72,8 +82,9 @@ public class VehiclePersistenceAdapter implements VehiclePersistencePort {
                 vehicleRepo.findById(id),
                 financialRepo.findByVehicleId(id).defaultIfEmpty(new FinancialParameterEntity()),
                 maintenanceRepo.findByVehicleId(id).defaultIfEmpty(new MaintenanceParameterEntity()),
-                galleryRepo.findByVehicleId(id).map(VehicleIllustrationImageEntity::getImagePath).collectList().defaultIfEmpty(List.of())
-        ).map(tuple -> mapper.toDomain(tuple.getT1(), tuple.getT2(), tuple.getT3(), tuple.getT4()));
+                galleryRepo.findByVehicleId(id).map(VehicleIllustrationImageEntity::getImagePath).collectList()
+                        .defaultIfEmpty(List.of()))
+                .map(tuple -> mapper.toDomain(tuple.getT1(), tuple.getT2(), tuple.getT3(), tuple.getT4()));
     }
 
     @Override
@@ -92,12 +103,20 @@ public class VehiclePersistenceAdapter implements VehiclePersistencePort {
     }
 
     @Override
+    public Flux<Vehicle> getVehiclesByCompanyOfUser(UUID userId) {
+        return vehicleRepo.findAllBySameCompanyAsUser(userId).flatMap(v -> getLocalDataById(v.getId()));
+    }
+
+    @Override
     public Mono<Void> updateVehiclePhotos(UUID vehicleId, String photoUrl, String vinPhotoUrl, String regPhotoUrl) {
         return vehicleRepo.findById(vehicleId)
                 .flatMap(v -> {
-                    if (photoUrl != null) v.setPhotoUrl(photoUrl);
-                    if (vinPhotoUrl != null) v.setSerialNumberPhotoUrl(vinPhotoUrl);
-                    if (regPhotoUrl != null) v.setRegistrationPhotoUrl(regPhotoUrl);
+                    if (photoUrl != null)
+                        v.setPhotoUrl(photoUrl);
+                    if (vinPhotoUrl != null)
+                        v.setSerialNumberPhotoUrl(vinPhotoUrl);
+                    if (regPhotoUrl != null)
+                        v.setRegistrationPhotoUrl(regPhotoUrl);
                     v.setNew(false);
                     return vehicleRepo.save(v);
                 }).then();

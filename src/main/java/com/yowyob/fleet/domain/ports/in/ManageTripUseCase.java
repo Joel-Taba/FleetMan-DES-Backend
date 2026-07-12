@@ -12,47 +12,49 @@ import reactor.core.publisher.Mono;
 
 /**
  * Port d'entrée pour la gestion des Trajets.
- * Nouveau flux : le Fleet Manager crée et pilote les trajets (plus le chauffeur).
+ * Nouveau flux : le Fleet Manager crée et pilote les trajets (plus le
+ * chauffeur).
  */
 public interface ManageTripUseCase {
     // ── Commandes imbriquées ─────────────────────────────────────────────────
 
     record TripDetailInput(
-        String itemType,
-        String description,
-        int quantity,
-        BigDecimal weight,
-        Integer departureQuantity
-    ) {}
+            String itemType,
+            String description,
+            int quantity,
+            BigDecimal weight,
+            Integer departureQuantity) {
+    }
 
     record CreateTripCommand(
-        UUID vehicleId,
-        UUID driverId,
-        UUID fleetId,
-        UUID managerId,
-        LocalDate startDate,
-        LocalTime startTime,
-        String departureLocation,
-        BigDecimal departureKmIndex,
-        BigDecimal departureFuelIndex,
-        String missionObject,
-        BigDecimal missionCost,
-        String rateType,
-        LocalDateTime scheduledReturnDatetime,
-        List<TripDetailInput> details
-    ) {}
+            UUID vehicleId,
+            UUID driverId,
+            UUID fleetId,
+            UUID managerId,
+            LocalDate startDate,
+            LocalTime startTime,
+            String departureLocation,
+            BigDecimal departureKmIndex,
+            BigDecimal departureFuelIndex,
+            String missionObject,
+            BigDecimal missionCost,
+            String rateType,
+            LocalDateTime scheduledReturnDatetime,
+            List<TripDetailInput> details) {
+    }
 
     record RegisterReturnCommand(
-        String tripCode,
-        LocalDate returnDate,
-        LocalTime returnTime,
-        String returnLocation,
-        BigDecimal returnKmIndex,
-        BigDecimal returnFuelIndex,
-        List<ReturnDetailInput> detailUpdates
-    ) {}
+            String tripCode,
+            LocalDate returnDate,
+            LocalTime returnTime,
+            String returnLocation,
+            BigDecimal returnKmIndex,
+            BigDecimal returnFuelIndex,
+            List<ReturnDetailInput> detailUpdates) {
+    }
 
-    record ReturnDetailInput(UUID detailId, Integer returnQuantity) {}
+    record ReturnDetailInput(UUID detailId, Integer returnQuantity) {
+    }
 
     // ── Opérations Manager ───────────────────────────────────────────────────
 
@@ -76,6 +78,13 @@ public interface ManageTripUseCase {
 
     /** Récupère le détail d'un trajet. */
     Mono<Trip> getTripById(UUID tripId);
+
+    Mono<Trip> startTrip(UUID tripId, BigDecimal departureKmIndex, BigDecimal departureFuelIndex,
+            String departureLocation);
+
+    Mono<Trip> returningTrip(UUID tripId);
+
+    Mono<Trip> completeTrip(UUID tripId, BigDecimal returnKmIndex, BigDecimal returnFuelIndex, String returnLocation);
 
     // ── Télémétrie (conservée pour usage futur app mobile chauffeur) ─────────
 

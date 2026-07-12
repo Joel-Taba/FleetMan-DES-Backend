@@ -34,6 +34,12 @@ public interface VehiclePersistencePort {
     Flux<Vehicle> getAllVehicles();
 
     /**
+     * Retrieves all vehicles belonging to the same company as the user (For
+     * Admin/Scope).
+     */
+    Flux<Vehicle> getVehiclesByCompanyOfUser(UUID userId);
+
+    /**
      * Updates the photo URLs for a vehicle.
      */
     Mono<Void> updateVehiclePhotos(UUID vehicleId, String photoUrl, String vinPhotoUrl, String regPhotoUrl);

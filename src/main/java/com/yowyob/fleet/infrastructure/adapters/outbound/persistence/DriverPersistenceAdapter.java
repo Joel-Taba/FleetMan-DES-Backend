@@ -31,7 +31,7 @@ public class DriverPersistenceAdapter implements DriverPersistencePort {
                 })
                 .switchIfEmpty(Mono.defer(() -> {
                     DriverEntity newEntity = mapper.toEntity(driver);
-                    newEntity.markAsNew(); 
+                    newEntity.markAsNew();
                     return Mono.just(newEntity);
                 }))
                 .flatMap(repository::save)
@@ -77,5 +77,10 @@ public class DriverPersistenceAdapter implements DriverPersistencePort {
     @Override
     public Flux<Driver> findAll() {
         return repository.findAll().map(mapper::toDomain);
+    }
+
+    @Override
+    public Flux<Driver> findAllBySameCompanyAsUser(UUID userId) {
+        return repository.findAllBySameCompanyAsUser(userId).map(mapper::toDomain);
     }
 }

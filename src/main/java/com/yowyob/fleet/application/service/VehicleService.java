@@ -125,7 +125,8 @@ public class VehicleService implements ManageVehicleUseCase {
     public Flux<Vehicle> getVehicles(UUID requesterId, boolean isAdmin, String token) {
         Flux<Vehicle> localStream;
         if (isAdmin) {
-            localStream = localPersistencePort.getAllVehicles();
+            localStream = localPersistencePort.getVehiclesByCompanyOfUser(requesterId)
+                    .switchIfEmpty(Flux.defer(() -> localPersistencePort.getAllVehicles()));
         } else {
             localStream = driverPersistencePort.findById(requesterId)
                     .flatMapMany((Driver driver) -> {

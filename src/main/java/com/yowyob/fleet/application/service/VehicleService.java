@@ -3,6 +3,7 @@ package com.yowyob.fleet.application.service;
 import com.yowyob.fleet.domain.exception.VehicleException;
 import com.yowyob.fleet.domain.model.Vehicle;
 import com.yowyob.fleet.domain.model.VehicleParameters;
+import com.yowyob.fleet.domain.model.Driver;
 import com.yowyob.fleet.domain.ports.in.ManageVehicleUseCase;
 import com.yowyob.fleet.domain.ports.out.ExternalGeofencePort;
 import com.yowyob.fleet.domain.ports.out.ExternalVehiclePort;
@@ -19,6 +20,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import com.yowyob.fleet.domain.ports.out.GeofencePersistencePort; // AJOUTER
 import com.yowyob.fleet.domain.ports.out.FleetRepositoryPort; // AJOUTER
+import com.yowyob.fleet.domain.ports.out.DriverPersistencePort;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -38,6 +40,7 @@ public class VehicleService implements ManageVehicleUseCase {
     // Ajout des ports nécessaires pour la validation et la récupération des zones
     private final GeofencePersistencePort geofencePersistencePort;
     private final FleetRepositoryPort fleetRepository;
+    private final DriverPersistencePort driverPersistencePort;
 
     // Repositories des ressources (Souveraineté)
     private final VehicleTypeR2dbcRepository vehicleTypeRepo;
@@ -120,8 +123,23 @@ public class VehicleService implements ManageVehicleUseCase {
 
     @Override
     public Flux<Vehicle> getVehicles(UUID requesterId, boolean isAdmin, String token) {
-        Flux<Vehicle> localStream = isAdmin ? localPersistencePort.getAllVehicles()
-                : localPersistencePort.getVehiclesByManager(requesterId);
+        Flux<Vehicle> localStream;
+        if (isAdmin) {
+            localStream = localPersistencePort.getAllVehicles();
+        } else {
+            localStream = driverPersistencePort.findById(requesterId)
+                    .flatMapMany((Driver driver) -> {
+                        Flux<Vehicle> vehicles = localPersistencePort.getAllVehicles()
+                                .filter(v -> requesterId.equals(v.currentDriverId()));
+                        if (driver.assignedVehicleId() != null) {
+                            Mono<Vehicle> primaryVehicle = localPersistencePort
+                                    .getLocalDataById(driver.assignedVehicleId());
+                            vehicles = Flux.concat(primaryVehicle, vehicles).distinct(Vehicle::id);
+                        }
+                        return vehicles;
+                    })
+                    .switchIfEmpty(localPersistencePort.getVehiclesByManager(requesterId));
+        }
 
         return localStream.flatMap(v -> getVehicleDetails(v.id(), token)
                 .onErrorResume(e -> Mono.just(v)));

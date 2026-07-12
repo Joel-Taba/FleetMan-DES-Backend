@@ -8,30 +8,43 @@ import java.util.UUID;
 
 public interface AuthPort {
     Mono<AuthResponse> login(String identifier, String password);
-    Mono<AuthResponse> refresh(String refreshToken); 
+
+    Mono<AuthResponse> selectContext(String selectionToken, String contextId, UUID organizationId);
+
+    Mono<AuthResponse> refresh(String refreshToken);
 
     Mono<AuthResponse> registerInRemote(AuthUseCase.RegisterCommand command);
+
     Mono<UserDetail> getUserProfile(String token);
+
     Mono<UserDetail> getUserById(UUID userId, String token);
-    
+
     Flux<UserDetail> getUsersByService(String serviceName, String token);
+
     Flux<UserDetail> getAllUsers(String token);
 
     Mono<UserDetail> updateUserProfile(UUID userId, String token, AuthUseCase.UpdateProfileCommand command);
+
     Mono<Void> changePassword(UUID userId, String token, String currentPwd, String newPwd);
+
     Mono<Void> deleteRemoteAccount(UUID userId, String token);
+
     Mono<Void> moveUserToService(UUID userId, String newServiceName, String token);
+
     Mono<Void> updateProfilePicture(UUID userId, String token, AuthUseCase.FileContent file);
-    
+
     Mono<Boolean> roleExists(String roleName);
+
     Mono<Void> createRole(String roleName);
 
-    record AuthResponse(String accessToken, String refreshToken, UserDetail user) {}
+    record AuthResponse(String accessToken, String refreshToken, UserDetail user) {
+    }
 
     record UserDetail(
-        UUID id, String username, String email, String phone,
-        String firstName, String lastName, String service,
-        List<String> roles, List<String> permissions,
-        String photoUrl, String companyName, String licenceNumber, String vehicleId, boolean isActive, java.time.Instant lastLoginAt 
-    ) {}
+            UUID id, String username, String email, String phone,
+            String firstName, String lastName, String service,
+            List<String> roles, List<String> permissions,
+            String photoUrl, String companyName, String licenceNumber, String vehicleId, boolean isActive,
+            java.time.Instant lastLoginAt) {
+    }
 }

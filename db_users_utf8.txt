@@ -1,0 +1,21 @@
+﻿id,username,email,first_name,last_name,kernel_id
+a0000002-0000-4000-8000-000000000002,fleetadmin,admin@fleetman.cm,Marie,Admin,a0000002-0000-4000-8000-000000000002
+a0000001-0000-4000-8000-000000000001,superadmin,superadmin@fleetman.cm,Jean,Super,a0000001-0000-4000-8000-000000000001
+03410d2d-26fb-41bb-8565-5ce1742e7a8a,salo@gmail.com,salo@gmail.com,Salo,PART,03410d2d-26fb-41bb-8565-5ce1742e7a8a
+f9ab159b-ad33-4ad4-aa1c-cb481b2c3275,user_10786,test_10786@fleetman.cm,Demo,User,f9ab159b-ad33-4ad4-aa1c-cb481b2c3275
+aa3da596-212f-4430-b9c8-c100d36a2515,lovelace,lovelace@gmail.com,ada,lovelace,aa3da596-212f-4430-b9c8-c100d36a2515
+b4b96d73-b1ab-44f1-88c9-d2a4144db2e3,turing,turing@gmail.com,nehemie,turing,b4b96d73-b1ab-44f1-88c9-d2a4144db2e3
+70262809-3a95-4b83-aa60-4963207a3a4d,testadmin_999@fleet.com,testadmin_999@fleet.com,TestAdmin,Fleet,70262809-3a95-4b83-aa60-4963207a3a4d
+720049c2-dc4b-4918-8163-52a0976f3994,user_70293,test_70293@fleetman.cm,Demo,User,720049c2-dc4b-4918-8163-52a0976f3994
+311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2,Nehemie,nehemie@fleetman.cm,Nehemie,Nkolo,311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2
+fb8467f4-a739-47b7-8c57-61a940464023,user_87414,test_87414@fleetman.cm,Demo,User,fb8467f4-a739-47b7-8c57-61a940464023
+5ab7c8fe-38af-48ed-8400-d84c6c1ed634,curie@gmail.com,curie@gmail.com,marie,curie,5ab7c8fe-38af-48ed-8400-d84c6c1ed634
+de7432fd-f4ad-472b-993f-18f1f17129aa,Frank,Frank@gmail.com,Frank,Driver,de7432fd-f4ad-472b-993f-18f1f17129aa
+ac868468-130a-46a9-9a10-f15d3c0f0181,nehemie37@gmail.com,nehemie37@gmail.com,,,ac868468-130a-46a9-9a10-f15d3c0f0181
+45f6cc64-4af0-4d5a-8ac8-3dc5d39e029b,45f6cc64-4af0-4d5a-8ac8-3dc5d39e029b,nehemie30@gmail.com,,,45f6cc64-4af0-4d5a-8ac8-3dc5d39e029b
+2c5dae3d-82d5-46d3-cbd3-3c4d5e6f7a8b,MarcDriver,marc.driver@fleetman.cm,Marc,Eyango,5192bff0-e1e0-43ce-a4db-912808c32493
+4d3c4b5a-6b7c-8d9e-0f1a-2b3c4d5e6f7a,PaulDriver,paul.driver@fleetman.cm,Paul,Essomba,a3b8d1b6-0b3b-4b1a-9c1a-1a2b3c4d5e6f
+8f5b8e9d-0c1b-2a3b-4c5d-6e7f8a9b0c1d,SamuelDriver,samuel.driver@fleetman.cm,Samuel,Tchakounte,b4c9e2c7-1c4c-5c2b-ac2b-2b3c4d5e6f7a
+a0000003-0000-4000-8000-000000000003,fleetmanager,manager@fleetman.cm,Paul,Manager,a0000003-0000-4000-8000-000000000003
+a0000004-0000-4000-8000-000000000004,fleetdriver,driver@fleetman.cm,Andr├®,Mbarga,a0000004-0000-4000-8000-000000000004
+(19 rows)

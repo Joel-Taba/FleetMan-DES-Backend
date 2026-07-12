@@ -33,13 +33,14 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/geofence")
 @RequiredArgsConstructor
-@Tag(name =  OpenApiConfig.TAG_GEOFENCING)
+@Tag(name = OpenApiConfig.TAG_GEOFENCING)
+@PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
 @SecurityRequirement(name = "bearerAuth")
 public class GeofenceController {
 
     private final ManageGeofenceUseCase geofenceService;
     private final ObjectMapper objectMapper;
-    
+
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
     }
@@ -47,7 +48,6 @@ public class GeofenceController {
     @PostMapping("/zones")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Créer une nouvelle géofence", description = "Envoie la zone au moteur spatial. Pour un POLYGON, la première et la dernière coordonnée doivent être identiques.")
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     public Mono<GeofenceZone> create(@Valid @RequestBody GeofenceZoneDTORequest request, Authentication auth) {
 
         // Conversion manuelle du DTO vers le Domaine GeofenceZone
@@ -98,29 +98,24 @@ public class GeofenceController {
 
     @GetMapping("/circles")
     @Operation(summary = "Lister mes zones circulaires")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
     public Flux<Map<String, Object>> listCircles(Authentication auth) {
         return geofenceService.getMyExternalZones(getUserId(auth), "CIRCLE");
     }
 
     @GetMapping("/polygons")
     @Operation(summary = "Lister mes zones polygonales")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
     public Flux<Map<String, Object>> listPolygons(Authentication auth) {
         return geofenceService.getMyExternalZones(getUserId(auth), "POLYGON");
     }
 
-        @GetMapping("/fleet/{fleetId}")
+    @GetMapping("/fleet/{fleetId}")
     @Operation(summary = "Lister les zones d'une flotte spécifique", description = "Retourne les zones enrichies avec la géométrie du moteur externe.")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
     public Flux<Map<String, Object>> listByFleet(@PathVariable UUID fleetId, Authentication auth) {
         return geofenceService.getZonesByFleet(getUserId(auth), fleetId);
     }
-    
 
     @GetMapping("/{type}/{id}")
     @Operation(summary = "Récupérer le détail d'une géofence (par type + id)")
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     public Mono<Map<String, Object>> getById(
             @PathVariable String type,
             @PathVariable UUID id) {
@@ -128,22 +123,19 @@ public class GeofenceController {
         return geofenceService.getExternalZoneDetails(type, id);
     }
 
-   
     @PutMapping("/{type}/{id}")
     @Operation(summary = "Modifier une géofence", description = "Mise à jour partielle des champs.")
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     public Mono<Void> update(
-            @PathVariable String type, 
-            @PathVariable UUID id, 
+            @PathVariable String type,
+            @PathVariable UUID id,
             @RequestBody GeofenceUpdateDTO updates) { // Utilisation du DTO ici
-        
+
         // Conversion DTO -> Map pour le service
         @SuppressWarnings("unchecked")
         Map<String, Object> updateMap = objectMapper.convertValue(updates, Map.class);
-        
+
         return geofenceService.updateRemoteZone(type, id, updateMap);
     }
-
 
     // Nouveau endpoint simplifié
     @GetMapping("/zones/{id}")
@@ -162,10 +154,9 @@ public class GeofenceController {
     }
     // Dans GeofenceController.java
 
-     @GetMapping
+    @GetMapping
     @Operation(summary = "Lister toutes les zones du service")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    public  Flux<Map<String, Object>> listAll(Authentication auth) {
+    public Flux<Map<String, Object>> listAll(Authentication auth) {
         return geofenceService.getAllExternalZones("all");
     }
 
@@ -176,18 +167,17 @@ public class GeofenceController {
             @RequestParam(defaultValue = "20") int size) {
         return geofenceService.getExternalAlerts(page, size);
     }
-    
+
     @GetMapping("/alerts")
     @Operation(summary = "Récupérer mes alertes (Sécurisé par Flotte)", description = "Retourne uniquement les alertes des véhicules appartenant au manager connecté.")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
     public Mono<Map<String, Object>> getAlerts(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication auth) {
-        
+
         // 1. On récupère l'ID du manager connecté
         UUID managerId = getUserId(auth);
-        
+
         // 2. On appelle la méthode sécurisée du service
         return geofenceService.getExternalAlerts(page, size);
     }
@@ -200,21 +190,22 @@ public class GeofenceController {
 
     @DeleteMapping("/{type}/{id}")
     @Operation(summary = "Supprimer une zone de géofence")
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     public Mono<Void> delete(@PathVariable String type, @PathVariable UUID id, Authentication auth) {
         return geofenceService.deleteZone(id, type, getUserId(auth));
     }
     // @GetMapping("/events") // Endpoint pour les donnÃ©es LOCALES
-    // @Operation(summary = "Historique local des alertes", description = "RÃ©cupÃ¨re les Ã©vÃ©nements stockÃ©s localement (via Kafka).")
+    // @Operation(summary = "Historique local des alertes", description =
+    // "RÃ©cupÃ¨re les Ã©vÃ©nements stockÃ©s localement (via Kafka).")
     // @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     // public Flux<GeofenceEventEntity> getLocalEvents(
-    //         @RequestParam(required = false) UUID vehicleId,
-    //         @RequestParam(required = false) UUID zoneId,
-    //         @RequestParam(required = false) String type, // ENTRY / EXIT
-    //         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-    //         Authentication auth) {
-        
-    //     return geofenceService.getEvents(vehicleId, zoneId, type, date);
+    // @RequestParam(required = false) UUID vehicleId,
+    // @RequestParam(required = false) UUID zoneId,
+    // @RequestParam(required = false) String type, // ENTRY / EXIT
+    // @RequestParam(required = false) @DateTimeFormat(iso =
+    // DateTimeFormat.ISO.DATE) LocalDate date,
+    // Authentication auth) {
+
+    // return geofenceService.getEvents(vehicleId, zoneId, type, date);
     // }
 
 }

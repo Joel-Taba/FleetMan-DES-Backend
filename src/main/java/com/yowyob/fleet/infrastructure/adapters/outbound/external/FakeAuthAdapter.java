@@ -509,4 +509,19 @@ public class FakeAuthAdapter implements AuthPort {
     public Mono<Void> createRole(String roleName) {
         return Mono.empty();
     }
+
+    @Override
+    public Mono<AuthResponse> selectContext(String selectionToken, String contextId, UUID organizationId) {
+        String email = "admin@fleetman.cm";
+        if (selectionToken != null && selectionToken.contains(":")) {
+            email = selectionToken.substring(selectionToken.indexOf(":") + 1);
+        }
+        String password = "FleetMan2026!";
+        if (email.contains("nehemie")) {
+            password = "Nehemie@123";
+        } else if (email.contains("frank")) {
+            password = "Frank@123";
+        }
+        return this.login(email, password);
+    }
 }

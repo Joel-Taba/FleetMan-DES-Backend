@@ -15,157 +15,162 @@ import java.util.UUID;
  * URL de base : http://kernel-core.yowyob.com
  *
  * Flow d'authentification Kernel :
- * 1. POST /api/auth/discover-contexts  → selectionToken + contexts[]
- * 2. POST /api/auth/select-context     → accessToken (JWT RS256)
- * 3. GET  /api/users/me               → profil utilisateur
+ * 1. POST /api/auth/discover-contexts → selectionToken + contexts[]
+ * 2. POST /api/auth/select-context → accessToken (JWT RS256)
+ * 3. GET /api/users/me → profil utilisateur
  *
- * Sécurité server-to-server : X-Client-Id + X-Api-Key (injectés par le WebClient)
+ * Sécurité server-to-server : X-Client-Id + X-Api-Key (injectés par le
+ * WebClient)
  */
 @HttpExchange
 public interface KernelAuthApiClient {
 
-    // ── Authentification ──────────────────────────────────────────────────────
+        // ── Authentification ──────────────────────────────────────────────────────
 
-    /** Étape 1 : identifie l'utilisateur et retourne les contextes disponibles */
-    @PostExchange("/api/auth/discover-contexts")
-    Mono<ApiResponse<DiscoverContextsResponse>> discoverContexts(
-            @RequestBody LoginRequest request);
+        /** Étape 1 : identifie l'utilisateur et retourne les contextes disponibles */
+        @PostExchange("/api/auth/discover-contexts")
+        Mono<ApiResponse<DiscoverContextsResponse>> discoverContexts(
+                        @RequestBody LoginRequest request);
 
-    /** Étape 2 : sélectionne un contexte et retourne le JWT */
-    @PostExchange("/api/auth/select-context")
-    Mono<ApiResponse<ContextualLoginResponse>> selectContext(
-            @RequestBody SelectContextRequest request);
+        /** Étape 2 : sélectionne un contexte et retourne le JWT */
+        @PostExchange("/api/auth/select-context")
+        Mono<ApiResponse<ContextualLoginResponse>> selectContext(
+                        @RequestBody SelectContextRequest request);
 
-    /** Renouvellement du JWT via refresh token */
-    @PostExchange("/api/auth/refresh")
-    Mono<ApiResponse<RefreshTokenResponse>> refreshToken(
-            @RequestBody RefreshTokenRequest request);
+        /** Renouvellement du JWT via refresh token */
+        @PostExchange("/api/auth/refresh")
+        Mono<ApiResponse<RefreshTokenResponse>> refreshToken(
+                        @RequestBody RefreshTokenRequest request);
 
-    /** Inscription d'un nouvel utilisateur */
-    @PostExchange("/api/auth/register")
-    Mono<ApiResponse<UserAccountResponse>> register(
-            @RequestBody RegisterUserRequest request);
+        /** Inscription d'un nouvel utilisateur */
+        @PostExchange("/api/auth/register")
+        Mono<ApiResponse<UserAccountResponse>> register(
+                        @RequestHeader(value = "Authorization", required = false) String bearerToken,
+                        @RequestBody RegisterUserRequest request);
 
-    /** Mot de passe oublié */
-    @PostExchange("/api/auth/forgot-password")
-    Mono<Void> forgotPassword(@RequestBody ForgotPasswordRequest request);
+        /** Mot de passe oublié */
+        @PostExchange("/api/auth/forgot-password")
+        Mono<Void> forgotPassword(@RequestBody ForgotPasswordRequest request);
 
-    /** Réinitialisation du mot de passe */
-    @PostExchange("/api/auth/reset-password")
-    Mono<Void> resetPassword(@RequestBody ResetPasswordRequest request);
+        /** Réinitialisation du mot de passe */
+        @PostExchange("/api/auth/reset-password")
+        Mono<Void> resetPassword(@RequestBody ResetPasswordRequest request);
 
-    // ── Profil utilisateur ────────────────────────────────────────────────────
+        // ── Profil utilisateur ────────────────────────────────────────────────────
 
-    /** Profil de l'utilisateur connecté */
-    @GetExchange("/api/users/me")
-    Mono<ApiResponse<UserAccountResponse>> getMe(
-            @RequestHeader("Authorization") String bearerToken);
+        /** Profil de l'utilisateur connecté */
+        @GetExchange("/api/users/me")
+        Mono<ApiResponse<UserAccountResponse>> getMe(
+                        @RequestHeader("Authorization") String bearerToken);
 
-    // ── Administration ─────────────────────────────────────────────────────────
+        // ── Administration ─────────────────────────────────────────────────────────
 
-    /** Liste des administrateurs */
-    @GetExchange("/api/users/admins")
-    Mono<ApiResponse<List<UserAccountResponse>>> listAdmins(
-            @RequestHeader("Authorization") String bearerToken);
+        /** Liste des administrateurs */
+        @GetExchange("/api/users/admins")
+        Mono<ApiResponse<List<UserAccountResponse>>> listAdmins(
+                        @RequestHeader("Authorization") String bearerToken);
 
-    // ── DTO Records ────────────────────────────────────────────────────────────
+        // ── DTO Records ────────────────────────────────────────────────────────────
 
-    /** Enveloppe générique des réponses Kernel */
-    record ApiResponse<T>(
-            boolean success,
-            T data,
-            String message,
-            String errorCode,
-            String timestamp
-    ) {}
+        /** Enveloppe générique des réponses Kernel */
+        record ApiResponse<T>(
+                        boolean success,
+                        T data,
+                        String message,
+                        String errorCode,
+                        String timestamp) {
+        }
 
-    record LoginRequest(String principal, String password) {}
+        record LoginRequest(String principal, String password) {
+        }
 
-    record SelectContextRequest(
-            String selectionToken,
-            String contextId,
-            UUID organizationId
-    ) {}
+        record SelectContextRequest(
+                        String selectionToken,
+                        String contextId,
+                        UUID organizationId) {
+        }
 
-    record RefreshTokenRequest(String refreshToken) {}
+        record RefreshTokenRequest(String refreshToken) {
+        }
 
-    record ForgotPasswordRequest(String email) {}
+        record ForgotPasswordRequest(String email) {
+        }
 
-    record ResetPasswordRequest(
-            String resetToken,
-            String newPassword
-    ) {}
+        record ResetPasswordRequest(
+                        String resetToken,
+                        String newPassword) {
+        }
 
-    record RegisterUserRequest(
-            String username,
-            String email,
-            String phoneNumber,
-            String password,
-            String authProvider
-    ) {}
+        record RegisterUserRequest(
+                        String username,
+                        String email,
+                        String phoneNumber,
+                        String password,
+                        String authProvider) {
+        }
 
-    record DiscoverContextsResponse(
-            String selectionToken,
-            Long expiresInSeconds,
-            List<DiscoveredContext> contexts
-    ) {}
+        record DiscoverContextsResponse(
+                        String selectionToken,
+                        Long expiresInSeconds,
+                        List<DiscoveredContext> contexts) {
+        }
 
-    record DiscoveredContext(
-            String contextId,
-            UUID tenantId,
-            UUID userId,
-            UUID actorId,
-            List<OrganizationRef> organizations
-    ) {}
+        record DiscoveredContext(
+                        String contextId,
+                        UUID tenantId,
+                        UUID userId,
+                        UUID actorId,
+                        List<OrganizationRef> organizations) {
+        }
 
-    record OrganizationRef(
-            UUID organizationId,
-            String shortName,
-            String service
-    ) {}
+        record OrganizationRef(
+                        UUID organizationId,
+                        String shortName,
+                        String service) {
+        }
 
-    record SelectContextRequest2(
-            String selectionToken,
-            String contextId
-    ) {}
+        record SelectContextRequest2(
+                        String selectionToken,
+                        String contextId) {
+        }
 
-    record ContextualLoginResponse(
-            UUID selectedTenantId,
-            UUID selectedOrganizationId,
-            LoginResponse session
-    ) {}
+        record ContextualLoginResponse(
+                        UUID selectedTenantId,
+                        UUID selectedOrganizationId,
+                        LoginResponse session) {
+        }
 
-    record LoginResponse(
-            UUID id,
-            UUID tenantId,
-            UUID actorId,
-            String username,
-            String email,
-            String phoneNumber,
-            String accessToken,
-            String sessionToken,
-            String tokenType,
-            Long expiresInSeconds,
-            List<String> authorities,
-            List<OrganizationRef> organizations
-    ) {}
+        record LoginResponse(
+                        UUID id,
+                        UUID tenantId,
+                        UUID actorId,
+                        String username,
+                        String email,
+                        String phoneNumber,
+                        String accessToken,
+                        String sessionToken,
+                        String tokenType,
+                        Long expiresInSeconds,
+                        List<String> authorities,
+                        List<OrganizationRef> organizations) {
+        }
 
-    record RefreshTokenResponse(
-            String accessToken,
-            String refreshToken,
-            String tokenType,
-            Long accessExpiresInSeconds
-    ) {}
+        record RefreshTokenResponse(
+                        String accessToken,
+                        String refreshToken,
+                        String tokenType,
+                        Long accessExpiresInSeconds) {
+        }
 
-    record UserAccountResponse(
-            UUID id,
-            UUID tenantId,
-            UUID actorId,
-            String username,
-            String email,
-            String phoneNumber,
-            String status,
-            String plan,
-            List<String> authorities
-    ) {}
+        record UserAccountResponse(
+                        UUID id,
+                        UUID tenantId,
+                        UUID actorId,
+                        String username,
+                        String email,
+                        String phoneNumber,
+                        String status,
+                        String plan,
+                        List<String> authorities) {
+        }
 }

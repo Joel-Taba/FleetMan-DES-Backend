@@ -27,7 +27,8 @@ public class WebClientConfig {
     private static final Logger log = LoggerFactory.getLogger(WebClientConfig.class);
 
     /**
-     * Filtre pour logger toutes les requêtes sortantes vers les microservices tiers.
+     * Filtre pour logger toutes les requêtes sortantes vers les microservices
+     * tiers.
      */
     private ExchangeFilterFunction logRequest() {
         return ExchangeFilterFunction.ofRequestProcessor(clientRequest -> {
@@ -40,7 +41,7 @@ public class WebClientConfig {
     @Bean
     @Primary // Pour que ce builder soit celui utilisé par défaut partout
     public WebClient.Builder webClientBuilder() {
-         HttpClient httpClient = HttpClient.create()
+        HttpClient httpClient = HttpClient.create()
                 .resolver(DefaultAddressResolverGroup.INSTANCE);
         return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
@@ -54,11 +55,13 @@ public class WebClientConfig {
             WebClient.Builder builder,
             @Value("${application.kernel.url:http://kernel-core.yowyob.com}") String kernelUrl,
             @Value("${application.kernel.client-id:fleet-management-backend}") String clientId,
-            @Value("${application.kernel.api-key:fleet-api-key-2026}") String apiKey) {
+            @Value("${application.kernel.api-key:fleet-api-key-2026}") String apiKey,
+            @Value("${application.kernel.tenant-id:}") String tenantId) {
         return builder
                 .baseUrl(kernelUrl)
                 .defaultHeader("X-Client-Id", clientId)
                 .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader("X-Tenant-Id", tenantId)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .filter(logRequest())
@@ -69,11 +72,13 @@ public class WebClientConfig {
     public KernelAuthApiClient kernelAuthApiClient(
             @Value("${application.kernel.url:http://kernel-core.yowyob.com}") String kernelUrl,
             @Value("${application.kernel.client-id:fleet-management-backend}") String clientId,
-            @Value("${application.kernel.api-key:fleet-api-key-2026}") String apiKey) {
+            @Value("${application.kernel.api-key:fleet-api-key-2026}") String apiKey,
+            @Value("${application.kernel.tenant-id:}") String tenantId) {
         WebClient webClient = WebClient.builder()
                 .baseUrl(kernelUrl)
                 .defaultHeader("X-Client-Id", clientId)
                 .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader("X-Tenant-Id", tenantId)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .filter(logRequest())
@@ -85,27 +90,27 @@ public class WebClientConfig {
 
     @Bean("paymentWebClient")
     public WebClient paymentWebClient(WebClient.Builder builder,
-                                      @Value("${application.external.payment-service-url}") String url) {
+            @Value("${application.external.payment-service-url}") String url) {
         return builder.baseUrl(url).filter(logRequest()).build();
     }
 
     @Bean
     public VehicleApiClient vehicleApiClient(WebClient.Builder builder,
-                                             @Value("${application.external.vehicle-service-url}") String url) {
+            @Value("${application.external.vehicle-service-url}") String url) {
         WebClient webClient = builder.baseUrl(url).filter(logRequest()).build();
         return createProxy(webClient, VehicleApiClient.class);
     }
 
     @Bean
     public AuthApiClient authApiClient(WebClient.Builder builder,
-                                       @Value("${application.auth.url}") String url) {
+            @Value("${application.auth.url}") String url) {
         WebClient webClient = builder.baseUrl(url).filter(logRequest()).build();
         return createProxy(webClient, AuthApiClient.class);
     }
 
     @Bean
     public NotificationApiClient notificationApiClient(WebClient.Builder builder,
-                                                      @Value("${application.notification.url}") String url) {
+            @Value("${application.notification.url}") String url) {
         WebClient webClient = builder.baseUrl(url).filter(logRequest()).build();
         return createProxy(webClient, NotificationApiClient.class);
     }
@@ -120,7 +125,7 @@ public class WebClientConfig {
 
     @Bean
     public GeofenceAuthClient geofenceAuthClient(WebClient.Builder builder,
-                                                 @Value("${application.external.geofence-service-url}") String url) {
+            @Value("${application.external.geofence-service-url}") String url) {
         WebClient webClient = builder.baseUrl(url).build();
         return createProxy(webClient, GeofenceAuthClient.class);
     }
@@ -128,9 +133,9 @@ public class WebClientConfig {
     // TODO: Activer après implémentation du service de notification
     // @Bean
     // public NotificationApiClient notificationApiClient(WebClient.Builder builder,
-    //                                                    @Value("${application.external.notification.url}") String url) {
-    //     WebClient webClient = builder.baseUrl(url).build();
-    //     return createProxy(webClient, NotificationApiClient.class);
+    // @Value("${application.external.notification.url}") String url) {
+    // WebClient webClient = builder.baseUrl(url).build();
+    // return createProxy(webClient, NotificationApiClient.class);
     // }
 
     // Helper générique
@@ -141,15 +146,16 @@ public class WebClientConfig {
     }
 
     /**
-     * Crée un WebClient qui accepte les certificats SSL auto-signés (Utile pour le service Geofence).
+     * Crée un WebClient qui accepte les certificats SSL auto-signés (Utile pour le
+     * service Geofence).
      */
     private WebClient.Builder createInsecureWebClient(String baseUrl) {
         try {
             SslContext sslContext = SslContextBuilder.forClient()
                     .trustManager(InsecureTrustManagerFactory.INSTANCE).build();
             HttpClient httpClient = HttpClient.create()
-                .secure(t -> t.sslContext(sslContext))
-                .resolver(DefaultAddressResolverGroup.INSTANCE);
+                    .secure(t -> t.sslContext(sslContext))
+                    .resolver(DefaultAddressResolverGroup.INSTANCE);
 
             return WebClient.builder()
                     .baseUrl(baseUrl)

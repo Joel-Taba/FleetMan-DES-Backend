@@ -1,0 +1,41 @@
+﻿[INFO] Scanning for projects...
+[INFO] 
+[INFO] -------------------< com.yowyob:reactive-hexagonal >--------------------
+[INFO] Building reactive-hexagonal 0.0.1-SNAPSHOT
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- maven-resources-plugin:3.3.1:resources (default-resources) @ reactive-hexagonal ---
+[INFO] Copying 4 resources from src\main\resources to target\classes
+[INFO] Copying 31 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.11.0:compile (default-compile) @ reactive-hexagonal ---
+[INFO] Changes detected - recompiling the module! :source
+[INFO] Compiling 388 source files with javac [debug release 21] to target\classes
+[INFO] /D:/CODEsemestre2/RÚseaux/NewBackendFleet/FleetMan-DES-Backend/src/main/java/com/yowyob/fleet/infrastructure/adapters/outbound/external/VehicleApiAdapter.java: Some input files use unchecked or unsafe operations.
+[INFO] /D:/CODEsemestre2/RÚseaux/NewBackendFleet/FleetMan-DES-Backend/src/main/java/com/yowyob/fleet/infrastructure/adapters/outbound/external/VehicleApiAdapter.java: Recompile with -Xlint:unchecked for details.
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /D:/CODEsemestre2/RÚseaux/NewBackendFleet/FleetMan-DES-Backend/src/main/java/com/yowyob/fleet/application/service/VehicleService.java:[130,35] cannot find symbol
+  symbol:   class Driver
+  location: class com.yowyob.fleet.application.service.VehicleService
+[INFO] 1 error
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  20.259 s
+[INFO] Finished at: 2026-07-12T00:17:37+01:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project reactive-hexagonal: Compilation failure
+[ERROR] /D:/CODEsemestre2/RÚseaux/NewBackendFleet/FleetMan-DES-Backend/src/main/java/com/yowyob/fleet/application/service/VehicleService.java:[130,35] cannot find symbol
+[ERROR]   symbol:   class Driver
+[ERROR]   location: class com.yowyob.fleet.application.service.VehicleService
+[ERROR] 
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

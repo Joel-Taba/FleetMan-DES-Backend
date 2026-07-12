@@ -36,7 +36,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                         return Mono.empty();
                     }
                     log.info("🌱 [DEMO] Chargement des données de test fleet...");
-                    return Mono.fromRunnable(this::executeSqlSeed);
+                    return executeSqlSeed();
                 })
                 .doOnSuccess(v -> log.info("✅ [DEMO] Données de test chargées."))
                 .doOnError(e -> log.error("❌ [DEMO] Échec du seed : {}", e.getMessage()))
@@ -44,8 +44,8 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 .block();
     }
 
-    private void executeSqlSeed() {
+    private Mono<Void> executeSqlSeed() {
         var populator = new ResourceDatabasePopulator(new ClassPathResource("db/demo-seed.sql"));
-        populator.populate(connectionFactory).block();
+        return populator.populate(connectionFactory);
     }
 }

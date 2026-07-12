@@ -7,18 +7,23 @@ VALUES
   ('a0000001-0000-4000-8000-000000000001', 'superadmin', 'superadmin@fleetman.cm', 'Jean', 'Super', true),
   ('a0000002-0000-4000-8000-000000000002', 'fleetadmin', 'admin@fleetman.cm', 'Marie', 'Admin', true),
   ('a0000003-0000-4000-8000-000000000003', 'fleetmanager', 'manager@fleetman.cm', 'Paul', 'Manager', true),
-  ('a0000004-0000-4000-8000-000000000004', 'fleetdriver', 'driver@fleetman.cm', 'André', 'Mbarga', true)
+  ('a0000004-0000-4000-8000-000000000004', 'fleetdriver', 'driver@fleetman.cm', 'André', 'Mbarga', true),
+  ('a0000000-0000-4000-8000-000000000101', 'NehemieAdmin', 'nehemie@gmail.com', 'Nehemie', 'Admin', true),
+  ('a0000000-0000-4000-8000-000000000102', 'TuringManager', 'turing@gmail.com', 'Alan', 'Turing', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- 2. Manager + flottes
 INSERT INTO fleet.fleet_managers (user_id, company_name)
-VALUES ('a0000003-0000-4000-8000-000000000003', 'Transport Express CM')
+VALUES 
+  ('a0000003-0000-4000-8000-000000000003', 'Transport Express CM'),
+  ('a0000000-0000-4000-8000-000000000102', 'AXE CAPITAL')
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO fleet.fleets (id, manager_id, name, phone_number)
 VALUES
   ('b0000001-0000-4000-8000-000000000001', 'a0000003-0000-4000-8000-000000000003', 'Flotte Yaoundé', '+237677000001'),
-  ('b0000002-0000-4000-8000-000000000002', 'a0000003-0000-4000-8000-000000000003', 'Flotte Douala', '+237677000002')
+  ('b0000002-0000-4000-8000-000000000002', 'a0000003-0000-4000-8000-000000000003', 'Flotte Douala', '+237677000002'),
+  ('b0000000-0000-4000-8000-000000000102', 'a0000000-0000-4000-8000-000000000102', 'AXE CAPITAL Fleet 1', '+237677000102')
 ON CONFLICT (id) DO NOTHING;
 
 -- 3. Véhicules (type TRUCK / CAR via sous-requête)
@@ -75,7 +80,7 @@ VALUES
   ('d0000002-0000-4000-8000-000000000002', 'c0000003-0000-4000-8000-000000000003', 'a0000004-0000-4000-8000-000000000004',
    '2026-06-03', '2026-06-03', '14:00', '18:30', 'COMPLETED', 89, 270),
   ('d0000003-0000-4000-8000-000000000003', 'c0000001-0000-4000-8000-000000000001', 'a0000004-0000-4000-8000-000000000004',
-   '2026-06-06', NULL, '10:30', NULL, 'ONGOING', NULL, NULL)
+   '2026-06-06', NULL, '10:30', NULL, 'DEPARTED', NULL, NULL)
 ON CONFLICT (id) DO NOTHING;
 
 -- 7. Géofences

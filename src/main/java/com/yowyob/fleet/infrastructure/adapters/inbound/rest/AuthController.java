@@ -80,7 +80,7 @@ public class AuthController {
             return Mono.error(new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.UNAUTHORIZED, "Missing authorization header"));
         }
-        return authPort.getUserProfile(token);
+        return authUseCase.me(token);
     }
 
     @PostMapping("/discover-contexts")
@@ -104,18 +104,7 @@ public class AuthController {
     public Mono<AuthPort.AuthResponse> selectContext(
             @org.springframework.web.bind.annotation.RequestBody SelectContextRequest request) {
         log.info("✅ select-context: contextId={} orgId={}", request.contextId(), request.organizationId());
-        // Mode fake : simuler un login direct
-        String email = "admin@fleetman.cm";
-        if (request.selectionToken() != null && request.selectionToken().contains(":")) {
-            email = request.selectionToken().substring(request.selectionToken().indexOf(":") + 1);
-        }
-        String password = "FleetMan2026!";
-        if (email.contains("nehemie")) {
-            password = "Nehemie@123";
-        } else if (email.contains("frank")) {
-            password = "Frank@123";
-        }
-        return authUseCase.login(email, password);
+        return authUseCase.selectContext(request.selectionToken(), request.contextId(), request.organizationId());
     }
 
     // ── Records internes ───────────────────────────────────────────────────────

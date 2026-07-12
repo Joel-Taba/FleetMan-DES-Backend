@@ -27,10 +27,11 @@ import java.util.UUID;
  * Activé par : application.auth.mode=kernel
  *
  * Flow login Kernel (2 étapes) :
- * 1. POST /api/auth/discover-contexts  → selectionToken + contexts[]
- * 2. POST /api/auth/select-context     → JWT RS256 (accessToken)
+ * 1. POST /api/auth/discover-contexts → selectionToken + contexts[]
+ * 2. POST /api/auth/select-context → JWT RS256 (accessToken)
  *
- * Sécurité : headers X-Client-Id + X-Api-Key injectés automatiquement par le WebClient.
+ * Sécurité : headers X-Client-Id + X-Api-Key injectés automatiquement par le
+ * WebClient.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -46,6 +47,12 @@ public class KernelAuthAdapter implements AuthPort {
     @Value("${application.kernel.organization-id:}")
     private String defaultOrgId;
 
+    @Value("${application.geofence-system-user.username:system@fleetman.cm}")
+    private String systemUsername;
+
+    @Value("${application.geofence-system-user.password:SystemFleetMan2026!}")
+    private String systemPassword;
+
     // ── Login (2 étapes) ──────────────────────────────────────────────────────
 
     @Override
@@ -54,7 +61,7 @@ public class KernelAuthAdapter implements AuthPort {
 
         // Étape 1 : discover-contexts
         return kernelClient.discoverContexts(
-                        new KernelAuthApiClient.LoginRequest(identifier, password))
+                new KernelAuthApiClient.LoginRequest(identifier, password))
                 .flatMap(resp -> {
                     if (!resp.success() || resp.data() == null) {
                         log.warn("❌ [KERNEL AUTH] discover-contexts failed: {}", resp.message());
@@ -90,8 +97,7 @@ public class KernelAuthAdapter implements AuthPort {
                             new KernelAuthApiClient.SelectContextRequest(
                                     discover.selectionToken(),
                                     ctx.contextId(),
-                                    orgId
-                            ));
+                                    orgId));
                 })
                 .map(resp -> {
                     if (!resp.success() || resp.data() == null) {
@@ -109,7 +115,7 @@ public class KernelAuthAdapter implements AuthPort {
     @Override
     public Mono<AuthResponse> refresh(String refreshToken) {
         return kernelClient.refreshToken(
-                        new KernelAuthApiClient.RefreshTokenRequest(refreshToken))
+                new KernelAuthApiClient.RefreshTokenRequest(refreshToken))
                 .map(resp -> {
                     if (!resp.success() || resp.data() == null) {
                         throw AuthException.tokenExpired();
@@ -128,14 +134,18 @@ public class KernelAuthAdapter implements AuthPort {
     @Override
     public Mono<AuthResponse> registerInRemote(AuthUseCase.RegisterCommand command) {
         log.info("📝 [KERNEL AUTH] Inscription : {}", command.email());
-        return kernelClient.register(
-                        new KernelAuthApiClient.RegisterUserRequest(
-                                command.username(),
-                                command.email(),
-                                command.phone(),
-                                command.password(),
-                                "LOCAL"
-                        ))
+        return this.login(systemUsername, systemPassword)
+                .flatMap(systemAuth -> {
+                    String token = "Bearer " + systemAuth.accessToken();
+                    return kernelClient.register(
+                            token,
+                            new KernelAuthApiClient.RegisterUserRequest(
+                                    command.username(),
+                                    command.email(),
+                                    command.phone(),
+                                    command.password(),
+                                    "LOCAL"));
+                })
                 .flatMap(resp -> {
                     if (!resp.success() || resp.data() == null) {
                         return Mono.error(AuthException.generic(resp.message(), HttpStatus.BAD_REQUEST));
@@ -143,10 +153,9 @@ public class KernelAuthAdapter implements AuthPort {
                     var user = resp.data();
                     UserDetail detail = new UserDetail(
                             user.id(), user.username(), user.email(), user.phoneNumber(),
-                            null, null, serviceName,
+                            command.firstName(), command.lastName(), serviceName,
                             command.roles(), List.of(),
-                            null, null, null, null, true, null
-                    );
+                            null, null, null, null, true, null);
                     return Mono.just(new AuthResponse("", "", detail));
                 })
                 .onErrorResume(WebClientResponseException.class, this::mapWebClientError)
@@ -160,17 +169,18 @@ public class KernelAuthAdapter implements AuthPort {
      * sans appel réseau vers le Kernel.
      *
      * Le JWT (RS256 signé par le Kernel) contient :
-     * - sub        : userId (UUID Kernel)
+     * - sub : userId (UUID Kernel)
      * - permissions: rôles et permissions (source fiable)
-     * - tid        : tenantId
-     * - exp        : expiration
+     * - tid : tenantId
+     * - exp : expiration
      */
     @Override
     public Mono<UserDetail> getUserProfile(String token) {
         try {
             String rawToken = token.startsWith("Bearer ") ? token.substring(7) : token;
 
-            // Source des rôles = JWT (seule source fiable — /api/users/me ne porte pas les permissions)
+            // Source des rôles = JWT (seule source fiable — /api/users/me ne porte pas les
+            // permissions)
             List<String> authorities = extractAuthoritiesFromJwt(rawToken);
             List<String> roles = extractFleetRoles(authorities);
 
@@ -208,8 +218,7 @@ public class KernelAuthAdapter implements AuthPort {
                     userId, sub, null, null,
                     null, null, serviceName,
                     roles, authorities,
-                    null, null, null, null, true, null
-            );
+                    null, null, null, null, true, null);
 
             return Mono.just(detail);
 
@@ -232,7 +241,8 @@ public class KernelAuthAdapter implements AuthPort {
     public Flux<UserDetail> getUsersByService(String svcName, String token) {
         return kernelClient.listAdmins(ensureBearer(token))
                 .flatMapMany(resp -> {
-                    if (!resp.success() || resp.data() == null) return Flux.empty();
+                    if (!resp.success() || resp.data() == null)
+                        return Flux.empty();
                     return Flux.fromIterable(resp.data()).map(this::mapToUserDetail);
                 })
                 .onErrorResume(e -> {
@@ -261,16 +271,20 @@ public class KernelAuthAdapter implements AuthPort {
                                     ctx.contextId(), ctx.tenantId(), ctx.userId(), ctx.actorId(),
                                     ctx.organizations() == null ? List.of()
                                             : ctx.organizations().stream()
-                                                    .map(o -> new AuthController.OrgItem(o.organizationId(), o.shortName(), o.service()))
-                                                    .toList()
-                            )).toList();
-                    return new AuthController.DiscoverContextsResponse(data.selectionToken(), data.expiresInSeconds(), contexts);
+                                                    .map(o -> new AuthController.OrgItem(o.organizationId(),
+                                                            o.shortName(), o.service()))
+                                                    .toList()))
+                                    .toList();
+                    return new AuthController.DiscoverContextsResponse(data.selectionToken(), data.expiresInSeconds(),
+                            contexts);
                 })
                 .onErrorResume(WebClientResponseException.class, this::mapWebClientError);
     }
 
+    @Override
     public Mono<AuthResponse> selectContext(String selectionToken, String contextId, java.util.UUID organizationId) {
-        return kernelClient.selectContext(new KernelAuthApiClient.SelectContextRequest(selectionToken, contextId, organizationId))
+        return kernelClient
+                .selectContext(new KernelAuthApiClient.SelectContextRequest(selectionToken, contextId, organizationId))
                 .map(resp -> {
                     if (!resp.success() || resp.data() == null) {
                         throw AuthException.invalidCredentials();
@@ -284,14 +298,14 @@ public class KernelAuthAdapter implements AuthPort {
 
     public Mono<Void> forgotPassword(String email) {
         return kernelClient.forgotPassword(
-                        new KernelAuthApiClient.ForgotPasswordRequest(email))
+                new KernelAuthApiClient.ForgotPasswordRequest(email))
                 .doOnSuccess(v -> log.info("✅ [KERNEL AUTH] Forgot password envoyé : {}", email))
                 .doOnError(e -> log.warn("⚠️ [KERNEL AUTH] Forgot password error: {}", e.getMessage()));
     }
 
     public Mono<Void> resetPassword(String resetToken, String newPassword) {
         return kernelClient.resetPassword(
-                        new KernelAuthApiClient.ResetPasswordRequest(resetToken, newPassword))
+                new KernelAuthApiClient.ResetPasswordRequest(resetToken, newPassword))
                 .doOnSuccess(v -> log.info("✅ [KERNEL AUTH] Password réinitialisé"))
                 .doOnError(e -> log.warn("⚠️ [KERNEL AUTH] Reset password error: {}", e.getMessage()));
     }
@@ -300,14 +314,14 @@ public class KernelAuthAdapter implements AuthPort {
 
     @Override
     public Mono<UserDetail> updateUserProfile(UUID userId, String token,
-                                               AuthUseCase.UpdateProfileCommand command) {
+            AuthUseCase.UpdateProfileCommand command) {
         log.info("🛠 [KERNEL AUTH] updateUserProfile — délégué au Kernel (non implémenté)");
         return getUserProfile(token);
     }
 
     @Override
     public Mono<Void> changePassword(UUID userId, String token,
-                                      String currentPwd, String newPwd) {
+            String currentPwd, String newPwd) {
         log.info("🛠 [KERNEL AUTH] changePassword — délégué au Kernel");
         return Mono.empty();
     }
@@ -326,7 +340,7 @@ public class KernelAuthAdapter implements AuthPort {
 
     @Override
     public Mono<Void> updateProfilePicture(UUID userId, String token,
-                                            AuthUseCase.FileContent file) {
+            AuthUseCase.FileContent file) {
         log.info("🛠 [KERNEL AUTH] updateProfilePicture — délégué au Kernel");
         return Mono.empty();
     }
@@ -344,12 +358,14 @@ public class KernelAuthAdapter implements AuthPort {
     // ── Helpers de mapping ────────────────────────────────────────────────────
 
     private String ensureBearer(String token) {
-        if (token == null) return "";
+        if (token == null)
+            return "";
         return token.startsWith("Bearer ") ? token : "Bearer " + token;
     }
 
     private AuthResponse mapToAuthResponse(KernelAuthApiClient.LoginResponse session) {
-        if (session == null) throw AuthException.invalidCredentials();
+        if (session == null)
+            throw AuthException.invalidCredentials();
 
         // Extraire les rôles FleetMan depuis les authorities Kernel
         List<String> roles = extractFleetRoles(session.authorities());
@@ -364,14 +380,12 @@ public class KernelAuthAdapter implements AuthPort {
                 roles,
                 session.authorities() != null ? session.authorities() : List.of(),
                 null, null, null, null, true,
-                null
-        );
+                null);
 
         return new AuthResponse(
                 session.accessToken(),
                 session.sessionToken() != null ? session.sessionToken() : "",
-                user
-        );
+                user);
     }
 
     private UserDetail mapToUserDetail(KernelAuthApiClient.UserAccountResponse u) {
@@ -383,8 +397,7 @@ public class KernelAuthAdapter implements AuthPort {
                 u.authorities() != null ? u.authorities() : List.of(),
                 null, null, null, null,
                 "ACTIVE".equals(u.status()),
-                null
-        );
+                null);
     }
 
     private UserDetail mapToUserDetailWithRoles(KernelAuthApiClient.UserAccountResponse u, List<String> roles) {
@@ -395,16 +408,17 @@ public class KernelAuthAdapter implements AuthPort {
                 u.authorities() != null ? u.authorities() : List.of(),
                 null, null, null, null,
                 "ACTIVE".equals(u.status()),
-                null
-        );
+                null);
     }
 
     /**
      * Extrait les rôles FleetMan depuis les authorities Kernel.
-     * Les authorities Kernel sont de la forme : ROLE_FLEET_MANAGER, fleet:read, etc.
+     * Les authorities Kernel sont de la forme : ROLE_FLEET_MANAGER, fleet:read,
+     * etc.
      */
     private List<String> extractFleetRoles(List<String> authorities) {
-        if (authorities == null) return List.of();
+        if (authorities == null)
+            return List.of();
         return authorities.stream()
                 .filter(a -> a.startsWith("ROLE_FLEET_") || a.startsWith("FLEET_"))
                 .map(a -> a.startsWith("ROLE_") ? a.substring(5) : a)
@@ -415,13 +429,15 @@ public class KernelAuthAdapter implements AuthPort {
 
     /**
      * Extrait les authorities (permissions/rôles) directement depuis le claim JWT.
-     * Le JWT contient un claim "permissions" qui est la source fiable validée par Kernel.
+     * Le JWT contient un claim "permissions" qui est la source fiable validée par
+     * Kernel.
      */
     private List<String> extractAuthoritiesFromJwt(String token) {
         try {
             String rawToken = token.startsWith("Bearer ") ? token.substring(7) : token;
             String[] parts = rawToken.split("\\.");
-            if (parts.length < 2) return List.of();
+            if (parts.length < 2)
+                return List.of();
 
             String payloadJson = new String(
                     Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
@@ -451,7 +467,7 @@ public class KernelAuthAdapter implements AuthPort {
             case 404 -> Mono.error(AuthException.generic("Ressource introuvable dans le Kernel",
                     HttpStatus.NOT_FOUND));
             case 409 -> Mono.error(AuthException.userAlreadyExists());
-            default  -> Mono.error(AuthException.generic(
+            default -> Mono.error(AuthException.generic(
                     "Erreur Kernel [" + ex.getStatusCode() + "]: " + ex.getResponseBodyAsString(),
                     (HttpStatus) ex.getStatusCode()));
         };

@@ -1,0 +1,30 @@
+﻿2026-07-12T01:15:06.039+01:00 DEBUG 21736 --- [fleet-management] [ctor-http-nio-6] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : No matches found
+2026-07-12T01:15:06.039+01:00  WARN 21736 --- [fleet-management] [ctor-http-nio-6] c.y.f.i.a.o.external.KernelAuthAdapter   : ÔÜá´©Å [JWT] Aucun claim 'permissions' dans le token
+2026-07-12T01:15:06.039+01:00 DEBUG 21736 --- [fleet-management] [ctor-http-nio-6] c.y.f.i.a.o.external.KernelAuthAdapter   : Ô£à [KERNEL AUTH] getUserProfile depuis JWT : userId=45f6cc64-4af0-4d5a-8ac8-3dc5d39e029b, roles=[]
+2026-07-12T01:15:06.043+01:00 DEBUG 21736 --- [fleet-management] [actor-tcp-nio-7] c.y.f.i.c.s.JwtAuthenticationManager     : Ô£à [UUID REBIND] Kernel id=45f6cc64-4af0-4d5a-8ac8-3dc5d39e029b ÔåÆ local id=45f6cc64-4af0-4d5a-8ac8-3dc5d39e029b
+2026-07-12T01:15:06.056+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/logout', method=POST}
+2026-07-12T01:15:06.056+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'GET /api/v1/alerts/events/count-unread' doesn't match 'POST /logout'
+2026-07-12T01:15:06.056+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : No matches found
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/v3/api-docs/**', method=null}
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'GET /api/v1/alerts/events/count-unread' doesn't match 'null /v3/api-docs/**'
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/swagger-ui/**', method=null}
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'GET /api/v1/alerts/events/count-unread' doesn't match 'null /swagger-ui/**'
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/swagger-ui.html', method=null}
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'GET /api/v1/alerts/events/count-unread' doesn't match 'null /swagger-ui.html'
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/webjars/**', method=null}
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'GET /api/v1/alerts/events/count-unread' doesn't match 'null /webjars/**'
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/actuator/**', method=null}
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'GET /api/v1/alerts/events/count-unread' doesn't match 'null /actuator/**'
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/api/v1/health/**', method=null}
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'GET /api/v1/alerts/events/count-unread' doesn't match 'null /api/v1/health/**'
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/api/v1/auth/**', method=null}
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'GET /api/v1/alerts/events/count-unread' doesn't match 'null /api/v1/auth/**'
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : No matches found
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/api/v1/files/**', method=GET}
+2026-07-12T01:15:06.057+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'GET /api/v1/alerts/events/count-unread' doesn't match 'GET /api/v1/files/**'
+2026-07-12T01:15:06.058+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : No matches found
+2026-07-12T01:15:06.058+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : Trying to match using PathMatcherServerWebExchangeMatcher{pattern='/**', method=OPTIONS}
+2026-07-12T01:15:06.058+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] athPatternParserServerWebExchangeMatcher : Request 'GET /api/v1/alerts/events/count-unread' doesn't match 'OPTIONS /**'
+2026-07-12T01:15:06.058+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.u.m.OrServerWebExchangeMatcher : No matches found
+2026-07-12T01:15:06.058+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] a.DelegatingReactiveAuthorizationManager : Checking authorization on '/api/v1/alerts/events/count-unread' using org.springframework.security.authorization.AuthenticatedReactiveAuthorizationManager@73df3104
+2026-07-12T01:15:06.059+01:00 DEBUG 21736 --- [fleet-management] [    parallel-11] o.s.s.w.s.a.AuthorizationWebFilter       : Authorization successful

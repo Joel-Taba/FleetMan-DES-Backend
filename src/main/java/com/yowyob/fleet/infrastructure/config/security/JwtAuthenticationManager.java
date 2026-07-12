@@ -4,6 +4,7 @@ import com.yowyob.fleet.domain.exception.AuthException;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetManagerR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,8 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -24,6 +27,7 @@ public class JwtAuthenticationManager implements ReactiveAuthenticationManager {
     private final AuthPort authPort;
     private final UserLocalR2dbcRepository userRepo;
     private final DriverR2dbcRepository driverRepo;
+    private final FleetManagerR2dbcRepository managerRepo;
     private final VehicleLocalR2dbcRepository vehicleLocalRepo;
 
     @Override
@@ -62,10 +66,10 @@ public class JwtAuthenticationManager implements ReactiveAuthenticationManager {
                         localUser.setApprovalStatus("APPROVED");
                         localUser.setNew(false);
                         return userRepo.save(localUser)
-                                .map(saved -> rebindToLocalId(userDetail, saved));
+                                .flatMap(saved -> rebindToLocalId(userDetail, saved));
                     }
                     log.debug("✅ [UUID REBIND] Kernel id={} → local id={}", userDetail.id(), localUser.getId());
-                    return Mono.just(rebindToLocalId(userDetail, localUser));
+                    return rebindToLocalId(userDetail, localUser);
                 })
                 .flatMap(rebound -> {
                     if (rebound.roles().contains("FLEET_DRIVER")) {
@@ -106,23 +110,50 @@ public class JwtAuthenticationManager implements ReactiveAuthenticationManager {
                 }));
     }
 
-    private AuthPort.UserDetail rebindToLocalId(AuthPort.UserDetail kernelUser,
+    private Mono<List<String>> resolveUserRoles(UUID userId) {
+        return driverRepo.existsById(userId)
+                .flatMap(isDriver -> {
+                    if (isDriver) {
+                        return Mono.just(List.of("FLEET_DRIVER"));
+                    }
+                    return managerRepo.existsById(userId)
+                            .map(isManager -> {
+                                if (isManager) {
+                                    return List.of("FLEET_MANAGER");
+                                }
+                                return List.of("FLEET_MANAGER"); // Fallback par défaut
+                            });
+                });
+    }
+
+    private Mono<AuthPort.UserDetail> rebindToLocalId(AuthPort.UserDetail kernelUser,
             com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.UserLocalEntity localUser) {
-        return new AuthPort.UserDetail(
-                localUser.getId(),
-                kernelUser.username(),
-                kernelUser.email(),
-                kernelUser.phone(),
-                kernelUser.firstName(),
-                kernelUser.lastName(),
-                kernelUser.service(),
-                kernelUser.roles(),
-                kernelUser.permissions(),
-                kernelUser.photoUrl(),
-                kernelUser.companyName(),
-                kernelUser.licenceNumber(),
-                kernelUser.vehicleId(),
-                localUser.isActive(),
-                kernelUser.lastLoginAt());
+        String finalFirstName = (kernelUser.firstName() != null && !kernelUser.firstName().isBlank())
+                ? kernelUser.firstName()
+                : localUser.getFirstName();
+        String finalLastName = (kernelUser.lastName() != null && !kernelUser.lastName().isBlank())
+                ? kernelUser.lastName()
+                : localUser.getLastName();
+        String finalPhotoUrl = (kernelUser.photoUrl() != null && !kernelUser.photoUrl().isBlank())
+                ? kernelUser.photoUrl()
+                : localUser.getPhotoUrl();
+
+        return resolveUserRoles(localUser.getId())
+                .map(roles -> new AuthPort.UserDetail(
+                        localUser.getId(),
+                        kernelUser.username() != null ? kernelUser.username() : localUser.getUsername(),
+                        kernelUser.email() != null ? kernelUser.email() : localUser.getEmail(),
+                        kernelUser.phone(),
+                        finalFirstName,
+                        finalLastName,
+                        roles.contains("FLEET_DRIVER") ? "DRIVERS" : "FLEET_MANAGEMENT",
+                        roles,
+                        kernelUser.permissions(),
+                        finalPhotoUrl,
+                        kernelUser.companyName(),
+                        kernelUser.licenceNumber(),
+                        kernelUser.vehicleId(),
+                        localUser.isActive(),
+                        kernelUser.lastLoginAt()));
     }
 }

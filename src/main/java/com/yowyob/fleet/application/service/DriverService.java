@@ -223,9 +223,27 @@ public class DriverService implements ManageDriverUseCase {
     }
 
     public Flux<Driver> getDriversWithFilters(UUID fleetId, Boolean isAssigned, UUID requesterId) {
-        // Listing de base (par flotte ou tous si admin)
-        Flux<Driver> drivers = (fleetId != null) ? driverPersistencePort.findAllByFleetId(fleetId)
-                : driverPersistencePort.findAll();
+        String reqStr = requesterId.toString();
+        boolean isAdmin = reqStr.equals("311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2")
+                || reqStr.equals("a0000002-0000-4000-8000-000000000002")
+                || reqStr.equals("a0000001-0000-4000-8000-000000000001");
+
+        Flux<Driver> drivers;
+        if (isAdmin) {
+            drivers = (fleetId != null) ? driverPersistencePort.findAllByFleetId(fleetId)
+                    : driverPersistencePort.findAll();
+        } else {
+            if (fleetId != null) {
+                drivers = checkFleetOwnership(fleetId, requesterId)
+                        .thenMany(driverPersistencePort.findAllByFleetId(fleetId));
+            } else {
+                drivers = fleetRepository.findAllByManagerId(requesterId)
+                        .map(com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.FleetEntity::getId)
+                        .collectList()
+                        .flatMapMany(fleetIds -> driverPersistencePort.findAll()
+                                .filter(d -> d.fleetId() != null && fleetIds.contains(d.fleetId())));
+            }
+        }
 
         // Filtre applicatif sur l'assignation
         if (isAssigned != null) {

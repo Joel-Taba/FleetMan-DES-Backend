@@ -86,3 +86,8 @@ databaseChangeLog:
   # 23. Ajout de kernel_id sur la table users
   - include:
       file: db/changelog/changes/023-add-kernel-id-to-users.sql
+
+  # 24. Seed des comptes de test AXE CAPITAL
+  - include:
+      file: db/changelog/changes/024-seed-axe-capital.sql
+

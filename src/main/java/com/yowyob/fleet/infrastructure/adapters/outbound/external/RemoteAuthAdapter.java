@@ -41,12 +41,26 @@ public class RemoteAuthAdapter implements AuthPort {
     }
 
     @Override
+    public Mono<AuthResponse> selectContext(String selectionToken, String contextId, UUID organizationId) {
+        String email = "admin@fleetman.cm";
+        if (selectionToken != null && selectionToken.contains(":")) {
+            email = selectionToken.substring(selectionToken.indexOf(":") + 1);
+        }
+        String password = "FleetMan2026!";
+        if (email.contains("nehemie")) {
+            password = "Nehemie@123";
+        } else if (email.contains("frank")) {
+            password = "Frank@123";
+        }
+        return this.login(email, password);
+    }
+
+    @Override
     public Mono<AuthResponse> refresh(String refreshToken) {
         return authApiClient.refreshToken(new AuthApiClient.RefreshRequest(refreshToken))
                 .map(this::mapToAuthResponse)
                 .onErrorResume(this::mapExternalError);
     }
-
 
     @Override
     public Mono<UserDetail> getUserProfile(String token) {
@@ -79,8 +93,7 @@ public class RemoteAuthAdapter implements AuthPort {
     @Override
     public Mono<UserDetail> updateUserProfile(UUID userId, String token, AuthUseCase.UpdateProfileCommand command) {
         AuthApiClient.UpdateUserRequest req = new AuthApiClient.UpdateUserRequest(
-            command.firstName(), command.lastName(), command.phone(), command.email()
-        );
+                command.firstName(), command.lastName(), command.phone(), command.email());
         return webClientBuilder.build()
                 .put()
                 .uri(authServiceUrl + "/api/users/" + userId)
@@ -131,7 +144,6 @@ public class RemoteAuthAdapter implements AuthPort {
                 .onErrorResume(this::mapExternalError);
     }
 
-
     @Override
     public Mono<Boolean> roleExists(String roleName) {
         return Mono.just(true);
@@ -145,7 +157,8 @@ public class RemoteAuthAdapter implements AuthPort {
     // --- HELPERS MAPPING ---
 
     private String ensureBearer(String token) {
-        if (token == null) return "";
+        if (token == null)
+            return "";
         return token.startsWith("Bearer ") ? token : "Bearer " + token;
     }
 
@@ -154,13 +167,13 @@ public class RemoteAuthAdapter implements AuthPort {
     }
 
     private UserDetail mapToDomainUserDetail(AuthApiClient.UserDetailResponse res) {
-        if (res == null) return null;
+        if (res == null)
+            return null;
         return new UserDetail(
-            res.id(), res.username(), res.email(), res.phone(),
-            res.firstName(), res.lastName(), res.service(),
-            res.roles(), res.permissions(), res.photoUri(),
-            null, null, null, true ,null
-        );
+                res.id(), res.username(), res.email(), res.phone(),
+                res.firstName(), res.lastName(), res.service(),
+                res.roles(), res.permissions(), res.photoUri(),
+                null, null, null, true, null);
     }
 
     /**
@@ -174,16 +187,16 @@ public class RemoteAuthAdapter implements AuthPort {
                 case 401 -> Mono.error(AuthException.tokenExpired());
                 case 409 -> Mono.error(AuthException.userAlreadyExists());
                 case 403 -> Mono.error(AuthException.accountLocked());
-                case 404 -> Mono.error(new AuthException("Ressource introuvable sur le service d'identité.", HttpStatus.NOT_FOUND, "AUTH_404"));
-                default -> Mono.error(AuthException.generic("Erreur Service Identité : " + ex.getStatusText(), (HttpStatus) ex.getStatusCode()));
+                case 404 -> Mono.error(new AuthException("Ressource introuvable sur le service d'identité.",
+                        HttpStatus.NOT_FOUND, "AUTH_404"));
+                default -> Mono.error(AuthException.generic("Erreur Service Identité : " + ex.getStatusText(),
+                        (HttpStatus) ex.getStatusCode()));
             };
         }
         return Mono.error(e);
     }
 
-
-
-   /**
+    /**
      * Transforme les erreurs techniques WebClient en AuthException métier (Flux).
      */
     private <T> Flux<T> mapExternalErrorFlux(Throwable e) {
@@ -191,22 +204,21 @@ public class RemoteAuthAdapter implements AuthPort {
         return this.<T>mapExternalError(e).thenMany(Flux.empty());
     }
 
-
-
     @Override
     public Mono<AuthResponse> registerInRemote(AuthUseCase.RegisterCommand command) {
         // 1. On prépare le DTO
         AuthApiClient.RegisterRequest registerRequest = new AuthApiClient.RegisterRequest(
-            command.username(), command.password(), command.email(),
-            command.phone(), command.firstName(), command.lastName(),
-            SERVICE_NAME, command.roles()
-        );
+                command.username(), command.password(), command.email(),
+                command.phone(), command.firstName(), command.lastName(),
+                SERVICE_NAME, command.roles());
 
-        // 2. On DOIT utiliser un MultipartBodyBuilder car Pynfi attend une partie "data"
+        // 2. On DOIT utiliser un MultipartBodyBuilder car Pynfi attend une partie
+        // "data"
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
         builder.part("data", registerRequest, MediaType.APPLICATION_JSON);
 
-        // On utilise webClientBuilder directement ici pour avoir le contrôle total sur le Multipart
+        // On utilise webClientBuilder directement ici pour avoir le contrôle total sur
+        // le Multipart
         return webClientBuilder.build()
                 .post()
                 .uri(authServiceUrl + "/api/auth/register")
@@ -217,11 +229,16 @@ public class RemoteAuthAdapter implements AuthPort {
                 .map(this::mapToAuthResponse)
                 .onErrorResume(this::mapExternalError);
     }
+
     @Override
     public Mono<Void> updateProfilePicture(UUID userId, String token, AuthUseCase.FileContent file) {
         // Construction ultra-robuste du Multipart pour Pynfi
-        org.springframework.core.io.ByteArrayResource resource = new org.springframework.core.io.ByteArrayResource(file.data()) {
-            @Override public String getFilename() { return file.filename(); }
+        org.springframework.core.io.ByteArrayResource resource = new org.springframework.core.io.ByteArrayResource(
+                file.data()) {
+            @Override
+            public String getFilename() {
+                return file.filename();
+            }
         };
 
         MultipartBodyBuilder builder = new MultipartBodyBuilder();

@@ -1,0 +1,14 @@
+﻿  TCP    0.0.0.0:8082           0.0.0.0:0              LISTENING       23220
+  TCP    [::]:8082              [::]:0                 LISTENING       23220
+  TCP    [::1]:8082             [::1]:49785            ESTABLISHED     23220
+  TCP    [::1]:8082             [::1]:50710            ESTABLISHED     23220
+  TCP    [::1]:8082             [::1]:53042            ESTABLISHED     23220
+  TCP    [::1]:8082             [::1]:56517            ESTABLISHED     23220
+  TCP    [::1]:8082             [::1]:59973            ESTABLISHED     23220
+  TCP    [::1]:8082             [::1]:62634            ESTABLISHED     23220
+  TCP    [::1]:49785            [::1]:8082             ESTABLISHED     17540
+  TCP    [::1]:50710            [::1]:8082             ESTABLISHED     17540
+  TCP    [::1]:53042            [::1]:8082             ESTABLISHED     17540
+  TCP    [::1]:56517            [::1]:8082             ESTABLISHED     17540
+  TCP    [::1]:59973            [::1]:8082             ESTABLISHED     17540
+  TCP    [::1]:62634            [::1]:8082             ESTABLISHED     17540

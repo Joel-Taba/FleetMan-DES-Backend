@@ -30,7 +30,7 @@ import java.util.*;
 public class GeofenceApiAdapter implements ExternalGeofencePort {
 
     private final GeofenceApiClient apiClient;
-    
+
     private final GeofenceAuthClient authClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -40,6 +40,9 @@ public class GeofenceApiAdapter implements ExternalGeofencePort {
     @Value("${application.geofence-system-user.password}")
     private String systemPass;
 
+    @Value("${application.geofence-system-user.organization-id:}")
+    private String systemOrgId;
+
     private Mono<String> cachedToken;
 
     @Override
@@ -48,6 +51,31 @@ public class GeofenceApiAdapter implements ExternalGeofencePort {
             Map<String, String> loginReq = Map.of("type", "username", "username", systemUser, "password", systemPass);
             cachedToken = authClient.login(loginReq)
                     .map(res -> "Bearer " + (res.containsKey("token") ? res.get("token") : res.get("accessToken")))
+                    .onErrorResume(e -> {
+                        log.warn("⚠️ System login failed: {}. Attempting self-registry of system user: {}",
+                                e.getMessage(), systemUser);
+                        Map<String, Object> regReq = new HashMap<>();
+                        regReq.put("username", systemUser);
+                        regReq.put("email", systemUser);
+                        regReq.put("password", systemPass);
+                        if (systemOrgId != null && !systemOrgId.isEmpty()) {
+                            regReq.put("organizationId", systemOrgId);
+                        }
+                        return authClient.register(regReq)
+                                .doOnSuccess(
+                                        r -> log.info("✅ Successfully self-registered system user in Geofence service"))
+                                .onErrorResume(err -> {
+                                    log.warn("⚠️ System user registration failed (probably already exists): {}",
+                                            err.getMessage());
+                                    return Mono.empty();
+                                })
+                                .then(authClient.login(loginReq))
+                                .map(res -> "Bearer "
+                                        + (res.containsKey("token") ? res.get("token") : res.get("accessToken")));
+                    })
+                    .doOnError(err -> {
+                        cachedToken = null; // Clear cached failed Mono
+                    })
                     .cache(Duration.ofHours(24));
         }
         return cachedToken;
@@ -115,7 +143,8 @@ public class GeofenceApiAdapter implements ExternalGeofencePort {
 
     @Override
     public Mono<List<Map<String, Object>>> listRemoteZones(String category) {
-      // Appelle la version sans userId (récupère tout si admin, ou ses propres zones si token user)
+        // Appelle la version sans userId (récupère tout si admin, ou ses propres zones
+        // si token user)
         return getSystemToken().flatMap(token -> fetchZonesInternal(category, null, token));
     }
 
@@ -138,11 +167,11 @@ public class GeofenceApiAdapter implements ExternalGeofencePort {
     // Dans GeofenceApiAdapter.java
 
     // Helper pour construire le JSON complexe attendu par Geofence
-   private Map<String, Object> buildGeofenceMap(GeofenceZone zone) {
+    private Map<String, Object> buildGeofenceMap(GeofenceZone zone) {
         Map<String, Object> request = new HashMap<>();
-        
+
         request.put("title", zone.name());
-        request.put("description", zone.description() != null ? zone.description() : ""); 
+        request.put("description", zone.description() != null ? zone.description() : "");
         request.put("isTemporalEnabled", Boolean.TRUE.equals(zone.getIsTemporalEnabled()));
         request.put("isConditionalEnabled", Boolean.TRUE.equals(zone.getIsConditionalEnabled()));
         request.put("isActive", true);
@@ -157,9 +186,8 @@ public class GeofenceApiAdapter implements ExternalGeofencePort {
         if ("CIRCLE".equalsIgnoreCase(zone.zoneType())) {
             request.put("type", "circle");
             request.put("center", Map.of(
-                "type", "Point",
-                "coordinates", Arrays.asList(zone.centerLongitude(), zone.centerLatitude())
-            ));
+                    "type", "Point",
+                    "coordinates", Arrays.asList(zone.centerLongitude(), zone.centerLatitude())));
             request.put("radius", zone.radius() != null ? zone.radius() : 100.0);
         } else {
             request.put("type", "polygon");
@@ -167,15 +195,14 @@ public class GeofenceApiAdapter implements ExternalGeofencePort {
             if (zone.vertices() != null) {
                 ring = new ArrayList<>(zone.vertices().stream()
                         .map(v -> Arrays.asList(v.longitude(), v.latitude())).toList());
-                
-                if (!ring.isEmpty() && !ring.get(0).equals(ring.get(ring.size()-1))) {
+
+                if (!ring.isEmpty() && !ring.get(0).equals(ring.get(ring.size() - 1))) {
                     ring.add(ring.get(0));
                 }
             }
             request.put("polygon", Map.of(
-                "type", "Polygon", 
-                "coordinates", List.of(ring)
-            ));
+                    "type", "Polygon",
+                    "coordinates", List.of(ring)));
         }
         return request;
     }
@@ -199,7 +226,6 @@ public class GeofenceApiAdapter implements ExternalGeofencePort {
         return getSystemToken().flatMap(token -> apiClient.deleteZone(shortType, zoneId, token));
     }
 
-
     // Méthode helper pour éviter la duplication
     private Mono<List<Map<String, Object>>> fetchZonesInternal(String category, UUID userId, String token) {
         Mono<JsonNode> response;
@@ -214,11 +240,12 @@ public class GeofenceApiAdapter implements ExternalGeofencePort {
 
         return response.map(jsonNode -> {
             List<Map<String, Object>> result = new ArrayList<>();
-            
-            // Cas 1 : C'est un tableau JSON direct (Rare pour 'all', courant pour spécifique)
+
+            // Cas 1 : C'est un tableau JSON direct (Rare pour 'all', courant pour
+            // spécifique)
             if (jsonNode.isArray()) {
                 jsonNode.forEach(node -> result.add(convertNodeToMap(node)));
-            } 
+            }
             // Cas 2 : Structure Geofence Engine { "polygons": [], "circles": [] }
             else if (jsonNode.has("polygons") || jsonNode.has("circles")) {
                 if (jsonNode.has("polygons") && jsonNode.get("polygons").isArray()) {
@@ -231,59 +258,62 @@ public class GeofenceApiAdapter implements ExternalGeofencePort {
             // Cas 3 : Pagination classique "content"
             else if (jsonNode.has("content") && jsonNode.get("content").isArray()) {
                 jsonNode.get("content").forEach(node -> result.add(convertNodeToMap(node)));
-            } 
-            // Cas 4 : Objet unique (Erreur ou fallback) -> On évite de l'ajouter si c'est le conteneur racine vide
+            }
+            // Cas 4 : Objet unique (Erreur ou fallback) -> On évite de l'ajouter si c'est
+            // le conteneur racine vide
             else if (!jsonNode.isEmpty()) {
                 // On log pour debug si on tombe ici, car ça cause souvent des soucis
                 // log.debug("Structure JSON inconnue reçue : {}", jsonNode.fieldNames());
             }
-            
+
             return result;
         }).defaultIfEmpty(Collections.emptyList());
     }
-
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> convertNodeToMap(JsonNode node) {
         return objectMapper.convertValue(node, Map.class);
     }
-// --- DANS GeofenceApiAdapter.java ---
+    // --- DANS GeofenceApiAdapter.java ---
 
-     @Override
+    @Override
     public Mono<Void> registerVehicleAndAssignToZone(Vehicle vehicle, UUID zoneId, String zoneType) {
         return getSystemToken().flatMap(token -> {
-            
+
             // 1. PrÃ©paration des donnÃ©es "VehicleDTORequest"
             Map<String, Object> vehicleData = new HashMap<>();
             vehicleData.put("brand", vehicle.brand());
             vehicleData.put("model", vehicle.model());
             vehicleData.put("licensePlate", vehicle.licensePlate());
             vehicleData.put("description", "ImportÃ© depuis Fleet Management");
-            // geofenceZoneIds est optionnel ou peut Ãªtre une liste vide si le DTO serveur le demande
-            vehicleData.put("geofenceZoneIds", Collections.emptyList()); 
+            // geofenceZoneIds est optionnel ou peut Ãªtre une liste vide si le DTO serveur
+            // le demande
+            vehicleData.put("geofenceZoneIds", Collections.emptyList());
 
             // 2. Construction du Multipart
             MultipartBodyBuilder builder = new MultipartBodyBuilder();
-            builder.part("vehicle", vehicleData); 
+            builder.part("vehicle", vehicleData);
             // Note: Pas d'image pour l'instant, c'est 'required = false' sur le serveur
 
             log.info("ðŸš€ Sync VÃ©hicule vers Geofence API (Multipart) : Plaque {}", vehicle.licensePlate());
 
             // 3. Appel avec le build() qui retourne un MultiValueMap
             return apiClient.createVehicle(builder.build(), token)
-                .flatMap(responseNode -> {
-                    String remoteVehicleId = extractIdFromResponse(responseNode);
-                    if (remoteVehicleId == null) {
-                        return Mono.error(new RuntimeException("ID distant introuvable pour : " + vehicle.licensePlate()));
-                    }
+                    .flatMap(responseNode -> {
+                        String remoteVehicleId = extractIdFromResponse(responseNode);
+                        if (remoteVehicleId == null) {
+                            return Mono.error(
+                                    new RuntimeException("ID distant introuvable pour : " + vehicle.licensePlate()));
+                        }
 
-                    log.info("âœ… VÃ©hicule crÃ©Ã© dans Geofence (ID: {}). Assignation Ã  la zone {}...", remoteVehicleId, zoneId);
+                        log.info("âœ… VÃ©hicule crÃ©Ã© dans Geofence (ID: {}). Assignation Ã  la zone {}...",
+                                remoteVehicleId, zoneId);
 
-                    String shortType = resolveShortType(zoneType);
-                    return apiClient.addVehicleToZone(remoteVehicleId, shortType, zoneId, token);
-                })
-                .doOnSuccess(v -> log.info("ðŸŽ‰ VÃ©hicule assignÃ© Ã  la zone {} avec succÃ¨s.", zoneId))
-                .doOnError(e -> log.error("â Œ Erreur Geofence Sync : {}", e.getMessage()));
+                        String shortType = resolveShortType(zoneType);
+                        return apiClient.addVehicleToZone(remoteVehicleId, shortType, zoneId, token);
+                    })
+                    .doOnSuccess(v -> log.info("ðŸŽ‰ VÃ©hicule assignÃ© Ã  la zone {} avec succÃ¨s.", zoneId))
+                    .doOnError(e -> log.error("â Œ Erreur Geofence Sync : {}", e.getMessage()));
         });
     }
 
@@ -306,21 +336,24 @@ public class GeofenceApiAdapter implements ExternalGeofencePort {
             log.info("ðŸš€ Enregistrement vÃ©hicule (Multipart) : {}", vehicle.licensePlate());
 
             return apiClient.createVehicle(builder.build(), token)
-                .map(node -> {
-                    String remoteId = extractIdFromResponse(node);
-                    if (remoteId == null) {
-                        throw new RuntimeException("API Geofence n'a pas retournÃ© d'ID");
-                    }
-                    return remoteId;
-                })
-                .doOnSuccess(id -> log.info("âœ… VÃ©hicule enregistrÃ© avec ID : {}", id))
-                .doOnError(e -> log.error("â Œ Ã‰chec enregistrement : {}", e.getMessage()));
+                    .map(node -> {
+                        String remoteId = extractIdFromResponse(node);
+                        if (remoteId == null) {
+                            throw new RuntimeException("API Geofence n'a pas retournÃ© d'ID");
+                        }
+                        return remoteId;
+                    })
+                    .doOnSuccess(id -> log.info("âœ… VÃ©hicule enregistrÃ© avec ID : {}", id))
+                    .doOnError(e -> log.error("â Œ Ã‰chec enregistrement : {}", e.getMessage()));
         });
     }
-     // Helper pour extraire l'ID (car le format JSON peut varier)
+
+    // Helper pour extraire l'ID (car le format JSON peut varier)
     private String extractIdFromResponse(JsonNode node) {
-        if (node.has("id")) return node.get("id").asText();
-        if (node.has("_id")) return node.get("_id").asText();
+        if (node.has("id"))
+            return node.get("id").asText();
+        if (node.has("_id"))
+            return node.get("_id").asText();
         if (node.has("data") && node.get("data").has("id")) {
             return node.get("data").get("id").asText();
         }
@@ -330,9 +363,7 @@ public class GeofenceApiAdapter implements ExternalGeofencePort {
     @Override
     public Mono<Void> addVehicleToZone(String remoteVehicleId, UUID zoneId, String zoneType) {
         String shortType = resolveShortType(zoneType);
-        return getSystemToken().flatMap(token -> 
-            apiClient.addVehicleToZone(remoteVehicleId, shortType, zoneId, token)
-                .doOnSuccess(v -> log.info("ðŸ”— Linked remote vehicle {} to zone {}", remoteVehicleId, zoneId))
-        );
+        return getSystemToken().flatMap(token -> apiClient.addVehicleToZone(remoteVehicleId, shortType, zoneId, token)
+                .doOnSuccess(v -> log.info("ðŸ”— Linked remote vehicle {} to zone {}", remoteVehicleId, zoneId)));
     }
 }

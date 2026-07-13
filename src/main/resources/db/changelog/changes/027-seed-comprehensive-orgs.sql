@@ -2,8 +2,8 @@
 --changeset antigravity:seed-comprehensive-orgs-v1 splitStatements:true
 
 -- Nettoyage preventif
-DELETE FROM fleet.geofence_zones WHERE name IN ('Dépôt Bastos', 'Zone Industrielle', 'Zone Interdite Militaire', 'Zone Aéroport Douala');
-DELETE FROM fleet.trips WHERE status IN ('ONGOING', 'SCHEDULED') AND start_date > '2026-07-01';
+DELETE FROM fleet.geofence_zones WHERE id IN ('66666666-0000-4000-8000-000000000001', '66666666-0000-4000-8000-000000000002', '66666666-0000-4000-8000-000000000003', '77777777-0000-4000-8000-000000000001');
+DELETE FROM fleet.trips WHERE status IN ('ONGOING', 'SCHEDULED', 'DEPARTED') AND start_date > '2026-07-01';
 DELETE FROM fleet.vehicles WHERE license_plate IN ('LT 111 AB', 'LT 112 AB', 'LT 113 AB', 'LT 211 CD', 'LT 212 CD', 'LT 311 EF', 'DU 101 AB', 'DU 102 AB', 'DU 201 CD', 'DU 202 CD', 'DU 301 EF', 'BF 101 AB', 'BF 102 AB', 'BF 201 CD', 'BF 301 EF', 'BF 302 EF');
 DELETE FROM fleet.fleets WHERE name IN ('Transport Urbain', 'Logistique Lourde', 'Parc Maintenance', 'Port Logistics', 'Industrial Deliveries', 'Regional Transport', 'Intercity Buses', 'VIP Shuttles', 'Courier Services');
 DELETE FROM fleet.fleet_managers WHERE company_name IN ('Yaoundé Transport Solutions', 'DOUALA LOGISTICS EXPRESS', 'BAFOUSSAM VOYAGES');
@@ -134,14 +134,14 @@ INSERT INTO fleet.drivers (user_id, fleet_id, licence_number, status, assigned_v
 ('33333333-0000-4000-8000-333333330005', 'f3333333-0000-4000-8000-000000000003', 'LIC-003-35', 'ACTIVE', 'v3333333-0000-4000-8000-000000000302');
 
 -- 6. GEOFENCES (ORG 1)
-INSERT INTO fleet.geofence_zones (id, name, type, fleet_id, radius_meters, center_latitude, center_longitude) VALUES
-('z1111111-0000-4000-8000-000000000001', 'Dépôt Bastos', 'CIRCLE', 'f1111111-0000-4000-8000-000000000001', 200, 3.8667, 11.5167),
-('z1111111-0000-4000-8000-000000000002', 'Zone Industrielle', 'CIRCLE', 'f1111111-0000-4000-8000-000000000002', 500, 3.8800, 11.5300),
-('z1111111-0000-4000-8000-000000000003', 'Zone Interdite Militaire', 'POLYGON', 'f1111111-0000-4000-8000-000000000002', NULL, NULL, NULL);
+INSERT INTO fleet.geofence_zones (id, manager_id, fleet_id, zone_type) VALUES
+('66666666-0000-4000-8000-000000000001', '11111111-0000-4000-8000-000000000002', 'f1111111-0000-4000-8000-000000000001', 'CIRCLE'),
+('66666666-0000-4000-8000-000000000002', '11111111-0000-4000-8000-000000000003', 'f1111111-0000-4000-8000-000000000002', 'CIRCLE'),
+('66666666-0000-4000-8000-000000000003', '11111111-0000-4000-8000-000000000003', 'f1111111-0000-4000-8000-000000000002', 'POLYGON');
 
 -- 6. GEOFENCES (ORG 2)
-INSERT INTO fleet.geofence_zones (id, name, type, fleet_id, radius_meters, center_latitude, center_longitude) VALUES
-('z2222222-0000-4000-8000-000000000001', 'Zone Aéroport Douala', 'CIRCLE', 'f2222222-0000-4000-8000-000000000001', 300, 4.0500, 9.7000);
+INSERT INTO fleet.geofence_zones (id, manager_id, fleet_id, zone_type) VALUES
+('77777777-0000-4000-8000-000000000001', '22222222-0000-4000-8000-000000000002', 'f2222222-0000-4000-8000-000000000001', 'CIRCLE');
 
 -- 7. OPERATIONS / TRAJETS ET INCIDENTS (ORG 1)
 INSERT INTO fleet.trips (id, vehicle_id, driver_id, fleet_id, created_by, start_date, start_time, status, distance_km) VALUES

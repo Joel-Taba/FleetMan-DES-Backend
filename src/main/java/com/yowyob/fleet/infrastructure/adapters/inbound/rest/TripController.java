@@ -24,6 +24,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import org.springframework.security.access.AccessDeniedException;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetR2dbcRepository;
 
 @RestController
 @RequestMapping("/api/v1/trips")
@@ -31,254 +34,290 @@ import reactor.core.publisher.Mono;
 @SecurityRequirement(name = "bearerAuth")
 public class TripController {
 
-    private final ManageTripUseCase tripUseCase;
+        private final ManageTripUseCase tripUseCase;
+        private final TripR2dbcRepository tripRepository;
+        private final FleetR2dbcRepository fleetRepository;
 
-    private UUID getUserId(Authentication auth) {
-        return ((AuthPort.UserDetail) auth.getPrincipal()).id();
-    }
+        private UUID getUserId(Authentication auth) {
+                return ((AuthPort.UserDetail) auth.getPrincipal()).id();
+        }
 
-    // ── DTOs ─────────────────────────────────────────────────────────────────
+        private boolean checkAdmin(Authentication auth) {
+                return auth.getAuthorities().stream().anyMatch(ga -> ga.getAuthority().equals("ROLE_FLEET_ADMIN") ||
+                                ga.getAuthority().equals("ROLE_FLEET_SUPER_ADMIN"));
+        }
 
-    public record TripDetailInputDto(
-            @NotBlank String itemType,
-            String description,
-            @NotNull int quantity,
-            BigDecimal weight,
-            Integer departureQuantity) {
-    }
+        /**
+         * G10 FIX: Vérifie que le trajet appartient à l'organisation du requester.
+         */
+        private Mono<Void> assertTripAccess(UUID tripId, UUID requesterId, boolean isAdmin) {
+                return tripRepository.findById(tripId)
+                                .switchIfEmpty(Mono.error(new AccessDeniedException("Trajet introuvable.")))
+                                .flatMap(trip -> {
+                                        // Le créateur ou le conducteur a toujours accès
+                                        if (requesterId.equals(trip.getCreatedBy())
+                                                        || requesterId.equals(trip.getDriverId())) {
+                                                return Mono.<Void>empty();
+                                        }
+                                        // Si admin, vérifier la même organisation via la flotte
+                                        return fleetRepository.findById(trip.getFleetId())
+                                                        .flatMap(fleet -> fleetRepository.shareSameCompany(
+                                                                        fleet.getManagerId(), requesterId))
+                                                        .flatMap(share -> {
+                                                                if (share)
+                                                                        return Mono.<Void>empty();
+                                                                return Mono.<Void>error(new AccessDeniedException(
+                                                                                "Ce trajet ne vous appartient pas."));
+                                                        })
+                                                        .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                                                        "Ce trajet ne vous appartient pas.")));
+                                });
+        }
 
-    public record CreateTripRequest(
-            @NotNull UUID vehicleId,
-            @NotNull UUID driverId,
-            @NotNull UUID fleetId,
-            @NotNull LocalDate startDate,
-            @NotNull LocalTime startTime,
-            String departureLocation,
-            BigDecimal departureKmIndex,
-            BigDecimal departureFuelIndex,
-            String missionObject,
-            BigDecimal missionCost,
-            String rateType,
-            LocalDateTime scheduledReturnDatetime,
-            List<TripDetailInputDto> details) {
-    }
+        // ── DTOs ─────────────────────────────────────────────────────────────────
 
-    public record ReturnDetailInputDto(UUID detailId, Integer returnQuantity) {
-    }
+        public record TripDetailInputDto(
+                        @NotBlank String itemType,
+                        String description,
+                        @NotNull int quantity,
+                        BigDecimal weight,
+                        Integer departureQuantity) {
+        }
 
-    public record RegisterReturnRequest(
-            @NotBlank String tripCode,
-            @NotNull LocalDate returnDate,
-            @NotNull LocalTime returnTime,
-            String returnLocation,
-            BigDecimal returnKmIndex,
-            BigDecimal returnFuelIndex,
-            List<ReturnDetailInputDto> detailUpdates) {
-    }
+        public record CreateTripRequest(
+                        @NotNull UUID vehicleId,
+                        @NotNull UUID driverId,
+                        @NotNull UUID fleetId,
+                        @NotNull LocalDate startDate,
+                        @NotNull LocalTime startTime,
+                        String departureLocation,
+                        BigDecimal departureKmIndex,
+                        BigDecimal departureFuelIndex,
+                        String missionObject,
+                        BigDecimal missionCost,
+                        String rateType,
+                        LocalDateTime scheduledReturnDatetime,
+                        List<TripDetailInputDto> details) {
+        }
 
-    public record UpdateDriverRequest(@NotNull UUID newDriverId) {
-    }
+        public record ReturnDetailInputDto(UUID detailId, Integer returnQuantity) {
+        }
 
-    public record CancelTripRequest(String reason) {
-    }
+        public record RegisterReturnRequest(
+                        @NotBlank String tripCode,
+                        @NotNull LocalDate returnDate,
+                        @NotNull LocalTime returnTime,
+                        String returnLocation,
+                        BigDecimal returnKmIndex,
+                        BigDecimal returnFuelIndex,
+                        List<ReturnDetailInputDto> detailUpdates) {
+        }
 
-    // ── OPÉRATIONS MANAGER ───────────────────────────────────────────────────
+        public record UpdateDriverRequest(@NotNull UUID newDriverId) {
+        }
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
-    @PostMapping
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Créer un trajet (départ) — réservé au Fleet Manager")
-    public Mono<Trip> createTrip(
-            @Valid @RequestBody CreateTripRequest req,
-            Authentication auth) {
-        List<ManageTripUseCase.TripDetailInput> details = req.details() != null
-                ? req
-                        .details()
-                        .stream()
-                        .map(d -> new ManageTripUseCase.TripDetailInput(
-                                d.itemType(),
-                                d.description(),
-                                d.quantity(),
-                                d.weight(),
-                                d.departureQuantity()))
-                        .toList()
-                : List.of();
+        public record CancelTripRequest(String reason) {
+        }
 
-        return tripUseCase.createTrip(
-                new ManageTripUseCase.CreateTripCommand(
-                        req.vehicleId(),
-                        req.driverId(),
-                        req.fleetId(),
-                        getUserId(auth),
-                        req.startDate(),
-                        req.startTime(),
-                        req.departureLocation(),
-                        req.departureKmIndex(),
-                        req.departureFuelIndex(),
-                        req.missionObject(),
-                        req.missionCost(),
-                        req.rateType(),
-                        req.scheduledReturnDatetime(),
-                        details));
-    }
+        // ── OPÉRATIONS MANAGER ───────────────────────────────────────────────────
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
-    @PostMapping("/return")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Enregistrer le retour d'un trajet par son code")
-    public Mono<Trip> registerReturn(
-            @Valid @RequestBody RegisterReturnRequest req) {
-        List<ManageTripUseCase.ReturnDetailInput> detailUpdates = req.detailUpdates() != null
-                ? req
-                        .detailUpdates()
-                        .stream()
-                        .map(d -> new ManageTripUseCase.ReturnDetailInput(
-                                d.detailId(),
-                                d.returnQuantity()))
-                        .toList()
-                : List.of();
+        @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+        @PostMapping
+        @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+        @ResponseStatus(HttpStatus.CREATED)
+        @Operation(summary = "Créer un trajet (départ) — réservé au Fleet Manager")
+        public Mono<Trip> createTrip(
+                        @Valid @RequestBody CreateTripRequest req,
+                        Authentication auth) {
+                List<ManageTripUseCase.TripDetailInput> details = req.details() != null
+                                ? req
+                                                .details()
+                                                .stream()
+                                                .map(d -> new ManageTripUseCase.TripDetailInput(
+                                                                d.itemType(),
+                                                                d.description(),
+                                                                d.quantity(),
+                                                                d.weight(),
+                                                                d.departureQuantity()))
+                                                .toList()
+                                : List.of();
 
-        return tripUseCase.registerReturn(
-                new ManageTripUseCase.RegisterReturnCommand(
-                        req.tripCode(),
-                        req.returnDate(),
-                        req.returnTime(),
-                        req.returnLocation(),
-                        req.returnKmIndex(),
-                        req.returnFuelIndex(),
-                        detailUpdates));
-    }
+                return tripUseCase.createTrip(
+                                new ManageTripUseCase.CreateTripCommand(
+                                                req.vehicleId(),
+                                                req.driverId(),
+                                                req.fleetId(),
+                                                getUserId(auth),
+                                                req.startDate(),
+                                                req.startTime(),
+                                                req.departureLocation(),
+                                                req.departureKmIndex(),
+                                                req.departureFuelIndex(),
+                                                req.missionObject(),
+                                                req.missionCost(),
+                                                req.rateType(),
+                                                req.scheduledReturnDatetime(),
+                                                details));
+        }
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
-    @GetMapping("/code/{code}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Retrouver un trajet par son code (TRJ-2026-XXXX)")
-    public Mono<Trip> getByCode(@PathVariable String code) {
-        return tripUseCase.getTripByCode(code);
-    }
+        @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+        @PostMapping("/return")
+        @PreAuthorize("hasRole('FLEET_MANAGER')")
+        @Operation(summary = "Enregistrer le retour d'un trajet par son code")
+        public Mono<Trip> registerReturn(
+                        @Valid @RequestBody RegisterReturnRequest req) {
+                List<ManageTripUseCase.ReturnDetailInput> detailUpdates = req.detailUpdates() != null
+                                ? req
+                                                .detailUpdates()
+                                                .stream()
+                                                .map(d -> new ManageTripUseCase.ReturnDetailInput(
+                                                                d.detailId(),
+                                                                d.returnQuantity()))
+                                                .toList()
+                                : List.of();
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
-    @PatchMapping("/{id}/driver")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Changer le conducteur d'un trajet planifié")
-    public Mono<Trip> updateDriver(
-            @PathVariable UUID id,
-            @RequestBody UpdateDriverRequest req,
-            Authentication auth) {
-        return tripUseCase.updateTripDriver(
-                id,
-                req.newDriverId(),
-                getUserId(auth));
-    }
+                return tripUseCase.registerReturn(
+                                new ManageTripUseCase.RegisterReturnCommand(
+                                                req.tripCode(),
+                                                req.returnDate(),
+                                                req.returnTime(),
+                                                req.returnLocation(),
+                                                req.returnKmIndex(),
+                                                req.returnFuelIndex(),
+                                                detailUpdates));
+        }
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
-    @PatchMapping("/{id}/cancel")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Annuler un trajet")
-    public Mono<Trip> cancel(
-            @PathVariable UUID id,
-            @RequestBody(required = false) CancelTripRequest req,
-            Authentication auth) {
-        String reason = req != null ? req.reason() : null;
-        return tripUseCase.cancelTrip(id, reason, getUserId(auth));
-    }
+        @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+        @GetMapping("/code/{code}")
+        @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+        @Operation(summary = "Retrouver un trajet par son code (TRJ-2026-XXXX)")
+        public Mono<Trip> getByCode(@PathVariable String code) {
+                return tripUseCase.getTripByCode(code);
+        }
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
-    @GetMapping("/{id}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Détail d'un trajet")
-    public Mono<Trip> getById(@PathVariable UUID id) {
-        return tripUseCase.getTripById(id);
-    }
+        @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+        @PatchMapping("/{id}/driver")
+        @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+        @Operation(summary = "Changer le conducteur d'un trajet planifié")
+        public Mono<Trip> updateDriver(
+                        @PathVariable UUID id,
+                        @RequestBody UpdateDriverRequest req,
+                        Authentication auth) {
+                return tripUseCase.updateTripDriver(
+                                id,
+                                req.newDriverId(),
+                                getUserId(auth));
+        }
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
-    @GetMapping
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Lister les trajets du manager (filtre optionnel par flotte)")
-    public Flux<Trip> list(
-            Authentication auth,
-            @RequestParam(required = false) UUID fleetId) {
-        return tripUseCase.getManagerTrips(getUserId(auth), fleetId);
-    }
+        @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+        @PatchMapping("/{id}/cancel")
+        @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+        @Operation(summary = "Annuler un trajet")
+        public Mono<Trip> cancel(
+                        @PathVariable UUID id,
+                        @RequestBody(required = false) CancelTripRequest req,
+                        Authentication auth) {
+                String reason = req != null ? req.reason() : null;
+                return tripUseCase.cancelTrip(id, reason, getUserId(auth));
+        }
 
-    // ── TÉLÉMÉTRIE CHAUFFEUR (conservée) ─────────────────────────────────────
+        @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+        @GetMapping("/{id}")
+        @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+        @Operation(summary = "Détail d'un trajet")
+        public Mono<Trip> getById(@PathVariable UUID id, Authentication auth) {
+                return assertTripAccess(id, getUserId(auth), checkAdmin(auth))
+                                .then(tripUseCase.getTripById(id));
+        }
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
-    @PostMapping("/{id}/telemetry")
-    @PreAuthorize("hasRole('FLEET_DRIVER')")
-    @Operation(summary = "Envoyer un point de télémétrie GPS")
-    public Mono<Void> telemetry(
-            @PathVariable UUID id,
-            @RequestBody TelemetryRequest r) {
-        return tripUseCase.sendTelemetry(id, r.lat(), r.lng(), r.speed());
-    }
+        @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+        @GetMapping
+        @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+        @Operation(summary = "Lister les trajets du manager (filtre optionnel par flotte)")
+        public Flux<Trip> list(
+                        Authentication auth,
+                        @RequestParam(required = false) UUID fleetId) {
+                return tripUseCase.getManagerTrips(getUserId(auth), fleetId);
+        }
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
-    @GetMapping("/my-active")
-    @PreAuthorize("hasRole('FLEET_DRIVER')")
-    @Operation(summary = "Trajet actif du chauffeur (lecture seule)")
-    public Mono<Trip> getMyActive(Authentication auth) {
-        return tripUseCase.getMyActiveTrip(getUserId(auth));
-    }
+        // ── TÉLÉMÉTRIE CHAUFFEUR (conservée) ─────────────────────────────────────
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
-    @GetMapping("/my-history")
-    @PreAuthorize("hasRole('FLEET_DRIVER')")
-    @Operation(summary = "Historique du chauffeur")
-    public Flux<Trip> getMyHistory(Authentication auth) {
-        return tripUseCase.getMyTripHistory(getUserId(auth));
-    }
+        @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
+        @PostMapping("/{id}/telemetry")
+        @PreAuthorize("hasRole('FLEET_DRIVER')")
+        @Operation(summary = "Envoyer un point de télémétrie GPS")
+        public Mono<Void> telemetry(
+                        @PathVariable UUID id,
+                        @RequestBody TelemetryRequest r) {
+                return tripUseCase.sendTelemetry(id, r.lat(), r.lng(), r.speed());
+        }
 
-    public record StartTripDto(
-            BigDecimal departureKmIndex,
-            BigDecimal departureFuelIndex,
-            String departureLocation) {
-    }
+        @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
+        @GetMapping("/my-active")
+        @PreAuthorize("hasRole('FLEET_DRIVER')")
+        @Operation(summary = "Trajet actif du chauffeur (lecture seule)")
+        public Mono<Trip> getMyActive(Authentication auth) {
+                return tripUseCase.getMyActiveTrip(getUserId(auth));
+        }
 
-    public record CompleteTripDto(
-            BigDecimal returnKmIndex,
-            BigDecimal returnFuelIndex,
-            String returnLocation) {
-    }
+        @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
+        @GetMapping("/my-history")
+        @PreAuthorize("hasRole('FLEET_DRIVER')")
+        @Operation(summary = "Historique du chauffeur")
+        public Flux<Trip> getMyHistory(Authentication auth) {
+                return tripUseCase.getMyTripHistory(getUserId(auth));
+        }
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
-    @PutMapping("/{id}/start")
-    @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER')")
-    @Operation(summary = "Démarrer le trajet")
-    public Mono<Trip> startTrip(
-            @PathVariable UUID id,
-            @RequestBody StartTripDto req) {
-        return tripUseCase.startTrip(id, req.departureKmIndex(), req.departureFuelIndex(), req.departureLocation());
-    }
+        public record StartTripDto(
+                        BigDecimal departureKmIndex,
+                        BigDecimal departureFuelIndex,
+                        String departureLocation) {
+        }
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
-    @PutMapping("/{id}/returning")
-    @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER')")
-    @Operation(summary = "Marquer le trajet comme retour en cours")
-    public Mono<Trip> returningTrip(
-            @PathVariable UUID id) {
-        return tripUseCase.returningTrip(id);
-    }
+        public record CompleteTripDto(
+                        BigDecimal returnKmIndex,
+                        BigDecimal returnFuelIndex,
+                        String returnLocation) {
+        }
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
-    @PutMapping("/{id}/complete")
-    @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER')")
-    @Operation(summary = "Terminer le trajet")
-    public Mono<Trip> completeTrip(
-            @PathVariable UUID id,
-            @RequestBody CompleteTripDto req) {
-        return tripUseCase.completeTrip(id, req.returnKmIndex(), req.returnFuelIndex(), req.returnLocation());
-    }
+        @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
+        @PutMapping("/{id}/start")
+        @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER')")
+        @Operation(summary = "Démarrer le trajet")
+        public Mono<Trip> startTrip(
+                        @PathVariable UUID id,
+                        @RequestBody StartTripDto req) {
+                return tripUseCase.startTrip(id, req.departureKmIndex(), req.departureFuelIndex(),
+                                req.departureLocation());
+        }
 
-    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
-    @PutMapping("/{id}/cancel")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Annuler un trajet (alias PUT)")
-    public Mono<Trip> cancelPut(
-            @PathVariable UUID id,
-            @RequestBody(required = false) CancelTripRequest req,
-            Authentication auth) {
-        return cancel(id, req, auth);
-    }
+        @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
+        @PutMapping("/{id}/returning")
+        @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER')")
+        @Operation(summary = "Marquer le trajet comme retour en cours")
+        public Mono<Trip> returningTrip(
+                        @PathVariable UUID id) {
+                return tripUseCase.returningTrip(id);
+        }
+
+        @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
+        @PutMapping("/{id}/complete")
+        @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER')")
+        @Operation(summary = "Terminer le trajet")
+        public Mono<Trip> completeTrip(
+                        @PathVariable UUID id,
+                        @RequestBody CompleteTripDto req) {
+                return tripUseCase.completeTrip(id, req.returnKmIndex(), req.returnFuelIndex(), req.returnLocation());
+        }
+
+        @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+        @PutMapping("/{id}/cancel")
+        @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+        @Operation(summary = "Annuler un trajet (alias PUT)")
+        public Mono<Trip> cancelPut(
+                        @PathVariable UUID id,
+                        @RequestBody(required = false) CancelTripRequest req,
+                        Authentication auth) {
+                return cancel(id, req, auth);
+        }
 }

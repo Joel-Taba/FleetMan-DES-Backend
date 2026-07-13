@@ -125,20 +125,21 @@ public class VehicleService implements ManageVehicleUseCase {
     public Flux<Vehicle> getVehicles(UUID requesterId, boolean isAdmin, String token) {
         Flux<Vehicle> localStream;
         if (isAdmin) {
-            localStream = localPersistencePort.getVehiclesByCompanyOfUser(requesterId)
-                    .switchIfEmpty(Flux.defer(() -> localPersistencePort.getAllVehicles()));
+            // G1 FIX: Admin voit uniquement les véhicules de SON organisation (pas de
+            // fallback findAll)
+            localStream = localPersistencePort.getVehiclesByCompanyOfUser(requesterId);
         } else {
+            // G2 FIX: D'abord essayer comme Driver (véhicule assigné uniquement)
             localStream = driverPersistencePort.findById(requesterId)
                     .flatMapMany((Driver driver) -> {
-                        Flux<Vehicle> vehicles = localPersistencePort.getAllVehicles()
-                                .filter(v -> requesterId.equals(v.currentDriverId()));
                         if (driver.assignedVehicleId() != null) {
-                            Mono<Vehicle> primaryVehicle = localPersistencePort
-                                    .getLocalDataById(driver.assignedVehicleId());
-                            vehicles = Flux.concat(primaryVehicle, vehicles).distinct(Vehicle::id);
+                            // Le conducteur voit SON véhicule assigné uniquement
+                            return localPersistencePort.getLocalDataById(driver.assignedVehicleId())
+                                    .flux();
                         }
-                        return vehicles;
+                        return Flux.<Vehicle>empty();
                     })
+                    // Si pas un driver, c'est un Manager → ses véhicules via managerId
                     .switchIfEmpty(localPersistencePort.getVehiclesByManager(requesterId));
         }
 

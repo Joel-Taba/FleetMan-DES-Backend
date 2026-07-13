@@ -72,18 +72,10 @@ public class FleetService implements ManageFleetUseCase {
                     if (f.getManagerId().equals(requesterId)) {
                         return Mono.just(f);
                     }
+                    // G6 FIX: Vérification dynamique par organisation
                     return repository.shareSameCompany(f.getManagerId(), requesterId)
                             .flatMap(share -> {
                                 if (share) {
-                                    return Mono.just(f);
-                                }
-                                String reqStr = requesterId.toString();
-                                boolean systemAllowed = reqStr.equals("311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2")
-                                        || reqStr.equals("a0000002-0000-4000-8000-000000000002")
-                                        || reqStr.equals("a0000001-0000-4000-8000-000000000001")
-                                        || reqStr.equals("a0000000-0000-4000-8000-000000000101"); // Nehemie Admin Seed
-                                                                                                  // ID
-                                if (systemAllowed) {
                                     return Mono.just(f);
                                 }
                                 return Mono.error(FleetException.accessDenied());
@@ -95,8 +87,9 @@ public class FleetService implements ManageFleetUseCase {
     @Override
     public Flux<Fleet> getFleets(UUID requesterId, boolean isAdmin) {
         if (isAdmin) {
+            // G5 FIX: Admin voit UNIQUEMENT les flottes de SON organisation — JAMAIS
+            // findAll()
             return repository.findAllBySameCompanyAsUser(requesterId)
-                    .switchIfEmpty(Flux.defer(() -> repository.findAll()))
                     .map(mapper::toDomain);
         }
         return repository.findAllByManagerId(requesterId).map(mapper::toDomain);
@@ -108,11 +101,10 @@ public class FleetService implements ManageFleetUseCase {
         return repository.findById(id)
                 .switchIfEmpty(Mono.error(FleetException.notFound(id)))
                 .flatMap(existing -> {
+                    // G6 FIX: Vérification dynamique sans IDs hardcodés
                     Mono<Boolean> hasAccess = Mono.just(existing.getManagerId().equals(requesterId));
                     if (!existing.getManagerId().equals(requesterId)) {
-                        hasAccess = repository.shareSameCompany(existing.getManagerId(), requesterId)
-                                .map(share -> share
-                                        || requesterId.toString().equals("a0000001-0000-4000-8000-000000000001"));
+                        hasAccess = repository.shareSameCompany(existing.getManagerId(), requesterId);
                     }
                     return hasAccess.flatMap(allowed -> {
                         if (!allowed) {
@@ -135,11 +127,10 @@ public class FleetService implements ManageFleetUseCase {
         return repository.findById(id)
                 .switchIfEmpty(Mono.error(FleetException.notFound(id)))
                 .flatMap(existing -> {
+                    // G6 FIX: Vérification dynamique sans IDs hardcodés
                     Mono<Boolean> hasAccess = Mono.just(existing.getManagerId().equals(requesterId));
                     if (!existing.getManagerId().equals(requesterId)) {
-                        hasAccess = repository.shareSameCompany(existing.getManagerId(), requesterId)
-                                .map(share -> share
-                                        || requesterId.toString().equals("a0000001-0000-4000-8000-000000000001"));
+                        hasAccess = repository.shareSameCompany(existing.getManagerId(), requesterId);
                     }
                     return hasAccess.flatMap(allowed -> {
                         if (!allowed) {
@@ -177,15 +168,11 @@ public class FleetService implements ManageFleetUseCase {
         return repository.findById(fleetId)
                 .switchIfEmpty(Mono.error(FleetException.notFound(fleetId)))
                 .flatMap(fleet -> {
-                    String reqStr = requesterId.toString();
-                    boolean allowed = fleet.getManagerId().equals(requesterId)
-                            || reqStr.equals("311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2") // Nehemie
-                            || reqStr.equals("a0000002-0000-4000-8000-000000000002") // Marie Admin
-                            || reqStr.equals("a0000001-0000-4000-8000-000000000001") // Jean SuperAdmin
-                            || reqStr.equals("a0000000-0000-4000-8000-000000000101"); // Nehemie Admin Seed ID
-                    if (allowed) {
-                        return Mono.empty();
+                    // G6 FIX: Vérification dynamique — pas d'IDs hardcodés
+                    if (fleet.getManagerId().equals(requesterId)) {
+                        return Mono.empty(); // Le manager de la flotte a toujours accès
                     }
+                    // Vérifier si le requester est dans la même organisation
                     return repository.shareSameCompany(fleet.getManagerId(), requesterId)
                             .flatMap(share -> {
                                 if (share) {

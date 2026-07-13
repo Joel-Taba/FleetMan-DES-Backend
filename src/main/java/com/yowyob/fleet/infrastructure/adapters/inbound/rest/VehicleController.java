@@ -21,6 +21,9 @@ import reactor.core.publisher.Mono;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehiclePatchRequest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yowyob.fleet.domain.ports.out.VehiclePersistencePort;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetR2dbcRepository;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.Map;
 import java.util.UUID;
@@ -33,6 +36,8 @@ public class VehicleController {
 
     private final ManageVehicleUseCase vehicleUseCase;
     private final ObjectMapper objectMapper;
+    private final VehiclePersistencePort vehiclePersistencePort;
+    private final FleetR2dbcRepository fleetRepository;
 
     /**
      * Helper pour extraire le token JWT
@@ -52,6 +57,34 @@ public class VehicleController {
     private boolean checkAdmin(Authentication auth) {
         return auth.getAuthorities().stream().anyMatch(ga -> ga.getAuthority().equals("ROLE_FLEET_ADMIN") ||
                 ga.getAuthority().equals("ROLE_FLEET_SUPER_ADMIN"));
+    }
+
+    /**
+     * G3/G4/G14 FIX: Vérifie que le véhicule appartient à l'organisation du
+     * requester.
+     * Pour un manager, vérifie que le véhicule a son managerId.
+     * Pour un admin, vérifie que le véhicule est dans la même organisation.
+     */
+    private Mono<Void> assertVehicleAccess(UUID vehicleId, UUID requesterId, boolean isAdmin) {
+        return vehiclePersistencePort.getLocalDataById(vehicleId)
+                .switchIfEmpty(Mono.error(new AccessDeniedException("Véhicule introuvable.")))
+                .flatMap(vehicle -> {
+                    // Le manager du véhicule a toujours accès
+                    if (requesterId.equals(vehicle.managerId())) {
+                        return Mono.<Void>empty();
+                    }
+                    // Vérifier même organisation
+                    if (vehicle.managerId() != null) {
+                        return fleetRepository.shareSameCompany(vehicle.managerId(), requesterId)
+                                .flatMap(share -> {
+                                    if (share)
+                                        return Mono.<Void>empty();
+                                    return Mono.<Void>error(
+                                            new AccessDeniedException("Ce véhicule ne vous appartient pas."));
+                                });
+                    }
+                    return Mono.<Void>error(new AccessDeniedException("Ce véhicule ne vous appartient pas."));
+                });
     }
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
@@ -76,7 +109,9 @@ public class VehicleController {
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN', 'FLEET_DRIVER')")
     @Operation(summary = "Détails complets d'un véhicule", description = "Agrégation Identité + Finance + Maintenance + Opérationnel. Acteur: Manager/Admin.")
     public Mono<Vehicle> getVehicle(@PathVariable UUID vehicleId, Authentication auth) {
-        return vehicleUseCase.getVehicleDetails(vehicleId, extractToken(auth));
+        // G14 FIX: Le véhicule doit appartenir à l'organisation du requester
+        return assertVehicleAccess(vehicleId, getUserId(auth), checkAdmin(auth))
+                .then(vehicleUseCase.getVehicleDetails(vehicleId, extractToken(auth)));
     }
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
@@ -96,7 +131,9 @@ public class VehicleController {
         // Nettoyage des nulls pour ne pas écraser des données existantes
         updates.values().removeIf(java.util.Objects::isNull);
 
-        return vehicleUseCase.patchVehicleInfo(vehicleId, updates, extractToken(auth));
+        // G3 FIX: Vérifier que le véhicule appartient à l'organisation
+        return assertVehicleAccess(vehicleId, getUserId(auth), checkAdmin(auth))
+                .then(vehicleUseCase.patchVehicleInfo(vehicleId, updates, extractToken(auth)));
     }
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
@@ -105,7 +142,8 @@ public class VehicleController {
     @Operation(summary = "Paramètres Financiers", description = "Mise à jour Assurance, Coût/KM, Achat. Acteur: Manager.")
     public Mono<Vehicle> updateFinancial(@PathVariable UUID vehicleId, @RequestBody VehicleParameters.Financial params,
             Authentication auth) {
-        return vehicleUseCase.updateFinancialParameters(vehicleId, params, extractToken(auth));
+        return assertVehicleAccess(vehicleId, getUserId(auth), checkAdmin(auth))
+                .then(vehicleUseCase.updateFinancialParameters(vehicleId, params, extractToken(auth)));
     }
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
@@ -124,7 +162,8 @@ public class VehicleController {
                 request.batteryHealth(),
                 request.maintenanceStatus());
 
-        return vehicleUseCase.updateMaintenanceParameters(vehicleId, params, extractToken(auth));
+        return assertVehicleAccess(vehicleId, getUserId(auth), checkAdmin(auth))
+                .then(vehicleUseCase.updateMaintenanceParameters(vehicleId, params, extractToken(auth)));
     }
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
@@ -133,7 +172,9 @@ public class VehicleController {
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Supprimer un véhicule", description = "Suppression physique distante et locale. Acteur: Manager.")
     public Mono<Void> delete(@PathVariable UUID vehicleId, Authentication auth) {
-        return vehicleUseCase.removeVehicle(vehicleId, extractToken(auth));
+        // G4 FIX: Vérifier que le véhicule appartient à l'organisation
+        return assertVehicleAccess(vehicleId, getUserId(auth), checkAdmin(auth))
+                .then(vehicleUseCase.removeVehicle(vehicleId, extractToken(auth)));
     }
 
     // ========================================================================

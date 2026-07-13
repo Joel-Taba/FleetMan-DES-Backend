@@ -105,7 +105,12 @@ public class DriverService implements ManageDriverUseCase {
     @Override
     public Flux<Driver> getDrivers(UUID fleetId, UUID requesterId, boolean isAdmin) {
         if (isAdmin) {
-            return fleetId != null ? driverPersistencePort.findAllByFleetId(fleetId) : driverPersistencePort.findAll();
+            // G7 FIX: Admin voit uniquement les drivers de SON organisation — JAMAIS
+            // findAll()
+            if (fleetId != null) {
+                return driverPersistencePort.findAllByFleetId(fleetId);
+            }
+            return driverPersistencePort.findAllBySameCompanyAsUser(requesterId);
         }
         if (fleetId == null) {
             return Flux.error(new IllegalArgumentException("fleetId obligatoire pour les managers"));
@@ -223,28 +228,15 @@ public class DriverService implements ManageDriverUseCase {
     }
 
     public Flux<Driver> getDriversWithFilters(UUID fleetId, Boolean isAssigned, UUID requesterId) {
+        // G8 FIX: Toujours filtrer par organisation — pas d'IDs hardcodés
         Flux<Driver> drivers = driverPersistencePort.findAllBySameCompanyAsUser(requesterId)
                 .switchIfEmpty(Flux.defer(() -> {
-                    String reqStr = requesterId.toString();
-                    boolean isAdmin = reqStr.equals("311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2")
-                            || reqStr.equals("a0000002-0000-4000-8000-000000000002")
-                            || reqStr.equals("a0000001-0000-4000-8000-000000000001")
-                            || reqStr.equals("a0000000-0000-4000-8000-000000000101");
-                    if (isAdmin) {
-                        return (fleetId != null) ? driverPersistencePort.findAllByFleetId(fleetId)
-                                : driverPersistencePort.findAll();
-                    } else {
-                        if (fleetId != null) {
-                            return checkFleetOwnership(fleetId, requesterId)
-                                    .thenMany(driverPersistencePort.findAllByFleetId(fleetId));
-                        } else {
-                            return fleetRepository.findAllByManagerId(requesterId)
-                                    .map(com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.FleetEntity::getId)
-                                    .collectList()
-                                    .flatMapMany(fleetIds -> driverPersistencePort.findAll()
-                                            .filter(d -> d.fleetId() != null && fleetIds.contains(d.fleetId())));
-                        }
-                    }
+                    // Fallback Manager : récupérer les drivers de ses flottes
+                    return fleetRepository.findAllByManagerId(requesterId)
+                            .map(com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.FleetEntity::getId)
+                            .collectList()
+                            .flatMapMany(fleetIds -> driverPersistencePort.findAllBySameCompanyAsUser(requesterId)
+                                    .filter(d -> d.fleetId() != null && fleetIds.contains(d.fleetId())));
                 }));
 
         if (fleetId != null) {
@@ -328,31 +320,38 @@ public class DriverService implements ManageDriverUseCase {
         if (vehicle.managerId() != null && vehicle.managerId().equals(requesterId)) {
             return Mono.empty();
         }
-        String reqStr = requesterId.toString();
-        if (reqStr.equals("311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2")
-                || reqStr.equals("a0000002-0000-4000-8000-000000000002")
-                || reqStr.equals("a0000001-0000-4000-8000-000000000001")) {
-            return Mono.empty();
+        // G8 FIX: Vérification dynamique par organisation au lieu d'IDs hardcodés
+        if (vehicle.managerId() != null) {
+            return fleetRepository.shareSameCompany(vehicle.managerId(), requesterId)
+                    .flatMap(share -> {
+                        if (share)
+                            return Mono.empty();
+                        return Mono.error(new AccessDeniedException("Ce véhicule ne vous appartient pas."));
+                    });
         }
         return Mono.error(new AccessDeniedException("Ce véhicule ne vous appartient pas."));
     }
 
     private Mono<Void> checkFleetOwnership(UUID fleetId, UUID managerId) {
         log.info("🔍 [FLEET_OWNERSHIP] Vérification : fleetId={}, managerId={}", fleetId, managerId);
-        String reqStr = managerId.toString();
-        if (reqStr.equals("311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2")
-                || reqStr.equals("a0000002-0000-4000-8000-000000000002")
-                || reqStr.equals("a0000001-0000-4000-8000-000000000001")) {
-            return Mono.empty();
-        }
+        // G8 FIX: Plus d'IDs hardcodés — vérification dynamique
         return fleetRepository.existsByIdAndManagerId(fleetId, managerId)
                 .flatMap(exists -> {
-                    log.info("🔍 [FLEET_OWNERSHIP] Résultat existance : {} (fleetId={}, managerId={})", exists, fleetId,
-                            managerId);
-                    if (!exists)
-                        return Mono.error(new AccessDeniedException("Cette flotte ne vous appartient pas."));
-                    return Mono.empty();
-                });
+                    if (exists) {
+                        return Mono.<Void>empty();
+                    }
+                    // Vérifier si le requester est dans la même organisation que le manager de la
+                    // flotte
+                    return fleetRepository.findById(fleetId)
+                            .flatMap(fleet -> fleetRepository.shareSameCompany(fleet.getManagerId(), managerId)
+                                    .flatMap(share -> {
+                                        if (share)
+                                            return Mono.<Void>empty();
+                                        return Mono.<Void>error(
+                                                new AccessDeniedException("Cette flotte ne vous appartient pas."));
+                                    }))
+                            .then();
+                }).then();
     }
 
     @Override

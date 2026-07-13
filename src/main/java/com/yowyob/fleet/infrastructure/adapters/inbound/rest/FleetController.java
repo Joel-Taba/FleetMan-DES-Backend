@@ -41,10 +41,9 @@ public class FleetController {
     }
 
     private boolean checkAdmin(Authentication auth) {
+        // G6 FIX: Pas d'IDs hardcodés — vérification par rôles uniquement
         return auth.getAuthorities().stream().anyMatch(ga -> ga.getAuthority().equals("ROLE_FLEET_ADMIN") ||
-                ga.getAuthority().equals("ROLE_FLEET_SUPER_ADMIN") ||
-                ((AuthPort.UserDetail) auth.getPrincipal()).id().toString()
-                        .equals("311c6d0d-77ca-4b08-8e65-8bdf8dcb60a2"));
+                ga.getAuthority().equals("ROLE_FLEET_SUPER_ADMIN"));
     }
 
     // ========================================================================

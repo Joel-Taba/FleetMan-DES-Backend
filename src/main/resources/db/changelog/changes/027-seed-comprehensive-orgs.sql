@@ -151,10 +151,10 @@ INSERT INTO fleet.trips (id, vehicle_id, driver_id, fleet_id, created_by, start_
 
 INSERT INTO fleet.incidents (id, vehicle_id, driver_id, type, severity, status, description) VALUES
 ('dd111111-0000-4000-8000-000000000001', 'bb111111-0000-4000-8000-000000000201', '11111111-0000-4000-8000-111111110005', 'ACCIDENT', 'HIGH', 'REPORTED', 'Accrochage sur la route de Mbalmayo'),
-('dd111111-0000-4000-8000-000000000002', 'bb111111-0000-4000-8000-000000000103', NULL, 'PANNE', 'MEDIUM', 'UNDER_INVESTIGATION', 'Moteur qui chauffe anormalement');
+('dd111111-0000-4000-8000-000000000002', 'bb111111-0000-4000-8000-000000000103', NULL, 'BREAKDOWN', 'MEDIUM', 'UNDER_INVESTIGATION', 'Moteur qui chauffe anormalement');
 
-INSERT INTO fleet.fuel_recharges (id, vehicle_id, driver_id, quantity, price, station_name, recharge_date) VALUES
-('ee111111-0000-4000-8000-000000000001', 'bb111111-0000-4000-8000-000000000101', '11111111-0000-4000-8000-111111110001', 50, 45000, 'TOTAL Bastos', '2026-07-12');
+INSERT INTO fleet.fuel_recharges (id, vehicle_id, driver_id, quantity, price, station_name, recharge_date_time) VALUES
+('ee111111-0000-4000-8000-000000000001', 'bb111111-0000-4000-8000-000000000101', '11111111-0000-4000-8000-111111110001', 50, 45000, 'TOTAL', '2026-07-12');
 
 -- 7. OPERATIONS / TRAJETS ET INCIDENTS (ORG 2 & 3)
 INSERT INTO fleet.trips (id, vehicle_id, driver_id, fleet_id, created_by, start_date, start_time, status, distance_km) VALUES

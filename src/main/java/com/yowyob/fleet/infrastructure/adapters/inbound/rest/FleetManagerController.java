@@ -33,6 +33,11 @@ public class FleetManagerController {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
     }
 
+    private boolean checkAdmin(Authentication auth) {
+        return auth.getAuthorities().stream().anyMatch(ga -> ga.getAuthority().equals("ROLE_FLEET_ADMIN") ||
+                ga.getAuthority().equals("ROLE_FLEET_SUPER_ADMIN"));
+    }
+
     @GetMapping("/me")
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Détails de mon entreprise", description = "Profil complet incluant le nombre réel de flottes.")
@@ -46,7 +51,7 @@ public class FleetManagerController {
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Tableau de bord (KPIs)", description = "Statistiques clés pour l'écran d'accueil du manager.")
     public Mono<ManagerKpiResponse> getMyKpis(Authentication auth) {
-        return managerUseCase.getManagerKpis(getUserId(auth));
+        return managerUseCase.getManagerKpis(getUserId(auth), checkAdmin(auth));
     }
 
     @PutMapping("/me/company")

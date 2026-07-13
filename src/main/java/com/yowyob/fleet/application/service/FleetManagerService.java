@@ -96,17 +96,22 @@ public class FleetManagerService implements ManageFleetManagerUseCase {
         }
 
         @Override
-        public Mono<ManagerKpiResponse> getManagerKpis(UUID managerId) {
+        public Mono<ManagerKpiResponse> getManagerKpis(UUID managerId, boolean isAdmin) {
                 // Plage du mois courant pour les KPIs temporels
                 LocalDateTime startOfMonth = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0)
                                 .withSecond(0);
 
                 return Mono.zip(
                                 // ── KPIs existants ────────────────────────────────────────────────
-                                fleetRepository.countByManagerId(managerId),
-                                vehicleRepository.countByManagerId(managerId),
-                                driverRepository.countByManagerId(managerId),
-                                vehicleRepository.countByManagerIdAndStatus(managerId, "ON_TRIP"),
+                                isAdmin ? fleetRepository.findAllBySameCompanyAsUser(managerId).count()
+                                                : fleetRepository.countByManagerId(managerId),
+                                isAdmin ? vehicleRepository.findAllBySameCompanyAsUser(managerId).count()
+                                                : vehicleRepository.countByManagerId(managerId),
+                                isAdmin ? driverRepository.findAllBySameCompanyAsUser(managerId).count()
+                                                : driverRepository.countByManagerId(managerId),
+                                isAdmin ? vehicleRepository.findAllBySameCompanyAsUser(managerId)
+                                                .filter(v -> "ON_TRIP".equals(v.getStatus())).count()
+                                                : vehicleRepository.countByManagerIdAndStatus(managerId, "ON_TRIP"),
 
                                 // ── KPIs Opérations Terrain (Phase 6) ────────────────────────────
                                 // Maintenances du mois courant (filtre applicatif sur le flux)
@@ -127,7 +132,10 @@ public class FleetManagerService implements ManageFleetManagerUseCase {
                         long openIncidents = t.getT6();
 
                         // Coût total des incidents (tous véhicules du manager)
-                        Mono<BigDecimal> totalIncidentCostMono = vehicleRepository.findByManagerId(managerId)
+                        Flux<com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.VehicleLocalEntity> vehiclesFlux = isAdmin
+                                        ? vehicleRepository.findAllBySameCompanyAsUser(managerId)
+                                        : vehicleRepository.findByManagerId(managerId);
+                        Mono<BigDecimal> totalIncidentCostMono = vehiclesFlux
                                         .flatMap(v -> incidentRepository.getTotalCostByVehicleId(v.getId())
                                                         .defaultIfEmpty(BigDecimal.ZERO))
                                         .reduce(BigDecimal.ZERO, BigDecimal::add);

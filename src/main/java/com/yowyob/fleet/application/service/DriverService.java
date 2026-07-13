@@ -231,12 +231,9 @@ public class DriverService implements ManageDriverUseCase {
         // G8 FIX: Toujours filtrer par organisation — pas d'IDs hardcodés
         Flux<Driver> drivers = driverPersistencePort.findAllBySameCompanyAsUser(requesterId)
                 .switchIfEmpty(Flux.defer(() -> {
-                    // Fallback Manager : récupérer les drivers de ses flottes
+                    // Fallback Manager : récupérer les drivers par ses flottes
                     return fleetRepository.findAllByManagerId(requesterId)
-                            .map(com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.FleetEntity::getId)
-                            .collectList()
-                            .flatMapMany(fleetIds -> driverPersistencePort.findAllBySameCompanyAsUser(requesterId)
-                                    .filter(d -> d.fleetId() != null && fleetIds.contains(d.fleetId())));
+                            .flatMap(fleet -> driverPersistencePort.findAllByFleetId(fleet.getId()));
                 }));
 
         if (fleetId != null) {

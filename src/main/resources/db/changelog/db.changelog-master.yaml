@@ -99,5 +99,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/026-add-org-fields.sql
 
-
-
+  # 27. Seed de données étendues pour tests multilocataires
+  - include:
+      file: db/changelog/changes/027-seed-comprehensive-orgs.sql

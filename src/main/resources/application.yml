@@ -88,7 +88,7 @@ spring:
 application:
   # ── Kernel RT-Comops ────────────────────────────────────────────────────────
   kernel:
-    url: ${KERNEL_URL:https://kernel-core.yowyob.com}
+    url: ${KERNEL_URL:https://kernel-core.yowyob.com/kernel-api}
     client-id: ${KERNEL_CLIENT_ID:fleet-management-backend}
     api-key: ${KERNEL_API_KEY:K5mWlNhc6zH2-JcaZJWSs1sLxUzjS902u4MxEnJar5g}
     tenant-id: ${KERNEL_TENANT_ID:f5b814d9-766e-4c87-91ec-d6c8e32cb56c}
@@ -97,8 +97,12 @@ application:
     organization-sync: ${KERNEL_ORG_SYNC:true}
     service: COMMERCIAL
     roles:
+      # Surcharges optionnelles : si vides, résolues dynamiquement via
+      # GET /api/administration/roles (voir KernelRoleRegistry).
       fleet-driver-id: ${KERNEL_ROLE_FLEET_DRIVER_ID:}
       fleet-manager-id: ${KERNEL_ROLE_FLEET_MANAGER_ID:}
+      fleet-admin-id: ${KERNEL_ROLE_FLEET_ADMIN_ID:}
+      fleet-super-admin-id: ${KERNEL_ROLE_FLEET_SUPER_ADMIN_ID:}
 
   file:
     mode: ${FILE_MODE:kernel}
@@ -116,7 +120,7 @@ application:
     payment-service-url:  https://traefikdev.yowyob.com/payment
   auth:
     mode: kernel
-    url: https://kernel-core.yowyob.com
+    url: https://kernel-core.yowyob.com/kernel-api/kernel-api
   notification:
     mode: http
     url: https://traefikdev.yowyob.com/notification
@@ -195,6 +199,10 @@ resilience4j:
         slidingWindowSize: 10
         failureRateThreshold: 50
         waitDurationInOpenState: 30s
+      kernel-kyc:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
       kernel-actor:
         slidingWindowSize: 10
         failureRateThreshold: 50
@@ -213,6 +221,8 @@ resilience4j:
         timeoutDuration: 10s
       kernel-file:
         timeoutDuration: 10s
+      kernel-kyc:
+        timeoutDuration: 180s
       kernel-actor:
         timeoutDuration: 10s
 

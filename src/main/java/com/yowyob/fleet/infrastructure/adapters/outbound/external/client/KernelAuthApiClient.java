@@ -54,6 +54,12 @@ public interface KernelAuthApiClient {
     @PostExchange("/api/auth/reset-password")
     Mono<Void> resetPassword(@RequestBody ResetPasswordRequest request);
 
+    /** Changement de mot de passe (utilisateur authentifié, ancien mot de passe requis) */
+    @PostExchange("/api/v1/portal/change-password")
+    Mono<Void> changePassword(
+            @RequestHeader("Authorization") String bearerToken,
+            @RequestBody ChangePasswordRequest request);
+
     // ── Profil utilisateur ────────────────────────────────────────────────────
 
     /** Profil de l'utilisateur connecté */
@@ -93,6 +99,11 @@ public interface KernelAuthApiClient {
 
     record ResetPasswordRequest(
             String resetToken,
+            String newPassword
+    ) {}
+
+    record ChangePasswordRequest(
+            String currentPassword,
             String newPassword
     ) {}
 
@@ -144,6 +155,12 @@ public interface KernelAuthApiClient {
             String phoneNumber,
             String accessToken,
             String sessionToken,
+            // Vrai refresh token opaque Kernel (préfixe "rt_", ~14j de validité),
+            // distinct de accessToken/sessionToken — absent de ce record jusqu'ici,
+            // Jackson l'ignorait silencieusement et FleetMan retombait sur
+            // sessionToken (== accessToken) en guise de "refresh token" côté client,
+            // rendant tout rafraîchissement silencieux impossible.
+            String refreshToken,
             String tokenType,
             Long expiresInSeconds,
             List<String> authorities,

@@ -336,4 +336,17 @@ main() {
     echo ""
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    if [[ "${1:-}" == "--daemon" ]]; then
+        shift
+        INTERVAL_SECONDS="${1:-840}"  # 14 min par défaut (marge avant expiration ~15 min)
+        echo -e "${CYAN}Mode daemon — renouvellement toutes les ${INTERVAL_SECONDS}s${NC}"
+        while true; do
+            main
+            echo -e "${BLUE}⏳ Prochain cycle dans ${INTERVAL_SECONDS}s ($(date '+%H:%M:%S'))${NC}" >&2
+            sleep "$INTERVAL_SECONDS"
+        done
+    else
+        main "$@"
+    fi
+fi

@@ -3,8 +3,10 @@ package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 import com.yowyob.fleet.domain.model.SubscriptionPlan;
 import com.yowyob.fleet.domain.ports.in.AuthUseCase;
 import com.yowyob.fleet.domain.ports.in.ManageSubscriptionPlanUseCase;
-import com.yowyob.fleet.domain.ports.in.ManageSuperAdminUseCase;
+import com.yowyob.fleet.application.service.SuperAdminDashboardService;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
+import com.yowyob.fleet.domain.ports.in.ManageSuperAdminUseCase;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SuperAdminDashboardStatsResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ApiResponse;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
 import com.yowyob.fleet.infrastructure.config.security.FleetPermissions;
@@ -44,6 +46,7 @@ import reactor.core.publisher.Mono;
 public class SuperAdminController {
 
     private final ManageSuperAdminUseCase superAdminUseCase;
+    private final SuperAdminDashboardService dashboardService;
     private final ManageSubscriptionPlanUseCase planUseCase;
     private final com.yowyob.fleet.application.service.AppSettingsService appSettingsService;
     private final com.yowyob.fleet.application.service.SubscriptionRegistrationService registrationService;
@@ -84,10 +87,21 @@ public class SuperAdminController {
         @NotBlank String username,
         @NotBlank String password,
         @Email @NotBlank String email,
-        @NotBlank String phone,
-        @NotBlank String firstName,
-        @NotBlank String lastName
-    ) {}
+        @NotBlank
+        @jakarta.validation.constraints.Pattern(
+            regexp = "^\\+?[0-9]{8,15}$",
+            message = "Le numéro de téléphone ne doit contenir que des chiffres (avec un + optionnel en préfixe)."
+        )
+        String phone,
+        String firstName,
+        String lastName
+    ) {
+        @jakarta.validation.constraints.AssertTrue(message = "Le prénom ou le nom doit être renseigné.")
+        public boolean isNameProvided() {
+            return (firstName != null && !firstName.isBlank())
+                || (lastName != null && !lastName.isBlank());
+        }
+    }
 
     @PostMapping(
         value = "/admins",
@@ -108,7 +122,7 @@ public class SuperAdminController {
             )
         )
     )
-    public Mono<AuthPort.AuthResponse> create(
+    public Mono<AuthPort.UserDetail> create(
         @RequestPart("user") @Valid CreateAdminRequest req,
         @RequestPart(value = "file", required = false) Part filePart
     ) {
@@ -140,6 +154,14 @@ public class SuperAdminController {
                 )
             )
             .flatMap(superAdminUseCase::createAdmin);
+    }
+
+    @GetMapping("/dashboard-stats")
+    @Operation(summary = "Statistiques tableau de bord Super Admin", description = "Filtre par période : today, 7d, month")
+    public Mono<SuperAdminDashboardStatsResponse> dashboardStats(
+            @RequestParam(defaultValue = "7d") String period
+    ) {
+        return dashboardService.getDashboardStats(period);
     }
 
     private Mono<AuthUseCase.FileContent> processFilePart(Part fp) {
@@ -184,7 +206,7 @@ public class SuperAdminController {
 
     @PatchMapping("/admins/{id}/toggle")
     @Operation(summary = "Activer/Désactiver un Administrateur")
-    public Mono<Void> toggle(@PathVariable UUID id, Authentication auth) {
+    public Mono<AuthPort.UserDetail> toggle(@PathVariable UUID id, Authentication auth) {
         AuthPort.UserDetail currentUser =
             (AuthPort.UserDetail) auth.getPrincipal();
         return superAdminUseCase.toggleAdminStatus(id, currentUser.id());
@@ -321,6 +343,20 @@ public class SuperAdminController {
         @PathVariable UUID id
     ) {
         return registrationService.listDocuments(id);
+    }
+
+    @PostMapping("/subscriptions/{id}/documents/{documentId}/verify")
+    @Operation(summary = "Vérifier un document de souscription via Kernel KYC")
+    public Mono<ApiResponse<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.KycDocumentVerificationResponse>> verifySubscriptionDocument(
+        @PathVariable UUID id,
+        @PathVariable UUID documentId,
+        Authentication auth
+    ) {
+        String token = auth != null && auth.getCredentials() != null
+                ? auth.getCredentials().toString()
+                : null;
+        return registrationService.verifyDocument(id, documentId, token)
+                .map(ApiResponse::ok);
     }
 
     @GetMapping("/settings/subscription-grace-days")

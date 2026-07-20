@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -73,9 +74,9 @@ public class KernelAuthAdapter implements AuthPort {
     public Mono<AuthResponse> login(String identifier, String password) {
         log.info("🔑 [KERNEL AUTH] Login pour : {}", identifier);
 
-        // Étape 1 : discover-contexts
-        return kernelCallSupport.run("kernel-auth",
-                kernelClient.discoverContexts(
+        // Étape 1 : discover-contexts — pas de circuit breaker ici : une erreur auth
+        // ne doit pas être avalée (sinon réponse HTTP 200 vide côté client).
+        return kernelClient.discoverContexts(
                         new KernelAuthApiClient.LoginRequest(identifier, password))
                 .flatMap(resp -> {
                     if (!resp.success() || resp.data() == null) {
@@ -88,21 +89,17 @@ public class KernelAuthAdapter implements AuthPort {
                         return Mono.error(AuthException.invalidCredentials());
                     }
 
-                    var ctx = discover.contexts().stream()
-                            .filter(c -> c.organizations() != null && c.organizations().stream()
-                                    .anyMatch(o -> serviceName.equalsIgnoreCase(o.service())))
-                            .findFirst()
-                            .orElse(discover.contexts().get(0));
+                    var selected = selectContextAndOrganization(discover.contexts())
+                            .orElseThrow(AuthException::invalidCredentials);
 
-                    UUID orgId = resolveOrganizationId(ctx);
-
-                    log.debug("✅ [KERNEL AUTH] Context sélectionné: {} org={}", ctx.contextId(), orgId);
+                    log.debug("✅ [KERNEL AUTH] Context sélectionné: {} org={}",
+                            selected.contextId(), selected.organizationId());
 
                     return kernelClient.selectContext(
                             new KernelAuthApiClient.SelectContextRequest(
                                     discover.selectionToken(),
-                                    ctx.contextId(),
-                                    orgId
+                                    selected.contextId(),
+                                    selected.organizationId()
                             ));
                 })
                 .map(resp -> {
@@ -113,27 +110,30 @@ public class KernelAuthAdapter implements AuthPort {
                     return mapToAuthResponse(session);
                 })
                 .onErrorResume(WebClientResponseException.class, this::mapWebClientError)
-                .doOnSuccess(r -> log.info("✅ [KERNEL AUTH] Login réussi : {}", identifier)));
+                .onErrorResume(this::mapConnectivityError)
+                .doOnSuccess(r -> log.info("✅ [KERNEL AUTH] Login réussi : {}", identifier));
     }
 
     // ── Refresh Token ─────────────────────────────────────────────────────────
 
     @Override
     public Mono<AuthResponse> refresh(String refreshToken) {
-        return kernelCallSupport.run("kernel-auth",
-                kernelClient.refreshToken(
-                        new KernelAuthApiClient.RefreshTokenRequest(refreshToken))
-                .map(resp -> {
+        // Pas de circuit breaker ici : une réponse vide corromprait la session côté client.
+        return kernelClient.refreshToken(new KernelAuthApiClient.RefreshTokenRequest(refreshToken))
+                .flatMap(resp -> {
                     if (!resp.success() || resp.data() == null) {
-                        throw AuthException.tokenExpired();
+                        return Mono.error(AuthException.tokenExpired());
                     }
-                    var r = resp.data();
-                    // On reconstruit une AuthResponse avec le nouveau token
-                    var fakeUser = new UserDetail(null, null, null, null, null, null,
-                            serviceName, List.of(), List.of(), null, null, null, null, true, null);
-                    return new AuthResponse(r.accessToken(), r.refreshToken(), fakeUser);
+                    var tokens = resp.data();
+                    String accessToken = tokens.accessToken();
+                    String nextRefresh = tokens.refreshToken() != null && !tokens.refreshToken().isBlank()
+                            ? tokens.refreshToken()
+                            : refreshToken;
+                    return parseUserDetailFromJwt(accessToken)
+                            .map(user -> new AuthResponse(accessToken, nextRefresh, user));
                 })
-                .onErrorResume(WebClientResponseException.class, this::mapWebClientError));
+                .onErrorResume(WebClientResponseException.class, this::mapWebClientError)
+                .onErrorResume(this::mapConnectivityError);
     }
 
     // ── Inscription ───────────────────────────────────────────────────────────
@@ -187,8 +187,15 @@ public class KernelAuthAdapter implements AuthPort {
     public Mono<UserDetail> getUserProfile(String token) {
         try {
             String rawToken = token.startsWith("Bearer ") ? token.substring(7) : token;
+            return parseUserDetailFromJwt(rawToken);
+        } catch (Exception e) {
+            log.error("❌ [KERNEL AUTH] Erreur lecture JWT : {}", e.getMessage());
+            return Mono.error(AuthException.tokenExpired());
+        }
+    }
 
-            // Source des rôles = JWT (seule source fiable — /api/users/me ne porte pas les permissions)
+    private Mono<UserDetail> parseUserDetailFromJwt(String rawToken) {
+        try {
             List<String> authorities = extractAuthoritiesFromJwt(rawToken);
             List<String> roles = extractFleetRoles(authorities);
 
@@ -202,7 +209,6 @@ public class KernelAuthAdapter implements AuthPort {
                     Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
             JsonNode payload = objectMapper.readTree(payloadJson);
 
-            // Vérifier l'expiration
             long exp = payload.has("exp") ? payload.get("exp").asLong(0) : 0;
             long now = System.currentTimeMillis() / 1000;
             if (exp > 0 && now > exp) {
@@ -211,7 +217,6 @@ public class KernelAuthAdapter implements AuthPort {
             }
 
             String sub = payload.has("sub") ? payload.get("sub").asText() : null;
-
             UUID userId;
             try {
                 userId = UUID.fromString(sub);
@@ -220,19 +225,16 @@ public class KernelAuthAdapter implements AuthPort {
                 return Mono.error(AuthException.tokenExpired());
             }
 
-            log.debug("✅ [KERNEL AUTH] getUserProfile depuis JWT : userId={}, roles={}", userId, roles);
+            log.debug("✅ [KERNEL AUTH] Profil depuis JWT : userId={}, roles={}", userId, roles);
 
-            UserDetail detail = new UserDetail(
+            return Mono.just(new UserDetail(
                     userId, sub, null, null,
                     null, null, serviceName,
                     roles, authorities,
                     null, null, null, null, true, null
-            );
-
-            return Mono.just(detail);
-
+            ));
         } catch (Exception e) {
-            log.error("❌ [KERNEL AUTH] Erreur lecture JWT : {}", e.getMessage());
+            log.error("❌ [KERNEL AUTH] Erreur décodage JWT : {}", e.getMessage());
             return Mono.error(AuthException.tokenExpired());
         }
     }
@@ -327,8 +329,29 @@ public class KernelAuthAdapter implements AuthPort {
     @Override
     public Mono<Void> changePassword(UUID userId, String token,
                                       String currentPwd, String newPwd) {
-        log.info("🛠 [KERNEL AUTH] changePassword — délégué au Kernel");
-        return Mono.empty();
+        String bearer = ensureBearer(token);
+        // 1. Vérifie réellement l'ancien mot de passe via une tentative de connexion
+        //    (le JWT ne porte pas l'email, on le récupère via /api/users/me).
+        return kernelClient.getMe(bearer)
+                .flatMap(resp -> {
+                    if (!resp.success() || resp.data() == null || resp.data().email() == null) {
+                        return Mono.error(AuthException.tokenExpired());
+                    }
+                    return login(resp.data().email(), currentPwd);
+                })
+                .onErrorMap(e -> AuthException.generic(
+                        "Ancien mot de passe incorrect.", HttpStatus.UNPROCESSABLE_ENTITY))
+                // 2. Ancien mot de passe confirmé valide : applique le nouveau.
+                .then(Mono.defer(() -> kernelClient.changePassword(
+                                bearer,
+                                new KernelAuthApiClient.ChangePasswordRequest(currentPwd, newPwd))
+                        .onErrorResume(WebClientResponseException.class, ex -> {
+                            log.error("❌ [KERNEL AUTH] changePassword indisponible côté Kernel : {}", ex.getMessage());
+                            return Mono.error(AuthException.generic(
+                                    "Le changement de mot de passe n'est pas encore disponible sur la plateforme "
+                                            + "d'identité. Contactez un administrateur.",
+                                    HttpStatus.SERVICE_UNAVAILABLE));
+                        })));
     }
 
     @Override
@@ -361,6 +384,41 @@ public class KernelAuthAdapter implements AuthPort {
     }
 
     // ── Helpers de mapping ────────────────────────────────────────────────────
+
+    private record SelectedLoginContext(String contextId, UUID organizationId) {}
+
+    /**
+     * Choisit contexte + organisation depuis la réponse discover-contexts.
+     * N'utilise jamais {@code defaultOrgId} : l'org doit appartenir au contexte sélectionné.
+     */
+    private java.util.Optional<SelectedLoginContext> selectContextAndOrganization(
+            List<KernelAuthApiClient.DiscoveredContext> contexts) {
+        for (var ctx : contexts) {
+            if (ctx.organizations() == null) {
+                continue;
+            }
+            for (var org : ctx.organizations()) {
+                if (serviceName.equalsIgnoreCase(org.service())) {
+                    return java.util.Optional.of(
+                            new SelectedLoginContext(ctx.contextId(), org.organizationId()));
+                }
+            }
+        }
+        for (var ctx : contexts) {
+            if (ctx.organizations() != null && !ctx.organizations().isEmpty()) {
+                var org = ctx.organizations().get(0);
+                return java.util.Optional.of(
+                        new SelectedLoginContext(ctx.contextId(), org.organizationId()));
+            }
+        }
+        // Contexte sans organisation listée (cas manager/chauffeur) → organizationId null
+        for (var ctx : contexts) {
+            if (ctx.contextId() != null && !ctx.contextId().isBlank()) {
+                return java.util.Optional.of(new SelectedLoginContext(ctx.contextId(), null));
+            }
+        }
+        return java.util.Optional.empty();
+    }
 
     private UUID resolveOrganizationId(KernelAuthApiClient.DiscoveredContext ctx) {
         if (ctx.organizations() != null && !ctx.organizations().isEmpty()) {
@@ -404,9 +462,13 @@ public class KernelAuthAdapter implements AuthPort {
                 null
         );
 
+        // session.refreshToken() est le vrai refresh token opaque Kernel (distinct
+        // de accessToken/sessionToken) : sans lui le front ne peut jamais distinguer
+        // "j'ai un refresh token valide" de "je n'en ai pas", et retombe toujours
+        // sur la reconnexion interactive.
         return new AuthResponse(
                 session.accessToken(),
-                session.sessionToken() != null ? session.sessionToken() : "",
+                session.refreshToken() != null ? session.refreshToken() : "",
                 user
         );
     }
@@ -482,6 +544,10 @@ public class KernelAuthAdapter implements AuthPort {
 
     private <T> Mono<T> mapWebClientError(WebClientResponseException ex) {
         log.error("❌ [KERNEL AUTH] Erreur HTTP {}: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+        String body = ex.getResponseBodyAsString();
+        if (ex.getStatusCode().value() == 401 && body != null && body.contains("AUTH_INVALID_REFRESH_TOKEN")) {
+            return Mono.error(AuthException.tokenExpired());
+        }
         return switch (ex.getStatusCode().value()) {
             case 401 -> Mono.error(AuthException.invalidCredentials());
             case 403 -> Mono.error(AuthException.accountLocked());
@@ -492,5 +558,35 @@ public class KernelAuthAdapter implements AuthPort {
                     "Erreur Kernel [" + ex.getStatusCode() + "]: " + ex.getResponseBodyAsString(),
                     (HttpStatus) ex.getStatusCode()));
         };
+    }
+
+    private <T> Mono<T> mapConnectivityError(Throwable ex) {
+        if (ex instanceof AuthException authException) {
+            return Mono.error(authException);
+        }
+        if (ex instanceof WebClientResponseException webClientResponseException) {
+            return mapWebClientError(webClientResponseException);
+        }
+        if (isConnectivityFailure(ex)) {
+            log.error("❌ [KERNEL AUTH] Service Kernel injoignable : {}", ex.getMessage());
+            return Mono.error(AuthException.remoteServiceUnavailable());
+        }
+        return Mono.error(ex);
+    }
+
+    private static boolean isConnectivityFailure(Throwable ex) {
+        Throwable current = ex;
+        while (current != null) {
+            if (current instanceof WebClientRequestException
+                    || current instanceof java.net.UnknownHostException
+                    || current instanceof java.net.ConnectException
+                    || current instanceof java.nio.channels.ClosedChannelException
+                    || current instanceof io.netty.handler.timeout.ReadTimeoutException
+                    || current instanceof java.util.concurrent.TimeoutException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

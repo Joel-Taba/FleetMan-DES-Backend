@@ -35,6 +35,9 @@ public class UserLocalEntity implements Persistable<UUID> {
     @Column("last_name")
     private String lastName;
 
+    @Column("phone")
+    private String phone;
+
     @Column("photo_url")
     private String photoUrl;
 

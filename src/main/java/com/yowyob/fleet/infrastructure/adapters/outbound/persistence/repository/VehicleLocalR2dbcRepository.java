@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Repository
@@ -27,4 +28,10 @@ public interface VehicleLocalR2dbcRepository extends ReactiveCrudRepository<Vehi
     Mono<Long> countByManagerIdAndStatus(UUID managerId, String status);
 
     Mono<VehicleLocalEntity> findByKernelResourceId(UUID kernelResourceId);
+
+    @Query("SELECT * FROM fleet.vehicles WHERE manager_id = :managerId AND deleted_at IS NULL AND updated_at > :since")
+    Flux<VehicleLocalEntity> findActiveByManagerIdUpdatedAfter(UUID managerId, Instant since);
+
+    @Query("SELECT * FROM fleet.vehicles WHERE manager_id = :managerId AND deleted_at IS NOT NULL AND deleted_at > :since")
+    Flux<VehicleLocalEntity> findDeletedByManagerIdSince(UUID managerId, Instant since);
 }

@@ -95,4 +95,12 @@ public class TripException extends DomainException {
             "TRP_010"
         );
     }
+
+    public static TripException codeCollision() {
+        return new TripException(
+            "Le code de trajet généré était déjà utilisé. Merci de réessayer.",
+            HttpStatus.CONFLICT,
+            "TRP_011"
+        );
+    }
 }

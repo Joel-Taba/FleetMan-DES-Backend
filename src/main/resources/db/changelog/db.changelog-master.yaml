@@ -126,3 +126,54 @@ databaseChangeLog:
   # 34. Multi-tenancy — tenant_id sur toutes les tables fleet
   - include:
       file: db/changelog/changes/034-tenant-id-all-tables.sql
+
+  # 35. Offline sync — idempotency store
+  - include:
+      file: db/changelog/changes/035-sync-mutations.sql
+
+  # 36. sync_mutations.response_body → TEXT (compatibilité R2DBC)
+  - include:
+      file: db/changelog/changes/036-sync-mutations-response-text.sql
+
+  # 37. Téléphone utilisateur (profil Mon compte)
+  - include:
+      file: db/changelog/changes/037-users-phone.sql
+
+  # 38. Identité admin démo (username / noms locaux)
+  - include:
+      file: db/changelog/changes/038-fix-demo-admin-identity.sql
+
+  # 39. 5 administrateurs plateforme pour démo Super Admin
+  - include:
+      file: db/changelog/changes/039-seed-platform-admins.sql
+
+  # 40. Resynchronise trip_code_seq (évite les collisions de code trajet
+  #     après un seed avec des trip_code explicites)
+  - include:
+      file: db/changelog/changes/040-fix-trip-code-sequence.sql
+
+  # 41. Corrige la collision d'IDs entre la migration 039 (admins démo) et les
+  #     chauffeurs démo driver2..driver5, qui avait écrasé leur identité.
+  - include:
+      file: db/changelog/changes/041-fix-admin-driver-id-collision.sql
+
+  # 42. Restaure l'identité (nom/prénom/téléphone) de manager1 et driver,
+  #     provisionnés hors flux applicatif donc jamais synchronisés.
+  - include:
+      file: db/changelog/changes/042-fix-manager1-driver-identity.sql
+
+  # 43. Logo + galerie photo de l'organisation (page Organisation du manager).
+  - include:
+      file: db/changelog/changes/043-fleet-manager-gallery.sql
+
+  # 44. annual_price nullable (plan sans prix annuel = facturation mensuelle seule).
+  - include:
+      file: db/changelog/changes/044-nullable-annual-price.sql
+
+  # 45. Marqueur local platform_admins (liste Administrateurs Système fiable).
+  - include:
+      file: db/changelog/changes/045-platform-admins-table.sql
+
+  # 46. manager_id nullable sur fleets (création par l'admin puis assignation).
+  - include:
+      file: db/changelog/changes/046-fleet-manager-nullable-assignable.sql

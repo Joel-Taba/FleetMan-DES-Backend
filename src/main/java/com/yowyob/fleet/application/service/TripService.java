@@ -93,15 +93,37 @@ public class TripService implements ManageTripUseCase {
 
             return assertNoActiveTripForDriver(cmd.driverId(), null)
                 .then(assertNoActiveTripForVehicle(cmd.vehicleId(), null))
+                // Le véhicule est réservé dès la planification (statut SCHEDULED), pas
+                // seulement au départ effectif : sinon il reste affichable comme
+                // "disponible" alors qu'un trajet lui est déjà promis (cancelTrip()
+                // suppose d'ailleurs déjà ce comportement pour libérer le véhicule
+                // d'un trajet SCHEDULED annulé — cette réservation à la création
+                // complète ce qui n'était qu'à moitié implémenté).
+                .then(Mono.defer(() -> {
+                    vehicle.setStatus("ON_TRIP");
+                    vehicle.setNew(false);
+                    return vehicleRepository.save(vehicle);
+                }))
                 .then(saveNewTrip(resolvedCmd));
         });
     }
 
     private Mono<Trip> saveNewTrip(CreateTripCommand cmd) {
+        // NB: pas de retry ici. `createTrip` est @Transactional : un doublon sur
+        // l'INSERT (trip_code déjà utilisé) fait échouer/abandonner la transaction
+        // PostgreSQL en cours (« current transaction is aborted »). Toute nouvelle
+        // requête SQL sur CETTE MÊME transaction échoue alors immédiatement, y
+        // compris un nouvel appel à generate_trip_code() — un retry silencieux ici
+        // ne fait que masquer l'échec réel derrière une erreur 500 incompréhensible.
+        // On surface donc une erreur métier claire ; le client peut relancer
+        // l'action (une nouvelle requête HTTP ouvre une nouvelle transaction).
         return generateTripCode()
                 .flatMap(tripCode -> persistTrip(tripCode, cmd))
-                .onErrorResume(DuplicateKeyException.class, ex -> generateTripCode()
-                        .flatMap(tripCode -> persistTrip(tripCode, cmd)));
+                .onErrorResume(DuplicateKeyException.class, ex -> {
+                    log.warn("⚠️ [TRIP] Collision de trip_code — vérifier la synchronisation de "
+                            + "fleet.trip_code_seq (migration 040) : {}", ex.getMessage());
+                    return Mono.error(TripException.codeCollision());
+                });
     }
 
     private Mono<String> generateTripCode() {
@@ -139,9 +161,9 @@ public class TripService implements ManageTripUseCase {
                         Mono.error(TripException.notFound(trip.getVehicleId()))
                     )
                     .flatMap(vehicle -> {
-                        if (!"AVAILABLE".equals(vehicle.getStatus())) {
-                            return Mono.error(TripException.vehicleOccupied());
-                        }
+                        // Le véhicule est déjà réservé (ON_TRIP) pour CE trajet depuis sa
+                        // création (voir createTrip) : plus rien à vérifier ici, l'exclusivité
+                        // a déjà été garantie par assertNoActiveTripForVehicle à la création.
 
                         LocalDateTime now = LocalDateTime.now();
                         trip.setStatus("DEPARTED");

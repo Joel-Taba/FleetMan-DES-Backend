@@ -28,6 +28,12 @@ public interface TripR2dbcRepository
     )
     Mono<Boolean> existsActiveTripForDriver(UUID driverId);
 
+    /** IDs des chauffeurs actuellement mobilisés par un trajet non terminé (pas de retour enregistré). */
+    @Query(
+        "SELECT DISTINCT driver_id FROM fleet.trips WHERE status IN ('SCHEDULED', 'DEPARTED', 'RETURNING')"
+    )
+    Flux<UUID> findActiveTripDriverIds();
+
     @Query(
         "SELECT COUNT(*) > 0 FROM fleet.trips WHERE driver_id = :driverId " +
             "AND status IN ('SCHEDULED', 'DEPARTED', 'RETURNING') AND id != :excludeTripId"

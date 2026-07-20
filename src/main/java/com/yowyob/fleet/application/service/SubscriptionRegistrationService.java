@@ -2,7 +2,10 @@ package com.yowyob.fleet.application.service;
 
 import com.yowyob.fleet.domain.ports.in.AuthUseCase;
 import com.yowyob.fleet.domain.ports.in.ManageSubscriptionPlanUseCase;
+import com.yowyob.fleet.domain.ports.out.ExternalFilePort;
+import com.yowyob.fleet.domain.ports.out.ExternalKycPort;
 import com.yowyob.fleet.domain.ports.out.MailPort;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.KycDocumentVerificationResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SubscriptionDocumentResponse;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.SubscriptionDocumentEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetManagerR2dbcRepository;
@@ -16,6 +19,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.nio.file.Files;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -33,6 +37,9 @@ public class SubscriptionRegistrationService {
     private final SubscriptionDocumentR2dbcRepository documentRepo;
     private final DatabaseClient db;
     private final MailPort mailPort;
+    private final ExternalKycPort kycPort;
+    private final ExternalFilePort filePort;
+    private final LocalFileStorageService localFileStorageService;
 
     public record DocumentInput(
             String docType,
@@ -146,6 +153,78 @@ public class SubscriptionRegistrationService {
 
     public Flux<SubscriptionDocumentResponse> listDocuments(UUID userId) {
         return documentRepo.findByUserId(userId).map(SubscriptionDocumentResponse::from);
+    }
+
+    public Mono<KycDocumentVerificationResponse> verifyDocument(
+            UUID userId,
+            UUID documentId,
+            String bearerToken) {
+        return documentRepo.findById(documentId)
+                .filter(doc -> doc.getUserId().equals(userId))
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("Document introuvable pour cette demande.")))
+                .flatMap(doc -> loadDocumentBytes(doc, bearerToken)
+                        .flatMap(file -> kycPort.verify(
+                                file.content(),
+                                file.fileName(),
+                                file.contentType(),
+                                null))
+                        .map(analysis -> KycDocumentVerificationResponse.from(doc, analysis))
+                        .switchIfEmpty(Mono.error(new IllegalStateException(
+                                "Le service KYC n'a renvoyé aucun résultat. Réessayez plus tard."))));
+    }
+
+    private record LoadedFile(byte[] content, String contentType, String fileName) {}
+
+    private Mono<LoadedFile> loadDocumentBytes(SubscriptionDocumentEntity doc, String bearerToken) {
+        String segment = extractFileSegment(doc.getFileUrl());
+        if (segment == null || segment.isBlank()) {
+            return Mono.error(new IllegalArgumentException("URL de fichier invalide."));
+        }
+        if (isUuid(segment)) {
+            return filePort.download(UUID.fromString(segment), bearerToken)
+                    .map(result -> new LoadedFile(
+                            result.content(),
+                            result.contentType() != null ? result.contentType() : doc.getFileMimeType(),
+                            result.fileName() != null ? result.fileName() : doc.getFileOriginalName()));
+        }
+        return Mono.fromCallable(() -> {
+            var path = localFileStorageService.resolve(segment);
+            if (!Files.exists(path)) {
+                throw new IllegalArgumentException("Fichier local introuvable : " + segment);
+            }
+            byte[] content = Files.readAllBytes(path);
+            String mime = doc.getFileMimeType();
+            if (mime == null || mime.isBlank()) {
+                mime = Files.probeContentType(path);
+            }
+            if (mime == null || mime.isBlank()) {
+                mime = "application/octet-stream";
+            }
+            String name = doc.getFileOriginalName() != null ? doc.getFileOriginalName() : segment;
+            return new LoadedFile(content, mime, name);
+        });
+    }
+
+    private static String extractFileSegment(String fileUrl) {
+        if (fileUrl == null || fileUrl.isBlank()) {
+            return null;
+        }
+        String normalized = fileUrl.trim();
+        int filesIdx = normalized.indexOf("/api/v1/files/");
+        if (filesIdx >= 0) {
+            return normalized.substring(filesIdx + "/api/v1/files/".length());
+        }
+        int slash = normalized.lastIndexOf('/');
+        return slash >= 0 ? normalized.substring(slash + 1) : normalized;
+    }
+
+    private static boolean isUuid(String value) {
+        try {
+            UUID.fromString(value);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     /**

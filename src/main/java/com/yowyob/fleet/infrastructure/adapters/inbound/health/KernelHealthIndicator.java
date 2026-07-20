@@ -49,11 +49,13 @@ public class KernelHealthIndicator implements ReactiveHealthIndicator {
                                 .build())
                         .onErrorResume(e -> {
                             String msg = e.getMessage() != null ? e.getMessage() : "";
-                            if (msg.contains("404")) {
+                            // Le endpoint /actuator/health du Kernel peut renvoyer 500
+                            // alors que l'auth (discover-contexts, select-context) fonctionne.
+                            if (msg.contains("404") || msg.contains("500")) {
                                 return Mono.just(Health.up()
                                         .withDetail("kernelUrl", kernelUrl)
                                         .withDetail("auth", "token_valid")
-                                        .withDetail("healthEndpoint", "not_exposed_404")
+                                        .withDetail("healthEndpoint", "degraded: " + msg)
                                         .build());
                             }
                             return Mono.just(Health.down()

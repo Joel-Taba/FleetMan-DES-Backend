@@ -54,3 +54,5 @@ management:
       enabled: false
     kafka:
       enabled: false
+    mail:
+      enabled: false

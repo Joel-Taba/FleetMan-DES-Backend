@@ -1,5 +1,6 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto;
 
+import java.util.List;
 import java.util.UUID;
 
 public record FleetManagerResponse(
@@ -11,5 +12,6 @@ public record FleetManagerResponse(
     String companyName,
     String status,
     Integer fleetCount,
-    String photoUrl
+    String photoUrl,
+    List<String> galleryUrls
 ) {}

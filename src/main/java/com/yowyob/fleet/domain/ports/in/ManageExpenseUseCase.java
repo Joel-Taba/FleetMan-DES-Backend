@@ -162,15 +162,18 @@ public interface ManageExpenseUseCase {
 
     /**
      * Résumé des dépenses par type pour un manager sur une période.
+     * Noms de champs alignés sur ExpenseSummaryResponse côté frontend
+     * (fuel/maintenance/incident/fine/toll/other/total) : le JSON est
+     * sérialisé directement depuis ces composants de record.
      */
     record ExpenseSummaryDto(
-            BigDecimal totalFuel,
-            BigDecimal totalMaintenance,
-            BigDecimal totalIncident,
-            BigDecimal totalFine,
-            BigDecimal totalToll,
-            BigDecimal totalOther,
-            BigDecimal grandTotal,
-            long totalCount
+            BigDecimal fuel,
+            BigDecimal maintenance,
+            BigDecimal incident,
+            BigDecimal fine,
+            BigDecimal toll,
+            BigDecimal other,
+            BigDecimal total,
+            long count
     ) {}
 }

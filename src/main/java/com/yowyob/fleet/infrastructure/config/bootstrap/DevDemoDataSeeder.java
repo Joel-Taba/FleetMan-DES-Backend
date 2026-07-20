@@ -41,6 +41,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                     return Mono.empty();
                 })
                 .then(runKernelOrgPatch())
+                .then(runKernelFleetExtPatch())
                 .doOnSuccess(v -> log.info("✅ [DEMO] Données de test chargées."))
                 .doOnError(e -> log.error("❌ [DEMO] Échec du seed : {}", e.getMessage(), e))
                 .onErrorResume(e -> Mono.empty())
@@ -49,6 +50,11 @@ public class DevDemoDataSeeder implements CommandLineRunner {
 
     private Mono<Void> runKernelOrgPatch() {
         var patch = new ResourceDatabasePopulator(new ClassPathResource("db/demo-kernel-org-patch.sql"));
+        return Mono.from(patch.populate(connectionFactory));
+    }
+
+    private Mono<Void> runKernelFleetExtPatch() {
+        var patch = new ResourceDatabasePopulator(new ClassPathResource("db/demo-seed-kernel-fleet-ext.sql"));
         return Mono.from(patch.populate(connectionFactory));
     }
 }

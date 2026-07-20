@@ -19,4 +19,9 @@ public class NoOpActorAdapter implements ExternalActorPort {
             UUID organizationId, String fleetRole) {
         return Mono.empty();
     }
+
+    @Override
+    public Mono<Void> assignPlatformRole(UUID kernelUserId, String fleetRole) {
+        return Mono.empty();
+    }
 }

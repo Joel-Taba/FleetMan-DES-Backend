@@ -30,4 +30,14 @@ public interface ExternalActorPort {
             String lastName,
             UUID organizationId,
             String fleetRole);
+
+    /**
+     * Assigne un rôle FleetMan (portée TENANT) à un utilisateur Kernel, sans créer d'acteur
+     * ni exiger d'organisation. Utilisé pour les rôles plateforme (FLEET_ADMIN,
+     * FLEET_SUPER_ADMIN) et pour les gestionnaires approuvés (FLEET_MANAGER) qui n'ont pas
+     * encore d'organisation/flotte au moment de la création du compte.
+     *
+     * Best-effort : ne doit jamais bloquer le flux appelant en cas d'échec Kernel.
+     */
+    Mono<Void> assignPlatformRole(UUID kernelUserId, String fleetRole);
 }

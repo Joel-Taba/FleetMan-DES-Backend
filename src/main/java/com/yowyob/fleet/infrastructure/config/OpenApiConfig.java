@@ -25,6 +25,7 @@ public class OpenApiConfig {
 
     // --- 1. DÉFINITION DES CONSTANTES (SPOF: Single Point Of Failure) ---
     public static final String TAG_MONITORING = "01. Monitoring";
+    public static final String TAG_SYNC = "01b. Offline Sync";
     public static final String TAG_AUTH = "02. Auth";
     public static final String TAG_ACCOUNT = "03. Account";
     public static final String TAG_SUPER_ADMIN = "04. Super Admin | Gestion des Administrateurs";

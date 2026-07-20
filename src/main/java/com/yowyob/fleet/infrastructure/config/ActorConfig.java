@@ -9,8 +9,30 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Configuration
 public class ActorConfig {
+
+    @Bean
+    @ConditionalOnProperty(name = "application.auth.mode", havingValue = "kernel")
+    public KernelRoleRegistry kernelRoleRegistry(
+            KernelAdminApiClient adminClient,
+            KernelTokenHolder tokenHolder,
+            @Value("${application.kernel.tenant-id}") String tenantId,
+            @Value("${application.kernel.organization-id:}") String organizationId,
+            @Value("${application.kernel.roles.fleet-driver-id:}") String fleetDriverRoleId,
+            @Value("${application.kernel.roles.fleet-manager-id:}") String fleetManagerRoleId,
+            @Value("${application.kernel.roles.fleet-admin-id:}") String fleetAdminRoleId,
+            @Value("${application.kernel.roles.fleet-super-admin-id:}") String fleetSuperAdminRoleId) {
+        Map<String, String> overrides = new HashMap<>();
+        overrides.put("FLEET_DRIVER", fleetDriverRoleId);
+        overrides.put("FLEET_MANAGER", fleetManagerRoleId);
+        overrides.put("FLEET_ADMIN", fleetAdminRoleId);
+        overrides.put("FLEET_SUPER_ADMIN", fleetSuperAdminRoleId);
+        return new KernelRoleRegistry(adminClient, tokenHolder, tenantId, organizationId, overrides);
+    }
 
     @Bean
     @ConditionalOnProperty(name = "application.auth.mode", havingValue = "kernel")
@@ -18,11 +40,11 @@ public class ActorConfig {
             KernelAdminApiClient adminClient,
             KernelTokenHolder tokenHolder,
             KernelCallSupport kernelCallSupport,
+            KernelRoleRegistry kernelRoleRegistry,
             @Value("${application.kernel.tenant-id}") String tenantId,
-            @Value("${application.kernel.roles.fleet-driver-id:}") String fleetDriverRoleId,
-            @Value("${application.kernel.roles.fleet-manager-id:}") String fleetManagerRoleId) {
+            @Value("${application.kernel.organization-id:}") String organizationId) {
         return new KernelActorAdapter(
-                adminClient, tokenHolder, kernelCallSupport, tenantId, fleetDriverRoleId, fleetManagerRoleId);
+                adminClient, tokenHolder, kernelCallSupport, kernelRoleRegistry, tenantId, organizationId);
     }
 
     @Bean

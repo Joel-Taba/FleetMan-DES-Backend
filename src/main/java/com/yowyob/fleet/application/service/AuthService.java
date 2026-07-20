@@ -59,8 +59,13 @@ public class AuthService implements AuthUseCase {
                     .flatMap(localId ->
                         ensureRoleProfileExistsForLocalId(response.user(), localId)
                             .then(checkUserAccessByLocalId(localId))
+                            .then(userRepo.findById(localId))
                     )
-                    .thenReturn(response)
+                    .map(local -> new AuthPort.AuthResponse(
+                            response.accessToken(),
+                            response.refreshToken(),
+                            mergeLocalIdentity(response.user(), local)
+                    ))
             );
     }
 
@@ -77,8 +82,13 @@ public class AuthService implements AuthUseCase {
                     .flatMap(localId ->
                         ensureRoleProfileExistsForLocalId(response.user(), localId)
                             .then(checkUserAccessByLocalId(localId))
+                            .then(userRepo.findById(localId))
                     )
-                    .thenReturn(response)
+                    .map(local -> new AuthPort.AuthResponse(
+                            response.accessToken(),
+                            response.refreshToken(),
+                            mergeLocalIdentity(response.user(), local)
+                    ))
             );
     }
 
@@ -156,7 +166,7 @@ public class AuthService implements AuthUseCase {
     public Mono<AuthPort.UserDetail> me(String token) {
         return authPort
             .getUserProfile(token)
-            .flatMap(summary -> authPort.getUserById(summary.id(), token))
+            .flatMap(summary -> authPort.getUserById(summary.id(), token).defaultIfEmpty(summary))
             .flatMap(remote ->
                 resolveLocalUser(remote)
                     .flatMap(localId -> ensureRoleProfileExistsForLocalId(remote, localId))
@@ -222,11 +232,24 @@ public class AuthService implements AuthUseCase {
     public Mono<AuthPort.AuthResponse> refreshToken(String refreshToken) {
         return authPort
             .refresh(refreshToken)
-            .flatMap(response ->
-                resolveLocalUser(response.user())
-                    .flatMap(localId -> ensureRoleProfileExistsForLocalId(response.user(), localId))
-                    .thenReturn(response)
-            );
+            .switchIfEmpty(Mono.error(AuthException.tokenExpired()))
+            .flatMap(response -> {
+                Mono<AuthPort.UserDetail> remoteUser = response.user() != null && response.user().id() != null
+                    ? Mono.just(response.user())
+                    : authPort.getUserProfile(response.accessToken());
+                return remoteUser.flatMap(user ->
+                    resolveLocalUser(user)
+                        .flatMap(localId ->
+                            ensureRoleProfileExistsForLocalId(user, localId)
+                                .then(userRepo.findById(localId))
+                        )
+                        .map(local -> new AuthPort.AuthResponse(
+                                response.accessToken(),
+                                response.refreshToken(),
+                                mergeLocalIdentity(user, local)
+                        ))
+                );
+            });
     }
 
     @Override
@@ -235,10 +258,31 @@ public class AuthService implements AuthUseCase {
         String token,
         UpdateProfileCommand command
     ) {
-        return authPort
-            .updateUserProfile(userId, token, command)
-            .flatMap(remote -> resolveLocalUser(remote).thenReturn(remote))
-            .flatMap(this::enrichWithLocalData);
+        return userRepo.findByKernelId(userId)
+            .switchIfEmpty(Mono.defer(() -> userRepo.findById(userId)))
+            .switchIfEmpty(Mono.error(new AuthException(
+                    "Utilisateur local introuvable.", HttpStatus.NOT_FOUND, "AUTH_404")))
+            .flatMap(local -> {
+                if (command.firstName() != null && !command.firstName().isBlank()) {
+                    local.setFirstName(command.firstName().trim());
+                }
+                if (command.lastName() != null && !command.lastName().isBlank()) {
+                    local.setLastName(command.lastName().trim());
+                }
+                if (command.email() != null && !command.email().isBlank()) {
+                    local.setEmail(command.email().trim());
+                }
+                if (command.phone() != null) {
+                    local.setPhone(command.phone().isBlank() ? null : command.phone().trim());
+                }
+                local.setNew(false);
+                return userRepo.save(local);
+            })
+            .flatMap(saved ->
+                authPort.getUserProfile(token)
+                    .map(remote -> mergeLocalIdentity(remote, saved))
+                    .flatMap(this::enrichWithLocalData)
+            );
     }
 
     @Override
@@ -302,48 +346,38 @@ public class AuthService implements AuthUseCase {
         return userRepo.findByKernelId(remote.id())
             .switchIfEmpty(Mono.defer(() -> userRepo.findById(remote.id())))
             .flatMap(local -> {
-                local.setUsername(remote.username());
-                local.setEmail(remote.email());
-                local.setFirstName(remote.firstName());
-                local.setLastName(remote.lastName());
-                local.setPhotoUrl(remote.photoUrl());
+                mergeRemoteIntoLocal(local, remote);
                 local.setLastLoginAt(Instant.now());
                 local.setKernelId(remote.id());
                 if (local.getTenantId() == null) {
                     local.setTenantId(resolveTenantId());
                 }
                 local.setNew(false);
-                return userRepo.save(local).map(saved -> saved.getId());
+                return userRepo.save(local).map(UserLocalEntity::getId);
             })
             .switchIfEmpty(Mono.defer(() ->
                 userRepo.findByEmail(remote.email())
                     .flatMap(existingByEmail -> {
                         log.info("🔄 [SYNC] Merge email={} — local id={}, kernel_id={}",
                                 remote.email(), existingByEmail.getId(), remote.id());
-                        existingByEmail.setUsername(
-                            remote.username() != null ? remote.username() : existingByEmail.getUsername());
-                        existingByEmail.setFirstName(
-                            remote.firstName() != null ? remote.firstName() : existingByEmail.getFirstName());
-                        existingByEmail.setLastName(
-                            remote.lastName() != null ? remote.lastName() : existingByEmail.getLastName());
-                        existingByEmail.setPhotoUrl(
-                            remote.photoUrl() != null ? remote.photoUrl() : existingByEmail.getPhotoUrl());
+                        mergeRemoteIntoLocal(existingByEmail, remote);
                         existingByEmail.setLastLoginAt(Instant.now());
                         existingByEmail.setKernelId(remote.id());
                         if (existingByEmail.getTenantId() == null) {
                             existingByEmail.setTenantId(resolveTenantId());
                         }
                         existingByEmail.setNew(false);
-                        return userRepo.save(existingByEmail).map(saved -> saved.getId());
+                        return userRepo.save(existingByEmail).map(UserLocalEntity::getId);
                     })
                     .switchIfEmpty(Mono.defer(() -> {
                         log.info("📝 [SYNC] Nouveau user : kernel_id={} email={}", remote.id(), remote.email());
                         UserLocalEntity n = UserLocalEntity.builder()
                             .id(remote.id())
-                            .username(remote.username())
-                            .email(remote.email())
+                            .username(nonBlank(remote.username(), remote.email()))
+                            .email(nonBlank(remote.email(), remote.username() + "@local.fleetman"))
                             .firstName(remote.firstName())
                             .lastName(remote.lastName())
+                            .phone(remote.phone())
                             .photoUrl(remote.photoUrl())
                             .isActive(true)
                             .lastLoginAt(Instant.now())
@@ -351,9 +385,70 @@ public class AuthService implements AuthUseCase {
                             .tenantId(resolveTenantId())
                             .build();
                         n.setNew(true);
-                        return userRepo.save(n).map(saved -> saved.getId());
+                        return userRepo.save(n).map(UserLocalEntity::getId);
                     }))
             ));
+    }
+
+    private static void mergeRemoteIntoLocal(UserLocalEntity local, AuthPort.UserDetail remote) {
+        if (nonBlank(remote.username(), null) != null && !looksLikeUuid(remote.username())) {
+            local.setUsername(remote.username());
+        }
+        if (nonBlank(remote.email(), null) != null) {
+            local.setEmail(remote.email());
+        }
+        if (nonBlank(remote.firstName(), null) != null) {
+            local.setFirstName(remote.firstName());
+        }
+        if (nonBlank(remote.lastName(), null) != null) {
+            local.setLastName(remote.lastName());
+        }
+        if (nonBlank(remote.phone(), null) != null) {
+            local.setPhone(remote.phone());
+        }
+        if (nonBlank(remote.photoUrl(), null) != null) {
+            local.setPhotoUrl(remote.photoUrl());
+        }
+    }
+
+    private static boolean looksLikeUuid(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            UUID.fromString(value.trim());
+            return true;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private static String nonBlank(String value, String fallback) {
+        if (value != null && !value.isBlank() && !"null".equalsIgnoreCase(value.trim())) {
+            return value.trim();
+        }
+        return fallback;
+    }
+
+    private AuthPort.UserDetail mergeLocalIdentity(AuthPort.UserDetail remote, UserLocalEntity local) {
+        String remoteUsername = looksLikeUuid(remote.username()) ? null : remote.username();
+        return new AuthPort.UserDetail(
+            local.getId(),
+            nonBlank(remoteUsername, local.getUsername()),
+            nonBlank(remote.email(), local.getEmail()),
+            nonBlank(remote.phone(), local.getPhone()),
+            nonBlank(remote.firstName(), local.getFirstName()),
+            nonBlank(remote.lastName(), local.getLastName()),
+            remote.service(),
+            remote.roles(),
+            remote.permissions(),
+            nonBlank(remote.photoUrl(), local.getPhotoUrl()),
+            remote.companyName(),
+            remote.licenceNumber(),
+            remote.vehicleId(),
+            local.isActive(),
+            remote.lastLoginAt() != null ? remote.lastLoginAt() : local.getLastLoginAt()
+        );
     }
 
     private UUID resolveTenantId() {
@@ -398,56 +493,62 @@ public class AuthService implements AuthUseCase {
     private Mono<AuthPort.UserDetail> enrichWithLocalData(
         AuthPort.UserDetail remote
     ) {
-        if (remote.roles().contains("FLEET_MANAGER")) {
-            return managerPort
-                .getCompanyName(remote.id())
-                .map(c ->
-                    new AuthPort.UserDetail(
-                        remote.id(),
-                        remote.username(),
-                        remote.email(),
-                        remote.phone(),
-                        remote.firstName(),
-                        remote.lastName(),
-                        remote.service(),
-                        remote.roles(),
-                        remote.permissions(),
-                        remote.photoUrl(),
-                        c,
-                        null,
-                        null,
-                        remote.isActive(),
-                        remote.lastLoginAt()
-                    )
-                )
-                .defaultIfEmpty(remote);
-        }
-        if (remote.roles().contains("FLEET_DRIVER")) {
-            return driverPort
-                .findById(remote.id())
-                .map(d ->
-                    new AuthPort.UserDetail(
-                        remote.id(),
-                        remote.username(),
-                        remote.email(),
-                        remote.phone(),
-                        remote.firstName(),
-                        remote.lastName(),
-                        remote.service(),
-                        remote.roles(),
-                        remote.permissions(),
-                        remote.photoUrl(),
-                        null,
-                        d.licenceNumber(),
-                        d.assignedVehicleId() != null
-                            ? d.assignedVehicleId().toString()
-                            : null,
-                        remote.isActive(),
-                        remote.lastLoginAt()
-                    )
-                )
-                .defaultIfEmpty(remote);
-        }
-        return Mono.just(remote);
+        return userRepo.findByKernelId(remote.id())
+            .switchIfEmpty(Mono.defer(() -> userRepo.findById(remote.id())))
+            .map(local -> mergeLocalIdentity(remote, local))
+            .defaultIfEmpty(remote)
+            .flatMap(merged -> {
+                if (merged.roles().contains("FLEET_MANAGER")) {
+                    return managerPort
+                        .getCompanyName(merged.id())
+                        .map(c ->
+                            new AuthPort.UserDetail(
+                                merged.id(),
+                                merged.username(),
+                                merged.email(),
+                                merged.phone(),
+                                merged.firstName(),
+                                merged.lastName(),
+                                merged.service(),
+                                merged.roles(),
+                                merged.permissions(),
+                                merged.photoUrl(),
+                                c,
+                                merged.licenceNumber(),
+                                merged.vehicleId(),
+                                merged.isActive(),
+                                merged.lastLoginAt()
+                            )
+                        )
+                        .defaultIfEmpty(merged);
+                }
+                if (merged.roles().contains("FLEET_DRIVER")) {
+                    return driverPort
+                        .findById(merged.id())
+                        .map(d ->
+                            new AuthPort.UserDetail(
+                                merged.id(),
+                                merged.username(),
+                                merged.email(),
+                                merged.phone(),
+                                merged.firstName(),
+                                merged.lastName(),
+                                merged.service(),
+                                merged.roles(),
+                                merged.permissions(),
+                                merged.photoUrl(),
+                                merged.companyName(),
+                                d.licenceNumber(),
+                                d.assignedVehicleId() != null
+                                    ? d.assignedVehicleId().toString()
+                                    : null,
+                                merged.isActive(),
+                                merged.lastLoginAt()
+                            )
+                        )
+                        .defaultIfEmpty(merged);
+                }
+                return Mono.just(merged);
+            });
     }
 }

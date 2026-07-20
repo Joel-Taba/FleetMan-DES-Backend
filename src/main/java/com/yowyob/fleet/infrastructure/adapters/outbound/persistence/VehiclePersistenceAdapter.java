@@ -63,7 +63,7 @@ public class VehiclePersistenceAdapter implements VehiclePersistencePort {
                 maintenanceRepo.findByVehicleId(vehicleId)
                     .map(existing -> { maint.setId(existing.getId()); maint.setNew(false); return maint; })
                     .defaultIfEmpty(maint).flatMap(maintenanceRepo::save)
-        ).thenReturn(new VehicleLocalEntity(vehicleId, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, false));
+        ).thenReturn(new VehicleLocalEntity(vehicleId, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, false));
     }
 
     @Override

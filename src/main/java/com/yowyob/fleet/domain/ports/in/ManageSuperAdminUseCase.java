@@ -6,8 +6,8 @@ import reactor.core.publisher.Mono;
 import java.util.UUID;
 
 public interface ManageSuperAdminUseCase {
-    Mono<AuthPort.AuthResponse> createAdmin(AuthUseCase.RegisterCommand command);
+    Mono<AuthPort.UserDetail> createAdmin(AuthUseCase.RegisterCommand command);
     Flux<AuthPort.UserDetail> listAdmins(String token);
     Mono<AuthPort.UserDetail> getAdminDetails(UUID adminId, String token);
-    Mono<Void> toggleAdminStatus(UUID adminId, UUID requesterId);
+    Mono<AuthPort.UserDetail> toggleAdminStatus(UUID adminId, UUID requesterId);
 }

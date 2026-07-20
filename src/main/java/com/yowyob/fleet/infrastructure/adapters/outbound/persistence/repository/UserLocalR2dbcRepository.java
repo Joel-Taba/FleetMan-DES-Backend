@@ -3,9 +3,12 @@ package com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.UserLocalEntity;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
-import reactor.core.publisher.Mono; // <--- L'IMPORT MANQUANT
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import java.util.Collection;
 
 import java.util.UUID;
+import java.util.Collection;
 
 @Repository
 public interface UserLocalR2dbcRepository extends ReactiveCrudRepository<UserLocalEntity, UUID> {
@@ -26,4 +29,6 @@ public interface UserLocalR2dbcRepository extends ReactiveCrudRepository<UserLoc
      * Recherche un utilisateur par son ID Kernel (UUID Kernel ≠ UUID local potentiellement).
      */
     Mono<UserLocalEntity> findByKernelId(UUID kernelId);
+
+    Flux<UserLocalEntity> findByEmailIn(Collection<String> emails);
 }

@@ -10,6 +10,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.server.ServerWebInputException;
 
@@ -102,6 +103,17 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, ex.getMessage());
         problem.setTitle("Kernel Service Error");
         problem.setProperty("kernelCode", ex.getKernelCode());
+        return problem;
+    }
+
+    @ExceptionHandler(WebClientRequestException.class)
+    public ProblemDetail handleWebClientRequestException(WebClientRequestException ex) {
+        log.error("❌ External service unreachable : {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Le service distant est temporairement injoignable. Vérifiez votre connexion réseau."
+        );
+        problem.setTitle("Service Unavailable");
         return problem;
     }
 

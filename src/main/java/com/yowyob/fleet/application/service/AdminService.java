@@ -1,9 +1,12 @@
 package com.yowyob.fleet.application.service;
 
 import com.yowyob.fleet.domain.exception.AdminException;
+import com.yowyob.fleet.domain.ports.in.AuthUseCase;
 import com.yowyob.fleet.domain.ports.in.ManageAdminUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
+import com.yowyob.fleet.domain.ports.out.ExternalActorPort;
 import com.yowyob.fleet.domain.ports.out.FleetManagerPersistencePort;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.FleetManagerEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.UserLocalEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetManagerR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
@@ -13,7 +16,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -21,30 +24,29 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AdminService implements ManageAdminUseCase {
 
-    private final AuthPort authPort;
     private final UserLocalR2dbcRepository userRepo;
     private final FleetManagerR2dbcRepository managerRepo;
+    private final AuthPort authPort;
+    private final ExternalActorPort externalActorPort;
     private final FleetManagerPersistencePort managerPersistencePort;
 
     @Override
     public Flux<AuthPort.UserDetail> listFleetManagers(String token) {
-        return authPort.getUsersByService("FLEET_MANAGEMENT", token)
-                .filter(u -> u.roles().contains("FLEET_MANAGER"))
-                .flatMap(remote -> syncIdentityAndRepairProfile(remote));
+        return managerRepo.findAll()
+                .flatMap(mgr -> userRepo.findById(mgr.getUserId())
+                        .map(user -> toManagerDetail(user, mgr)))
+                .sort((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(
+                        safeName(a), safeName(b)));
     }
 
     @Override
     public Mono<AuthPort.UserDetail> getManagerDetails(UUID managerId, String token, boolean isSuperAdmin) {
-        return authPort.getUserById(managerId, token)
-                .flatMap(remote -> {
-                    if (!isSuperAdmin && remote.roles().contains("FLEET_SUPER_ADMIN")) {
-                        return Mono.error(AdminException.masterAccessForbidden());
-                    }
-                    if (!remote.roles().contains("FLEET_MANAGER")) {
-                        return Mono.error(AdminException.actionForbiddenOnUserType());
-                    }
-                    return syncIdentityAndRepairProfile(remote);
-                });
+        return userRepo.findById(managerId)
+                .switchIfEmpty(Mono.defer(() -> userRepo.findByKernelId(managerId)))
+                .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
+                .flatMap(user -> managerRepo.findById(user.getId())
+                        .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
+                        .map(mgr -> toManagerDetail(user, mgr)));
     }
 
     @Override
@@ -61,64 +63,69 @@ public class AdminService implements ManageAdminUseCase {
                 .then();
     }
 
-    /**
-     * COEUR DE LA SYNCHRO :
-     * 1. Met à jour l'identité (fleet.users) depuis le service Auth.
-     * 2. Vérifie/Crée le profil métier (fleet.fleet_managers) - SELF HEALING.
-     * 3. Retourne le UserDetail enrichi.
-     */
-    private Mono<AuthPort.UserDetail> syncIdentityAndRepairProfile(AuthPort.UserDetail remote) {
+    @Override
+    public Mono<AuthPort.UserDetail> createManager(AuthUseCase.RegisterCommand command, String companyName) {
+        return authPort.registerInRemote(command)
+                .flatMap(res -> {
+                    // registerInRemote ne renvoie pas de session exploitable (voir
+                    // SuperAdminService.createAdmin) : on utilise directement le detail
+                    // renvoyé (id/username/email/phone Kernel + firstName/lastName/roles
+                    // de la commande) plutôt que de re-fetcher avec un token vide.
+                    UUID userId = res.user().id();
+
+                    Mono<Void> roleFlow = externalActorPort.assignPlatformRole(userId, "FLEET_MANAGER")
+                            .onErrorResume(e -> {
+                                log.warn("⚠️ Assignation rôle FLEET_MANAGER ignorée pour {} : {}", userId, e.getMessage());
+                                return Mono.empty();
+                            });
+
+                    // syncNewManagerIdentity DOIT s'exécuter avant createProfile : la table
+                    // fleet.fleet_managers a une FK vers fleet.users(id), qui n'existe pas
+                    // encore tant que le mirroir local n'a pas été créé.
+                    return roleFlow
+                            .then(syncNewManagerIdentity(res.user()))
+                            .flatMap(detail -> managerPersistencePort.createProfile(userId, companyName)
+                                    .thenReturn(detail));
+                });
+    }
+
+    private Mono<AuthPort.UserDetail> syncNewManagerIdentity(AuthPort.UserDetail remote) {
         return userRepo.findById(remote.id())
-                .flatMap(local -> {
-                    local.setUsername(remote.username());
-                    local.setEmail(remote.email());
-                    local.setFirstName(remote.firstName());
-                    local.setLastName(remote.lastName());
-                    local.setPhotoUrl(remote.photoUrl());
-                    local.setNewRecord(false);
-                    return userRepo.save(local);
-                })
                 .switchIfEmpty(Mono.defer(() -> {
                     UserLocalEntity n = UserLocalEntity.builder()
                             .id(remote.id()).username(remote.username()).email(remote.email())
+                            .phone(remote.phone())
                             .firstName(remote.firstName()).lastName(remote.lastName())
-                            .photoUrl(remote.photoUrl()).isActive(true).build();
+                            .isActive(true).build();
                     n.setNewRecord(true);
                     return userRepo.save(n);
                 }))
-                .flatMap(localUser ->
-                    managerRepo.existsById(localUser.getId())
-                        .flatMap(exists -> {
-                            if (Boolean.TRUE.equals(exists)) {
-                                return Mono.empty();
-                            }
-                            return managerPersistencePort
-                                    .createProfile(localUser.getId(), "Société de " + remote.lastName())
-                                    .onErrorResume(e -> {
-                                        log.warn("⚠️ Profil manager non créé pour {} : {}",
-                                                localUser.getId(), e.getMessage());
-                                        return Mono.empty();
-                                    });
-                        })
-                        .then(managerPersistencePort.getCompanyName(localUser.getId())
-                                .defaultIfEmpty(""))
-                        .map(company -> new AuthPort.UserDetail(
-                                localUser.getId(),
-                                remote.username(),
-                                remote.email(),
-                                remote.phone(),
-                                remote.firstName(),
-                                remote.lastName(),
-                                remote.service(),
-                                remote.roles() != null ? remote.roles() : java.util.List.of("FLEET_MANAGER"),
-                                remote.permissions(),
-                                remote.photoUrl(),
-                                company.isBlank() ? null : company,
-                                null,
-                                null,
-                                localUser.isActive(),
-                                localUser.getLastLoginAt()
-                        ))
-                );
+                .thenReturn(remote);
+    }
+
+    private static String safeName(AuthPort.UserDetail u) {
+        String name = ((u.firstName() != null ? u.firstName() : "")
+                + " " + (u.lastName() != null ? u.lastName() : "")).trim();
+        return name.isBlank() ? (u.username() != null ? u.username() : "") : name;
+    }
+
+    private AuthPort.UserDetail toManagerDetail(UserLocalEntity user, FleetManagerEntity mgr) {
+        return new AuthPort.UserDetail(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getPhone(),
+                user.getFirstName(),
+                user.getLastName(),
+                "FLEET_MANAGEMENT",
+                List.of("FLEET_MANAGER"),
+                List.of(),
+                user.getPhotoUrl(),
+                mgr.getCompanyName(),
+                null,
+                null,
+                user.isActive(),
+                user.getLastLoginAt()
+        );
     }
 }

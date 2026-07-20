@@ -1,111 +1,29 @@
 \documentclass[12pt,a4paper]{report}
+\input{packages}
 
-% --- Encodage et langue -------------------------------------------------------
-\usepackage{fontspec}
-\usepackage{polyglossia}
-\setmainlanguage{french}
-
-% --- Mise en page -------------------------------------------------------------
-\usepackage[top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm]{geometry}
-\usepackage{setspace}
-\onehalfspacing
-\usepackage{lscape}   % rotation en paysage
-\usepackage{pdflscape} % paysage avec rotation PDF viewer
-
-% --- Typographie --------------------------------------------------------------
-\usepackage{microtype}
-\usepackage{parskip}
-
-% --- Couleurs -----------------------------------------------------------------
-\usepackage[dvipsnames,table]{xcolor}
-\definecolor{fleetblue}{RGB}{19,109,236}
-\definecolor{fleetdark}{RGB}{11,17,32}
-\definecolor{fleetgray}{RGB}{107,114,128}
-\definecolor{fleetsuccess}{RGB}{16,185,129}
-\definecolor{fleetwarning}{RGB}{245,158,11}
-\definecolor{fleeterror}{RGB}{239,68,68}
-
-% --- Graphiques et figures ----------------------------------------------------
-\usepackage{graphicx}
-\usepackage{float}     % [H] placement strict
-\usepackage{caption}
-\usepackage{subcaption}
-\usepackage{rotating}  % sidewaysfigure
-\usepackage{tikz}
-\usetikzlibrary{shapes.geometric,arrows.meta,positioning,
-                fit,backgrounds,calc}
-
-% Chemin vers les figures PDF converties
-\graphicspath{{figures/}}
-
-% Style des légendes : gras pour le label, italique pour le titre
-\captionsetup{labelfont=bf, font=small, skip=6pt}
-\captionsetup[figure]{position=bottom}
-\captionsetup[table]{position=above}
-
-% --- Tableaux -----------------------------------------------------------------
-\usepackage{booktabs}
-\usepackage{longtable}
-\usepackage{tabularx}
-\usepackage{multirow}
-\usepackage{array}
-
-% --- Algorithmes et pseudo-code -----------------------------------------------
+% --- Compléments spécifiques au rapport --------------------------------------
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \makeatletter
 \renewcommand{\ALG@name}{Algorithme}
 \makeatother
-
-% --- Mathématiques ------------------------------------------------------------
 \usepackage{amsmath}
 \usepackage{amssymb}
 
-% --- Liens -------------------------------------------------------------------
-\usepackage[hidelinks,
-  pdftitle={FleetMan -- Rapport d'Analyse et de Conception},
-  pdfauthor={Groupe 5GI Depot 1},
-  pdfsubject={Gestion de Flotte de Vehicules}]{hyperref}
+\captionsetup{labelfont=bf, font=small, skip=6pt}
+\captionsetup[figure]{position=bottom}
+\captionsetup[table]{position=above}
 
-% --- En-têtes et pieds de page -----------------------------------------------
-\usepackage{fancyhdr}
-\usepackage{emptypage}
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[L]{\small\textcolor{fleetgray}{\leftmark}}
-\fancyhead[R]{\small\textcolor{fleetblue}{\textbf{FleetMan -- Rapport A\&C}}}
-\fancyfoot[C]{\small\thepage}
-\renewcommand{\headrulewidth}{0.4pt}
-\setlength{\headheight}{14pt}
-
-% --- Boîtes personnalisées ---------------------------------------------------
-\usepackage{tcolorbox}
-\tcbuselibrary{skins,breakable}
-\newtcolorbox{remarque}[1][]{colback=fleetblue!5,colframe=fleetblue,
-  fonttitle=\bfseries,title={Remarque},breakable,#1}
-\newtcolorbox{definition}[2][]{colback=fleetdark!4,colframe=fleetdark,
-  fonttitle=\bfseries\color{white},coltitle=white,title={#2},breakable,#1}
-\newtcolorbox{lecture}[1][]{colback=fleetsuccess!5,colframe=fleetsuccess,
-  fonttitle=\bfseries\color{white},coltitle=white,
-  title={Lecture du diagramme},breakable,#1}
-
-% --- Listes et titres --------------------------------------------------------
-\usepackage{enumitem}
-\usepackage{titlesec}
-\titleformat{\chapter}[display]
-  {\normalfont\huge\bfseries\color{fleetdark}}
-  {\chaptertitlename\ \thechapter}{20pt}{\Huge}
-\titlespacing*{\chapter}{0pt}{-10pt}{30pt}
-\titleformat{\section}{\normalfont\Large\bfseries\color{fleetblue}}
-  {\thesection}{1em}{}
-\titleformat{\subsection}{\normalfont\large\bfseries\color{fleetdark}}
-  {\thesubsection}{1em}{}
-\titleformat{\subsubsection}{\normalfont\normalsize\bfseries\color{fleetgray}}
-  {\thesubsubsection}{1em}{}
-
-% --- Bibliographie -----------------------------------------------------------
 \usepackage[backend=biber,style=authoryear,sorting=nyt]{biblatex}
 \addbibresource{references.bib}
+
+% Métadonnées page de garde
+\promotion{4GI}
+\anneeAcad{2025--2026}
+\encadrant{Pr, Dr, Ing Djotio Thomas}
+\membre{DJUZEU TABA II LILIAN JOEL}{22P274}
+\membreB{DONFACK MEGNEGUE SERENA NELLY}
+\membreC{EWANE BATCHAKUI NEHEMIE TURING}
 
 % =============================================================================
 \begin{document}
@@ -113,24 +31,28 @@
 
 % --- Page de garde -----------------------------------------------------------
 \begin{titlepage}
-  \pagecolor{fleetdark}\color{white}\centering
-  \vspace*{1.5cm}
-  {\small ECOLE POLYTECHNIQUE DE YAOUNDE\\
-   Departement Genie Informatique --- 5\textsuperscript{eme} Annee}\\[1.2cm]
-  \textcolor{fleetblue}{\rule{0.8\textwidth}{2pt}}\\[0.5cm]
-  {\fontsize{48}{58}\bfseries\textcolor{fleetblue}{FleetMan}}\\[0.3cm]
-  {\Large Plateforme de Gestion de Flotte de Vehicules}\\[0.5cm]
-  \textcolor{fleetblue}{\rule{0.8\textwidth}{1pt}}\\[1cm]
-  {\LARGE\bfseries Rapport d'Analyse et de Conception}\\[0.3cm]
-  {\large Architecture Hexagonale Reactive --- Backend Spring Boot}\\[1.5cm]
-  \begin{tabular}{rl}
-    \textcolor{white!70}{Theme :}     & \textbf{Gestion de Flotte Multi-Tenant} \\[0.3cm]
-    \textcolor{white!70}{Stack :}     & \textbf{Spring Boot 3.2 $\cdot$ WebFlux $\cdot$ PostgreSQL $\cdot$ React} \\[0.3cm]
-    \textcolor{white!70}{Promotion :} & \textbf{5GI --- Depot 1 --- Annee 2025--2026} \\[0.3cm]
-    \textcolor{white!70}{Encadrant :} & \textbf{[Nom de l'encadrant]} \\
-  \end{tabular}
+  \pagecolor{secondaryColor}\color{white}\centering
+  \vspace*{1.8cm}
+  {\small\textbf{ÉCOLE POLYTECHNIQUE DE YAOUNDÉ}}\\[0.2cm]
+  {\small Département Génie Informatique --- Promotion \FleetPromotion}\\[1.5cm]
+  \textcolor{primaryColor}{\rule{0.75\textwidth}{2pt}}\\[0.6cm]
+  {\fontsize{46}{56}\bfseries\textcolor{primaryColor}{FleetMan}}\\[0.4cm]
+  {\Large Plateforme de Gestion de Flotte de Véhicules}\\[0.6cm]
+  \textcolor{primaryColor}{\rule{0.75\textwidth}{1pt}}\\[1.2cm]
+  {\LARGE\bfseries Rapport d'Analyse et de Conception}\\[2cm]
+  \begin{minipage}{0.85\textwidth}
+    \raggedright
+    {\large\textbf{Réalisé par :}}\\[0.4cm]
+    \begin{itemize}[leftmargin=1.2cm, itemsep=0.2cm]
+      \item \FleetMembreA\quad(\FleetMatriculeA)
+      \item \FleetMembreB
+      \item \FleetMembreC
+    \end{itemize}
+    \vspace{0.8cm}
+    {\large\textbf{Encadré par :}} \FleetEncadrant
+  \end{minipage}
   \vfill
-  {\small Juin 2026}
+  {\small Année académique \FleetAnneeAcad --- Juillet 2026}
 \end{titlepage}
 \nopagecolor
 
@@ -148,33 +70,43 @@
 \thispagestyle{fancy}
 
 \noindent\textbf{Contexte et objectif.}
-La gestion efficace d'une flotte de vehicules constitue un enjeu operationnel
-et economique majeur pour les entreprises de transport en Afrique centrale.
-Ce projet vise a concevoir et implementer \textbf{FleetMan}, une plateforme
-B2B de gestion de flotte complete, deploye comme module metier de
-l'ecosysteme RT-Comops.
+La gestion efficace d'une flotte de véhicules constitue un enjeu opérationnel
+et économique majeur pour les entreprises de transport en Afrique centrale.
+Ce projet vise à concevoir et implémenter \textbf{FleetMan}, une plateforme
+B2B de gestion de flotte complète, déployée comme module métier de
+l'écosystème RT-Comops, avec un back-office web et un mode hors ligne
+pour les zones à connectivité intermittente.
 
-\noindent\textbf{Materiel et methodes.}
-Le backend est developpe en Java 21 sur Spring Boot 3.2 avec une architecture
-hexagonale reactive (WebFlux, R2DBC, PostgreSQL 16).
-Le frontend est realise en Next.js 16 avec TypeScript et Tailwind CSS.
-La methodologie adoptee est le Domain-Driven Design associe au pattern
+\noindent\textbf{Matériel et méthodes.}
+Le backend est développé en Java~21 sur Spring Boot~3.2 avec une architecture
+hexagonale réactive (WebFlux, R2DBC, PostgreSQL~16, Redis, Kafka).
+Le frontend est réalisé en Next.js~15 avec TypeScript, Tailwind CSS,
+Serwist (PWA) et IndexedDB (Dexie).
+L'authentification est déléguée au Kernel RT-Comops (JWT RS256, flux
+\texttt{discover-contexts} / \texttt{select-context}).
+La méthodologie adopte le Domain-Driven Design associé au pattern
 Ports \& Adapters.
 
-\noindent\textbf{Resultats.}
-La plateforme expose \textbf{134 endpoints REST} documentes via Swagger/OpenAPI,
-repartis en \textbf{20 modules fonctionnels}.
-Dix migrations Liquibase structurent \textbf{35 tables PostgreSQL}.
-La latence P95 cible est inferieure a 200\,ms.
+\noindent\textbf{Résultats.}
+La plateforme expose plus de \textbf{300 points d'accès REST} répartis sur
+\textbf{33 contrôleurs} et \textbf{24 modules fonctionnels}.
+Trente-cinq migrations Liquibase structurent le schéma PostgreSQL
+(multi-tenant, intégration Kernel, idempotence sync).
+Le mode offline (cache local, file de mutations, API \texttt{/api/v1/sync})
+couvre les rôles gestionnaire, admin et super-admin.
+L'intégration Kernel (auth, organisations, ressources, fichiers, acteurs)
+est opérationnelle en mode \texttt{kernel}.
 
 \noindent\textbf{Discussion et conclusion.}
-FleetMan constitue une reponse complete aux besoins de supervision de flotte
-identifies. Son architecture hexagonale garantit une testabilite maximale
-et une extractibilite vers des microservices sans refactorisation du domaine.
+FleetMan constitue une réponse complète aux besoins de supervision de flotte
+identifiés. Son architecture hexagonale garantit une testabilité maximale,
+une résilience réseau via le mode offline, et une intégration native
+à l'écosystème RT-Comops.
 
 \medskip
-\noindent\textbf{Mots-cles :} gestion de flotte, architecture hexagonale,
-Spring WebFlux, multi-tenant, georeperage, Domain-Driven Design, R2DBC.
+\noindent\textbf{Mots-clés :} gestion de flotte, architecture hexagonale,
+Spring WebFlux, multi-tenant, mode offline, PWA, Kernel RT-Comops,
+Domain-Driven Design, Next.js.
 
 % =============================================================================
 % INTRODUCTION GENERALE
@@ -225,12 +157,14 @@ existant~?}
 \end{enumerate}
 
 \section*{Structure du rapport}
-Ce rapport est organise en cinq parties~:
-\textbf{(I)} Etat de l'art et analyse de l'existant~;
+Ce rapport est organisé en sept parties~:
+\textbf{(I)} État de l'art et analyse de l'existant~;
 \textbf{(II)} Analyse des besoins~;
 \textbf{(III)} Conception de l'architecture~;
-\textbf{(IV)} Implementationet resultats~;
-\textbf{(V)} Integration au Kernel RT-Comops et perspectives.
+\textbf{(IV)} Conception des modules métier~;
+\textbf{(V)} Implémentation, frontend et mode offline~;
+\textbf{(VI)} Intégration au Kernel RT-Comops (réalisée)~;
+\textbf{(VII)} Résultats et perspectives.
 
 % =============================================================================
 \part{Etat de l'Art et Analyse de l'Existant}
@@ -1151,25 +1085,32 @@ La figure~\ref{fig:seq_auth} detaille le flux complet d'authentification
 d'un utilisateur, depuis la soumission des identifiants jusqu'a
 l'injection du contexte de securite dans la chaine reactive.
 
-\subsection{Flux d'authentification detaille}
+\subsection{Flux d'authentification détaillé}
 
-Le processus d'authentification FleetMan suit une architecture a 3 niveaux~:
+Le processus d'authentification FleetMan suit un flux \textbf{Kernel en deux
+étapes}, implémenté dans \texttt{KernelAuthAdapter}~:
 
 \begin{enumerate}[leftmargin=2cm]
-  \item \textbf{Niveau API Gateway}~: Reception de la requete HTTP avec
-        credentials (email + password) ou token JWT dans l'en-tete
-        \texttt{Authorization: Bearer <token>}.
-        
-  \item \textbf{Niveau Service Auth externe}~: Delegation de la validation
-        au service Auth centralisé du Kernel RT-Comops. Ce service valide
-        les credentials, genere un JWT RS256 signe avec cle privee,
-        et retourne les claims utilisateur (userId, tenantId, roles, permissions).
-        
-  \item \textbf{Niveau Application FleetMan}~: Stockage ou mise a jour
-        de l'utilisateur local dans la table \texttt{users}, cache des
-        permissions dans Redis (TTL 1h), injection du contexte de securite
-        dans le ReactiveSecurityContextHolder pour les requetes subsequentes.
+  \item \textbf{Discover contexts}~: \texttt{POST /api/auth/discover-contexts}
+        avec \texttt{principal} et \texttt{password}. Le Kernel retourne un
+        \texttt{selectionToken} et la liste des contextes accessibles
+        (admin, gestionnaire, conducteur).
+  \item \textbf{Select context}~: \texttt{POST /api/auth/select-context} avec
+        le \texttt{selectionToken}, le \texttt{contextId} choisi et
+        éventuellement \texttt{organizationId} (null pour gestionnaires
+        et conducteurs dont la liste d'organisations est vide).
+  \item \textbf{JWT RS256}~: le Kernel émet \texttt{accessToken} et
+        \texttt{refreshToken}. Les rôles sont extraits du claim
+        \texttt{permissions} (source fiable, car \texttt{/api/users/me}
+        ne retourne pas toujours les authorities).
+  \item \textbf{Rebind UUID local}~: \texttt{JwtAuthenticationManager} associe
+        le \texttt{sub} Kernel au \texttt{users.kernel\_id} PostgreSQL pour
+        la traçabilité locale.
 \end{enumerate}
+
+Le profil \texttt{fake-auth} (\texttt{FakeAuthAdapter}) reste disponible pour
+le développement local sans accès Kernel. Le frontend rejette automatiquement
+les anciens tokens \texttt{fake-token-*} stockés en session.
 
 \subsection{Securite du token JWT}
 
@@ -1234,18 +1175,11 @@ du token). Toutes les requetes verifient la blacklist avant d'autoriser l'acces.
 \end{landscape}
 
 \begin{lecture}
-La validation du token se fait en deux etapes~: (1)~le \texttt{BearerTokenFilter}
-extrait le token de l'en-tete HTTP \texttt{Authorization: Bearer <token>}
-via une expression reguliere~; (2)~le \texttt{RemoteAuthAdapter}
-appelle le service Auth externe pour valider le token et recuperer les
-claims utilisateur. L'utilisateur local est cree ou mis a jour
-dans \texttt{UserLocalRepository} apres validation, permettant la tracabilite
-des actions dans les logs d'audit. Les permissions sont cached dans Redis
-avec une cle \texttt{user:permissions:<userId>} et un TTL de 1 heure,
-evitant des appels reseau repetitifs. En cas d'echec de validation (token
-expire, signature invalide, utilisateur revoque), une exception
-\texttt{InvalidTokenException} est levee et mappee en HTTP 401 Unauthorized
-par le \texttt{GlobalExceptionHandler}.
+Le diagramme de la figure~\ref{fig:seq_auth} a été mis à jour pour refléter
+le flux Kernel en deux étapes (\texttt{discover-contexts} puis
+\texttt{select-context}). L'ancien schéma d'authentification locale directe
+est obsolète. Le code PlantUML de régénération est fourni dans
+\texttt{diagrammes\_plantuml.md}.
 \end{lecture}
 
 \subsection{Mecanisme de rafraichissement de token}
@@ -2456,7 +2390,7 @@ et status), \texttt{fleetman\_kpis\_calculation\_duration\_seconds} (histogram
 pour analyser les P50, P95, P99). Les KPIs calcules sont immediatement
 disponibles via l'API REST \texttt{GET /api/v1/kpis?granularity=DAILY\&from=...\&to=...}
 avec cache Redis pour latence < 20ms.
-\end{lecture>
+\end{lecture}
 
 \subsection{Formules de calcul des KPIs principaux}
 
@@ -2525,7 +2459,135 @@ Les KPIs sont exposes via un dashboard interactif avec~:
 \end{algorithm}
 
 % =============================================================================
-\part{Implementation et Resultats}
+\part{Implémentation, Frontend et Mode Offline}
+% =============================================================================
+
+\chapter{Architecture Frontend Next.js}
+
+\section{Stack et organisation}
+
+Le frontend \texttt{fleet\_management\_front} est une application
+\textbf{Next.js~15.1} (App Router) avec React~19 et TypeScript~5.7.
+L'interface utilise Tailwind CSS~3.4, Radix UI et Recharts pour les
+tableaux de bord. L'arborescence suit le pattern App Router~:
+\texttt{(auth)/} pour login et inscription,
+\texttt{(dashboard)/dashboard/} pour les vues par rôle
+(super-admin, admin, manager, driver).
+
+\section{Couche API et authentification client}
+
+Le module \texttt{src/lib/api/client.ts} centralise les appels REST vers
+\texttt{NEXT\_PUBLIC\_API\_URL}. La session JWT est stockée dans
+\texttt{localStorage} (\texttt{session.ts}) avec validation du format
+JWT (rejet des tokens \texttt{fake-token-*} hérités du mode mock).
+Le renouvellement passe par \texttt{POST /api/v1/auth/refresh}.
+
+\section{Guards et contrôle d'accès UI}
+
+\texttt{AuthGuard} protège les routes dashboard selon le rôle.
+\texttt{SubscriptionGuard} et \texttt{DataGate} appliquent les limites
+d'abonnement côté interface. Le mode mock (\texttt{NEXT\_PUBLIC\_USE\_MOCK})
+permet les démonstrations sans backend via \texttt{mock-store.ts}.
+
+% --- Diagramme composants frontend (à intégrer après compilation) ---
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+    \textit{Figure à insérer : DiagrammeComposants\_Frontend.pdf}\\[0.3cm]
+    \small (voir \texttt{diagrammes\_plantuml.md}, diagramme n°10)
+  \vspace{3cm}}}
+  \caption{Architecture des composants frontend Next.js.
+           \textbf{À compléter} après compilation PlantUML.}
+  \label{fig:frontend_components}
+\end{figure}
+
+\chapter{Mode Offline et Synchronisation}
+
+\section{Contexte et objectifs}
+
+Les gestionnaires de flotte opèrent souvent dans des zones à connectivité
+intermittente. FleetMan implémente un \textbf{mode offline} pour les rôles
+\texttt{FLEET\_MANAGER}, \texttt{FLEET\_ADMIN} et \texttt{FLEET\_SUPER\_ADMIN},
+selon l'architecture documentée dans \texttt{docs/offline/offline-architecture.md}.
+
+\section{Architecture PWA et persistance locale}
+
+\begin{itemize}[leftmargin=2cm]
+  \item \textbf{Serwist}~: Service Worker (\texttt{src/app/sw.ts}) pour le
+        cache des assets statiques et la page de secours \texttt{/{\textasciitilde}offline}.
+  \item \textbf{Dexie / IndexedDB}~: base \texttt{fleetman\_offline} avec
+        les stores \texttt{entities}, \texttt{mutations}, \texttt{fileUploads},
+        \texttt{syncMeta} et \texttt{conflicts}.
+  \item \textbf{Offline Data Manager}~: lecture cache-first, écriture
+        optimiste avec mise en file d'attente (\texttt{api-client.ts}).
+\end{itemize}
+
+\section{API de synchronisation backend}
+
+Le \texttt{SyncController} expose~:
+\begin{itemize}[leftmargin=2cm]
+  \item \texttt{GET /api/v1/sync/changes}~: pull delta ou snapshot complet
+        (\texttt{SyncPullService}, scopes par rôle).
+  \item \texttt{POST /api/v1/sync/mutations}~: replay des mutations offline
+        (\texttt{SyncPushService}).
+  \item \texttt{GET /api/v1/sync/status}~: métadonnées de synchronisation.
+\end{itemize}
+
+L'\texttt{IdempotencyWebFilter} et la table \texttt{fleet.sync\_mutations}
+(migration 035) garantissent la déduplication via \texttt{clientMutationId}.
+
+% --- Diagrammes offline (placeholders) ---
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+    \textit{Figure à insérer : DiagrammeArchitecture\_Offline.pdf}\\[0.3cm]
+    \small (voir \texttt{diagrammes\_plantuml.md}, diagramme n°7)
+  \vspace{3cm}}}
+  \caption{Architecture du mode offline FleetMan.
+           \textbf{À compléter} après compilation PlantUML.}
+  \label{fig:offline_arch}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+    \textit{Figure à insérer : DiagrammeSequence\_Sync.pdf}\\[0.3cm]
+    \small (voir \texttt{diagrammes\_plantuml.md}, diagramme n°8)
+  \vspace{3cm}}}
+  \caption{Diagramme de séquence~: synchronisation pull/push.
+           \textbf{À compléter} après compilation PlantUML.}
+  \label{fig:seq_sync}
+\end{figure}
+
+\chapter{Inscription KYC et Gestion des Abonnements}
+
+\section{Inscription publique des gestionnaires}
+
+Le endpoint \texttt{POST /api/v1/public/register-manager} permet l'inscription
+d'un nouveau gestionnaire avec pièces justificatives obligatoires
+(\texttt{ID\_CARD}, \texttt{CRIMINAL\_RECORD}, max.\ 10 documents).
+Le \texttt{SubscriptionRegistrationService} stocke la demande en statut
+\texttt{PENDING} jusqu'à validation par le super-admin.
+
+\section{Workflow super-admin}
+
+Le \texttt{SuperAdminController} gère les plans, les souscriptions en attente,
+l'historique et les paramètres de grâce (\texttt{AppSettingsService}).
+Le job \texttt{SubscriptionExpiryJob} vérifie les expirations quotidiennement.
+
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+    \textit{Figure à insérer : DiagrammeSequence\_InscriptionKYC.pdf}\\[0.3cm]
+    \small (voir \texttt{diagrammes\_plantuml.md}, diagramme n°9)
+  \vspace{3cm}}}
+  \caption{Diagramme de séquence~: inscription KYC et validation super-admin.
+           \textbf{À compléter} après compilation PlantUML.}
+  \label{fig:seq_kyc}
+\end{figure}
+
+% =============================================================================
+\part{Résultats Techniques}
 % =============================================================================
 
 \chapter{Stack Technique et Resultats}
@@ -2533,30 +2595,37 @@ Les KPIs sont exposes via un dashboard interactif avec~:
 \section{Stack technique}
 
 \begin{table}[H]
-\caption{Stack technique complete de FleetMan}
+\caption{Stack technique complète de FleetMan (juillet 2026)}
 \label{tab:stack}
 \centering\small
 \begin{tabularx}{\textwidth}{p{4.5cm}p{2.5cm}X}
 \toprule
-\textbf{Composant} & \textbf{Version} & \textbf{Role} \\
+\textbf{Composant} & \textbf{Version} & \textbf{Rôle} \\
 \midrule
-Spring Boot WebFlux & 3.2.6    & Framework web reactif non bloquant \\
+\multicolumn{3}{l}{\textit{Backend}} \\
+\midrule
+Spring Boot WebFlux & 3.2.6    & Framework web réactif non bloquant \\
 Java               & 21 (LTS) & Langage de programmation \\
-PostgreSQL + PostGIS & 16     & Base de donnees avec extensions geometriques \\
-R2DBC              & runtime  & Driver reactif PostgreSQL \\
-Redis              & alpine   & Cache telemetrie et quotas \\
-Apache Kafka       & 3.7.0    & Bus d'evenements (mode KRaft) \\
-Liquibase          & 4.x      & Migrations de schema (10 changesets) \\
-MapStruct          & 1.5.5    & Mapping objet genere \\
-Lombok             & 1.18.30  & Reduction du boilerplate \\
-SpringDoc OpenAPI  & 2.5.0    & Documentation Swagger/OpenAPI 3 \\
-Resilience4j       & Cloud    & Circuit Breaker reactif \\
-Micrometer + Prometheus & --  & Metriques et monitoring \\
-Next.js            & 16.2.6   & Framework frontend (SSR) \\
-React              & 18.3.1   & Bibliotheque UI \\
-TypeScript         & 5.x      & Typage statique \\
-Tailwind CSS       & 4.x      & Framework CSS utilitaire \\
-Docker Compose     & --       & Orchestration locale \\
+PostgreSQL + PostGIS & 16     & Base de données avec extensions géométriques \\
+R2DBC              & runtime  & Driver réactif PostgreSQL \\
+Redis              & alpine   & Cache et sessions \\
+Apache Kafka       & 3.7.0    & Bus d'événements Kernel (optionnel) \\
+Liquibase          & 4.x      & Migrations de schéma (35 fichiers) \\
+Resilience4j       & Cloud    & Circuit breaker sur appels Kernel \\
+\midrule
+\multicolumn{3}{l}{\textit{Frontend}} \\
+\midrule
+Next.js            & 15.1.12  & Framework frontend (App Router, SSR) \\
+React              & 19       & Bibliothèque UI \\
+TypeScript         & 5.7      & Typage statique \\
+Tailwind CSS       & 3.4      & Framework CSS utilitaire \\
+Serwist            & 9.5      & PWA / Service Worker \\
+Dexie              & 4.4      & IndexedDB (mode offline) \\
+\midrule
+\multicolumn{3}{l}{\textit{Intégration}} \\
+\midrule
+Kernel RT-Comops   & --       & Auth, organisations, ressources, fichiers \\
+Docker Compose     & --       & Orchestration locale (DB, Redis) \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -2564,84 +2633,96 @@ Docker Compose     & --       & Orchestration locale \\
 \section{Recapitulatif des endpoints REST}
 
 \begin{table}[H]
-\caption{Recapitulatif des endpoints REST par module (total : 134)}
+\caption{Récapitulatif des modules REST principaux (33 contrôleurs)}
 \label{tab:endpoints}
-\centering
+\centering\small
 \begin{tabularx}{\textwidth}{p{4.5cm}p{2cm}X}
 \toprule
-\textbf{Module} & \textbf{Nb} & \textbf{Chemin de base} \\
+\textbf{Module} & \textbf{Contrôleur} & \textbf{Chemin de base} \\
 \midrule
-Authentification      & 3   & \texttt{/api/v1/auth} \\
-Vehicules             & 11  & \texttt{/api/v1/vehicles} \\
-Conducteurs           & 5   & \texttt{/api/v1/drivers} \\
-Flottes               & 6   & \texttt{/api/v1/fleets} \\
-Trajets               & 6   & \texttt{/api/v1/trips} \\
-Georeperage           & 11  & \texttt{/api/v1/geofence} \\
-Maintenance           & 8   & \texttt{/api/v1/operations/maintenances} \\
-Incidents             & 12  & \texttt{/api/v1/operations/incidents} \\
-Carburant             & 8   & \texttt{/api/v1/operations/fuel-recharges} \\
-Planification         & 9   & \texttt{/api/v1/schedules} \\
-Affectations          & 13  & \texttt{/api/v1/assignments} \\
-Documents vehicules   & 5   & \texttt{/api/v1/vehicles/\{id\}/documents} \\
-Documents conducteurs & 5   & \texttt{/api/v1/drivers/\{id\}/documents} \\
-Conformite            & 3   & \texttt{/api/v1/documents} \\
-KPIs                  & 9   & \texttt{/api/v1/kpis} \\
-Administration        & 20  & \texttt{/api/v1/admin, /api/v1/super-admin} \\
+Authentification      & AuthController & \texttt{/api/v1/auth} \\
+Synchronisation       & SyncController & \texttt{/api/v1/sync} \\
+Inscription publique  & PublicApiController & \texttt{/api/v1/public} \\
+Véhicules             & VehicleController & \texttt{/api/v1/vehicles} \\
+Conducteurs           & DriverController & \texttt{/api/v1/drivers} \\
+Flottes               & FleetController & \texttt{/api/v1/fleets} \\
+Trajets               & TripController & \texttt{/api/v1/trips} \\
+Géorepérage           & GeofenceController & \texttt{/api/v1/geofence} \\
+Opérations            & Maintenance/Incident/Fuel & \texttt{/api/v1/operations/*} \\
+Planification         & Schedule/Assignment & \texttt{/api/v1/schedules, /assignments} \\
+Documents             & DocumentController & \texttt{/api/v1/documents} \\
+KPIs                  & KpiController & \texttt{/api/v1/kpis} \\
+Administration        & Admin*Controller & \texttt{/api/v1/admin/*} \\
+Super-administration  & SuperAdminController & \texttt{/api/v1/super-admin} \\
+Gestionnaire          & FleetManagerController & \texttt{/api/v1/fleet-managers} \\
+Fichiers              & FileStorageController & \texttt{/api/v1/files} \\
 \midrule
-\textbf{Total}        & \textbf{134} & \\
+\textbf{Total}        & \textbf{33} & \textbf{$\sim$300 handlers REST} \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 % =============================================================================
-\part{Integration au Kernel RT-Comops}
+\part{Intégration au Kernel RT-Comops — Réalisée}
 % =============================================================================
 
-\chapter{Integration au Kernel RT-Comops}
+\chapter{Intégration Kernel opérationnelle}
 
-\section{Modules Kernel applicables a FleetMan}
+\section{État de l'intégration}
+
+Contrairement à la version initiale du rapport qui planifiait l'intégration
+sur 16 semaines, FleetMan dispose désormais d'une \textbf{intégration Kernel
+fonctionnelle} via les adaptateurs hexagonaux suivants~:
 
 \begin{table}[H]
-\caption{Modules Kernel RT-Comops integres dans FleetMan}
-\label{tab:kernel}
-\centering
-\begin{tabularx}{\textwidth}{p{3.5cm}p{2.5cm}X}
+\caption{Adaptateurs Kernel implémentés}
+\label{tab:kernel_adapters}
+\centering\small
+\begin{tabularx}{\textwidth}{p{3.5cm}p{3cm}X}
 \toprule
-\textbf{Module Kernel} & \textbf{Priorite} & \textbf{Apport a FleetMan} \\
+\textbf{Adaptateur} & \textbf{Port} & \textbf{Rôle} \\
 \midrule
-\texttt{kernel-core}       & Critique & Multi-tenancy, JWT RS256, audit immuable \\
-\texttt{auth-core}         & Critique & Remplace l'auth locale, apporte MFA \\
-\texttt{roles-core}        & Critique & RBAC granulaire avec cache Redis \\
-\texttt{organization-core} & Haute    & Flotte = Organisation, depot = Agence \\
-\texttt{resource-core}     & Haute    & Vehicules comme ressources materielles \\
-\texttt{common-core}       & Haute    & BaseEntity, Address, Contact, PageResult \\
-\texttt{file-core}         & Normale  & Documents legaux centralises \\
-\texttt{tp-core}           & Normale  & Clients des missions comme tiers \\
-\texttt{settings-core}     & Normale  & Numerotation et parametres metier \\
+\texttt{KernelAuthAdapter}       & AuthPort & Login 2 étapes, refresh, JWT \\
+\texttt{KernelOrganizationAdapter} & ExternalOrganizationPort & Flottes = organisations \\
+\texttt{KernelResourceAdapter}   & ExternalVehiclePort & Véhicules = ressources \\
+\texttt{KernelActorAdapter}      & ExternalActorPort & Conducteurs / gestionnaires \\
+\texttt{KernelFileAdapter}       & ExternalFilePort & Documents légaux \\
+\texttt{KernelEventConsumer}     & -- & Événements Kafka Kernel \\
+\texttt{KernelTokenHolder}       & -- & Token système pour tâches de fond \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-\section{Plan d'integration en 6 phases}
+\section{Liaison base locale / Kernel}
 
-\begin{table}[H]
-\caption{Plan d'integration Kernel dans FleetMan (16 semaines)}
-\label{tab:plan_kernel}
-\centering
-\begin{tabularx}{\textwidth}{p{1cm}p{4.5cm}p{2.5cm}p{2cm}X}
-\toprule
-\textbf{Phase} & \textbf{Modules} & \textbf{Semaines} & \textbf{Effort} & \textbf{Livrable} \\
-\midrule
-0 & Enregistrement ClientApp  & 1--2   & Small  & FleetMan declare dans Kernel \\
-1 & auth-core, roles-core     & 3--5   & Medium & JWT RS256 + RBAC granulaire \\
-2 & organization-core         & 6--7   & Medium & Flottes synchronisees \\
-3 & resource-core             & 8--10  & Large  & Vehicules dans le Kernel \\
-4 & actor-core, tp-core       & 11--12 & Medium & Conducteurs et clients \\
-5 & file-core, settings-core  & 13--14 & Medium & Documents et numerotation \\
-6 & common-core, finalisation & 15--16 & Small  & Types alignes, tests e2e \\
-\bottomrule
-\end{tabularx}
-\end{table}
+Les migrations Liquibase 027--029 et 033--034 ajoutent les colonnes de
+correspondance~: \texttt{users.kernel\_id},
+\texttt{fleets.kernel\_organization\_id}, \texttt{vehicles.kernel\_resource\_id},
+\texttt{drivers.kernel\_actor\_id} et \texttt{tenant\_id} sur les tables métier.
+
+\section{Provisionnement démo}
+
+Le script \texttt{scripts/kernel\_provision\_demo\_fleet.sh} enregistre
+automatiquement les utilisateurs démo (5 conducteurs, 2 gestionnaires, 1 admin),
+crée les acteurs Kernel et enregistre les véhicules comme ressources.
+
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+    \textit{Figure à insérer : DiagrammeIntegration\_Kernel.pdf}\\[0.3cm]
+    \small (voir \texttt{diagrammes\_plantuml.md}, diagramme n°11)
+  \vspace{3cm}}}
+  \caption{Vue d'ensemble de l'intégration Kernel RT-Comops réalisée.
+           \textbf{À compléter} après compilation PlantUML.}
+  \label{fig:kernel_integration}
+\end{figure}
+
+\section{Modes d'authentification}
+
+Le paramètre \texttt{application.auth.mode} permet trois modes~:
+\texttt{kernel} (production), \texttt{fake} (développement local) et
+\texttt{remote} (legacy TraMaSys). Les WebClients Kernel incluent les en-têtes
+\texttt{X-Client-Id}, \texttt{X-Api-Key} et \texttt{X-Tenant-Id}.
 
 % =============================================================================
 \chapter*{Conclusion Generale}
@@ -2651,36 +2732,40 @@ Administration        & 20  & \texttt{/api/v1/admin, /api/v1/super-admin} \\
 
 \section*{Bilan des travaux}
 
-Ce projet a conduit a la conception et a l'implementation de la plateforme
+Ce projet a conduit à la conception et à l'implémentation de la plateforme
 \textbf{FleetMan}, avec les principaux apports suivants~:
 
 \begin{itemize}[leftmargin=2cm]
-  \item Une architecture hexagonale reactive exposant
-        \textbf{134 endpoints REST documentes}~;
-  \item \textbf{20 modules fonctionnels} couvrant l'ensemble du cycle
+  \item Une architecture hexagonale réactive exposant
+        \textbf{33 contrôleurs} et environ \textbf{300 handlers REST}~;
+  \item \textbf{24 modules fonctionnels} couvrant l'ensemble du cycle
         d'exploitation d'une flotte~;
-  \item Un frontend Next.js 16 avec TypeScript et Tailwind CSS~;
-  \item Un plan d'integration detaille avec le Kernel RT-Comops
-        en 6 phases sur 16 semaines.
+  \item Un frontend Next.js~15 complet avec tableaux de bord par rôle~;
+  \item Un \textbf{mode offline} (PWA Serwist, IndexedDB, API sync)~;
+  \item Une \textbf{intégration Kernel RT-Comops opérationnelle}
+        (auth, ressources, organisations, fichiers, acteurs)~;
+  \item Un workflow d'inscription KYC et de gestion des abonnements.
 \end{itemize}
 
 \section*{Limites}
 
 \begin{itemize}[leftmargin=2cm]
-  \item L'integration au Kernel RT-Comops est planifiee mais non encore
-        implementee~;
-  \item Les modules Depenses/Budget, Clients/Missions et Alertes
-        configurables restent a implementer~;
-  \item L'application mobile conducteur Android est hors perimetre.
+  \item Le mode offline conducteur reste partiel (phase ultérieure)~;
+  \item L'intégration KYC Kernel (\texttt{/api/kyc/verify}) est testée
+        mais non intégrée au parcours utilisateur final~;
+  \item L'application mobile conducteur native est hors périmètre~;
+  \item Certains diagrammes UML doivent être régénérés (voir
+        \texttt{diagrammes\_plantuml.md}).
 \end{itemize}
 
 \section*{Perspectives}
 
 \begin{itemize}[leftmargin=2cm]
-  \item Generation automatique de rapports PDF pour les KPIs~;
-  \item Tableau de bord cartographique temps reel (WebSocket)~;
-  \item Intelligence artificielle pour la prediction des maintenances~;
-  \item Ancrage des incidents critiques dans le blockchain-core Kernel.
+  \item Intégration complète du module KYC Kernel à l'inscription~;
+  \item Extension du mode offline au rôle conducteur~;
+  \item Tableau de bord cartographique temps réel (WebSocket)~;
+  \item Intelligence artificielle pour la prédiction des maintenances~;
+  \item Génération automatique de rapports PDF pour les KPIs.
 \end{itemize}
 
 % =============================================================================

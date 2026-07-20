@@ -8,6 +8,8 @@ import org.springframework.data.annotation.Transient;
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.relational.core.mapping.Table;
 import org.springframework.data.relational.core.mapping.Column;
+
+import java.time.Instant;
 import java.util.UUID;
 
 @Table(name = "vehicles", schema = "fleet")
@@ -56,6 +58,12 @@ public class VehicleLocalEntity implements Persistable<UUID> {
 
     @Column("kernel_resource_id")
     private UUID kernelResourceId;
+
+    @Column("updated_at")
+    private Instant updatedAt;
+
+    @Column("deleted_at")
+    private Instant deletedAt;
 
     @Transient
     private boolean isNew = false;

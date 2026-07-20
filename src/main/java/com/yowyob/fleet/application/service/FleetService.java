@@ -133,6 +133,28 @@ public class FleetService implements ManageFleetUseCase {
     }
 
     @Override
+    @Transactional
+    public Mono<Fleet> createFleetAsAdmin(Fleet fleet, UUID managerId) {
+        // Création administrative : ni limite de plan (le manager n'a pas encore
+        // forcément la flotte à sa charge), ni provisioning d'organisation Kernel
+        // (réservé au flux d'auto-inscription du gestionnaire) — juste l'entité
+        // locale, assignée ou non à ce stade.
+        return saveFleetLocally(fleet, managerId, null);
+    }
+
+    @Override
+    @Transactional
+    public Mono<Void> assignFleetsToManager(java.util.List<UUID> fleetIds, UUID managerId) {
+        return repository.findAllById(fleetIds)
+                .flatMap(entity -> {
+                    entity.setManagerId(managerId);
+                    entity.setNew(false);
+                    return repository.save(entity);
+                })
+                .then();
+    }
+
+    @Override
     public Mono<Fleet> getFleetById(UUID id, UUID requesterId, boolean isAdmin) {
         return repository.findById(id)
                 .switchIfEmpty(Mono.error(FleetException.notFound(id)))

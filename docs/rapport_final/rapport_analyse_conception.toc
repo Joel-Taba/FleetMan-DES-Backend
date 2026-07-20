@@ -1,6 +1,8 @@
-\xpginauxfiletrue 
-\selectlanguage *{french}
-\contentsline {chapter}{Resume}{xi}{chapter*.4}%
+\@ifundefined {etoctocstyle}{\let \etoc@startlocaltoc \@gobble \let \etoc@settocdepth \@gobble \let \etoc@depthtag \@gobble \let \etoc@setlocaltop \@gobble }{}
+\babel@toc {french}{}\relax 
+\contentsline {chapter}{Table des figures}{iv}{chapter*.2}%
+\contentsline {chapter}{Liste des tableaux}{ix}{chapter*.3}%
+\contentsline {chapter}{Resume}{x}{chapter*.4}%
 \contentsline {chapter}{Introduction Generale}{1}{chapter*.5}%
 \contentsline {part}{I\hspace {1em}Etat de l'Art et Analyse de l'Existant}{3}{part.1}%
 \contentsline {chapter}{\numberline {1}Etat de l'Art des Solutions de Gestion de Flotte}{4}{chapter.1}%
@@ -9,8 +11,8 @@
 \contentsline {chapter}{\numberline {2}Analyse des Besoins}{6}{chapter.2}%
 \contentsline {section}{\numberline {2.1}Acteurs du systeme}{6}{section.2.1}%
 \contentsline {section}{\numberline {2.2}Diagramme de cas d'utilisation}{6}{section.2.2}%
-\contentsline {subsection}{\numberline {2.2.1}Analyse detaillee des cas d'utilisation}{6}{subsection.2.2.1}%
-\contentsline {subsubsection}{Domaine Authentification et Autorisation}{6}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.1}Analyse detaillee des cas d'utilisation}{7}{subsection.2.2.1}%
+\contentsline {subsubsection}{Domaine Authentification et Autorisation}{7}{subsection.2.2.1}%
 \contentsline {subsubsection}{Domaine Vehicules}{7}{subsection.2.2.1}%
 \contentsline {subsubsection}{Domaine Conducteurs}{7}{subsection.2.2.1}%
 \contentsline {subsubsection}{Domaine Trajets et Telemetrie}{8}{subsection.2.2.1}%
@@ -20,7 +22,7 @@
 \contentsline {chapter}{\numberline {3}Choix Technologiques et Architecture Hexagonale}{13}{chapter.3}%
 \contentsline {section}{\numberline {3.1}Justification des choix technologiques}{13}{section.3.1}%
 \contentsline {section}{\numberline {3.2}Architecture hexagonale --- Vue d'ensemble}{13}{section.3.2}%
-\contentsline {section}{\numberline {3.3}Diagramme de packages}{13}{section.3.3}%
+\contentsline {section}{\numberline {3.3}Diagramme de packages}{14}{section.3.3}%
 \contentsline {subsection}{\numberline {3.3.1}Justification de l'architecture en packages}{14}{subsection.3.3.1}%
 \contentsline {subsection}{\numberline {3.3.2}Avantages de cette organisation}{14}{subsection.3.3.2}%
 \contentsline {subsection}{\numberline {3.3.3}Exemple concret de flux inter-packages}{16}{subsection.3.3.3}%
@@ -47,50 +49,77 @@
 \contentsline {part}{III\hspace {1em}Conception des Modules Metier}{32}{part.3}%
 \contentsline {chapter}{\numberline {5}Modules du Coeur Metier Initial}{33}{chapter.5}%
 \contentsline {section}{\numberline {5.1}Module Authentification --- Diagramme de sequence}{33}{section.5.1}%
-\contentsline {subsection}{\numberline {5.1.1}Flux d'authentification detaille}{33}{subsection.5.1.1}%
-\contentsline {subsection}{\numberline {5.1.2}Securite du token JWT}{33}{subsection.5.1.2}%
+\contentsline {subsection}{\numberline {5.1.1}Flux d'authentification détaillé}{33}{subsection.5.1.1}%
+\contentsline {subsection}{\numberline {5.1.2}Securite du token JWT}{34}{subsection.5.1.2}%
 \contentsline {subsection}{\numberline {5.1.3}Gestion des sessions et revocation}{34}{subsection.5.1.3}%
 \contentsline {subsection}{\numberline {5.1.4}Mecanisme de rafraichissement de token}{36}{subsection.5.1.4}%
 \contentsline {section}{\numberline {5.2}Module Vehicule --- Machine a etats}{36}{section.5.2}%
-\contentsline {section}{\numberline {5.3}Module Trajet --- Diagramme d'etats}{37}{section.5.3}%
-\contentsline {subsection}{\numberline {5.3.1}Etats du trajet et transitions}{37}{subsection.5.3.1}%
+\contentsline {section}{\numberline {5.3}Module Trajet --- Diagramme d'etats}{36}{section.5.3}%
+\contentsline {subsection}{\numberline {5.3.1}Etats du trajet et transitions}{36}{subsection.5.3.1}%
 \contentsline {subsection}{\numberline {5.3.2}Regles metier des transitions}{37}{subsection.5.3.2}%
-\contentsline {subsection}{\numberline {5.3.3}Calculs automatises lors de la completion}{38}{subsection.5.3.3}%
+\contentsline {subsection}{\numberline {5.3.3}Calculs automatises lors de la completion}{37}{subsection.5.3.3}%
 \contentsline {subsection}{\numberline {5.3.4}Persistance de la telemetrie GPS}{38}{subsection.5.3.4}%
-\contentsline {section}{\numberline {5.4}Module Georeperage --- Diagramme de sequence}{40}{section.5.4}%
-\contentsline {subsection}{\numberline {5.4.1}Architecture du module de georeperage}{40}{subsection.5.4.1}%
+\contentsline {section}{\numberline {5.4}Module Georeperage --- Diagramme de sequence}{38}{section.5.4}%
+\contentsline {subsection}{\numberline {5.4.1}Architecture du module de georeperage}{38}{subsection.5.4.1}%
 \contentsline {subsection}{\numberline {5.4.2}Requete PostGIS de detection}{40}{subsection.5.4.2}%
-\contentsline {subsection}{\numberline {5.4.3}Algorithme de dedoublonnage des alertes}{41}{subsection.5.4.3}%
-\contentsline {subsection}{\numberline {5.4.4}Performances et optimisations}{43}{subsection.5.4.4}%
-\contentsline {chapter}{\numberline {6}Module Operations Terrain}{44}{chapter.6}%
-\contentsline {section}{\numberline {6.1}Machine a etats de l'Incident}{44}{section.6.1}%
-\contentsline {subsection}{\numberline {6.1.1}Cycle de vie complet d'un incident}{44}{subsection.6.1.1}%
+\contentsline {subsection}{\numberline {5.4.3}Algorithme de dedoublonnage des alertes}{40}{subsection.5.4.3}%
+\contentsline {subsection}{\numberline {5.4.4}Performances et optimisations}{42}{subsection.5.4.4}%
+\contentsline {chapter}{\numberline {6}Module Operations Terrain}{43}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Machine a etats de l'Incident}{43}{section.6.1}%
+\contentsline {subsection}{\numberline {6.1.1}Cycle de vie complet d'un incident}{43}{subsection.6.1.1}%
 \contentsline {subsection}{\numberline {6.1.2}Regles metier et invariants}{44}{subsection.6.1.2}%
-\contentsline {subsection}{\numberline {6.1.3}Methodes metier de l'entite Incident}{45}{subsection.6.1.3}%
-\contentsline {subsection}{\numberline {6.1.4}Statistiques et KPIs des incidents}{46}{subsection.6.1.4}%
-\contentsline {section}{\numberline {6.2}Diagramme de sequence --- Declaration d'un incident}{48}{section.6.2}%
-\contentsline {subsection}{\numberline {6.2.1}Flux de declaration d'incident}{48}{subsection.6.2.1}%
-\contentsline {subsection}{\numberline {6.2.2}Regles de validation}{48}{subsection.6.2.2}%
-\contentsline {subsection}{\numberline {6.2.3}Gestion des photos d'incident}{51}{subsection.6.2.3}%
-\contentsline {chapter}{\numberline {7}Module Planification et Affectations}{52}{chapter.7}%
-\contentsline {section}{\numberline {7.1}Machine a etats du Planning}{52}{section.7.1}%
-\contentsline {subsection}{\numberline {7.1.1}Etats et transitions du planning}{52}{subsection.7.1.1}%
-\contentsline {subsection}{\numberline {7.1.2}Regles de modification selon l'etat}{53}{subsection.7.1.2}%
-\contentsline {subsection}{\numberline {7.1.3}Validation avant publication}{53}{subsection.7.1.3}%
-\contentsline {section}{\numberline {7.2}Detection de conflits --- Diagramme de sequence}{55}{section.7.2}%
-\contentsline {subsection}{\numberline {7.2.1}Types de conflits detectes}{55}{subsection.7.2.1}%
-\contentsline {subsection}{\numberline {7.2.2}Algorithme de detection optimise}{55}{subsection.7.2.2}%
-\contentsline {subsection}{\numberline {7.2.3}Gestion des chevauchements temporels}{56}{subsection.7.2.3}%
-\contentsline {subsection}{\numberline {7.2.4}Optimisations de performance}{58}{subsection.7.2.4}%
-\contentsline {section}{\numberline {7.3}Algorithme de detection de conflits}{59}{section.7.3}%
-\contentsline {chapter}{\numberline {8}Module Documents Legaux et KPIs}{60}{chapter.8}%
-\contentsline {section}{\numberline {8.1}Job nocturne des documents --- Diagramme de sequence}{60}{section.8.1}%
-\contentsline {subsection}{\numberline {8.1.1}Architecture du job de verification}{60}{subsection.8.1.1}%
-\contentsline {subsection}{\numberline {8.1.2}Documents critiques et blocage automatique}{61}{subsection.8.1.2}%
-\contentsline {subsection}{\numberline {8.1.3}Frequence des notifications par niveau d'urgence}{61}{subsection.8.1.3}%
-\contentsline {subsection}{\numberline {8.1.4}Strategie de renouvellement proactif}{64}{subsection.8.1.4}%
-\contentsline {section}{\numberline {8.2}Calcul des KPIs --- Diagramme d'activite}{65}{section.8.2}%
-\contentsline {subsection}{\numberline {8.2.1}Architecture du module KPI}{65}{subsection.8.2.1}%
-\contentsline {subsubsection}{Categories de KPIs}{65}{subsection.8.2.1}%
-\contentsline {subsubsection}{Granularites temporelles}{66}{Item.112}%
-\contentsline {subsection}{\numberline {8.2.2}Algorithme de calcul parallelise}{66}{subsection.8.2.2}%
+\contentsline {subsection}{\numberline {6.1.3}Methodes metier de l'entite Incident}{44}{subsection.6.1.3}%
+\contentsline {subsection}{\numberline {6.1.4}Statistiques et KPIs des incidents}{45}{subsection.6.1.4}%
+\contentsline {section}{\numberline {6.2}Diagramme de sequence --- Declaration d'un incident}{47}{section.6.2}%
+\contentsline {subsection}{\numberline {6.2.1}Flux de declaration d'incident}{47}{subsection.6.2.1}%
+\contentsline {subsection}{\numberline {6.2.2}Regles de validation}{47}{subsection.6.2.2}%
+\contentsline {subsection}{\numberline {6.2.3}Gestion des photos d'incident}{49}{subsection.6.2.3}%
+\contentsline {chapter}{\numberline {7}Module Planification et Affectations}{50}{chapter.7}%
+\contentsline {section}{\numberline {7.1}Machine a etats du Planning}{50}{section.7.1}%
+\contentsline {subsection}{\numberline {7.1.1}Etats et transitions du planning}{50}{subsection.7.1.1}%
+\contentsline {subsection}{\numberline {7.1.2}Regles de modification selon l'etat}{51}{subsection.7.1.2}%
+\contentsline {subsection}{\numberline {7.1.3}Validation avant publication}{51}{subsection.7.1.3}%
+\contentsline {section}{\numberline {7.2}Detection de conflits --- Diagramme de sequence}{51}{section.7.2}%
+\contentsline {subsection}{\numberline {7.2.1}Types de conflits detectes}{53}{subsection.7.2.1}%
+\contentsline {subsection}{\numberline {7.2.2}Algorithme de detection optimise}{53}{subsection.7.2.2}%
+\contentsline {subsection}{\numberline {7.2.3}Gestion des chevauchements temporels}{53}{subsection.7.2.3}%
+\contentsline {subsection}{\numberline {7.2.4}Optimisations de performance}{56}{subsection.7.2.4}%
+\contentsline {section}{\numberline {7.3}Algorithme de detection de conflits}{57}{section.7.3}%
+\contentsline {chapter}{\numberline {8}Module Documents Legaux et KPIs}{58}{chapter.8}%
+\contentsline {section}{\numberline {8.1}Job nocturne des documents --- Diagramme de sequence}{58}{section.8.1}%
+\contentsline {subsection}{\numberline {8.1.1}Architecture du job de verification}{58}{subsection.8.1.1}%
+\contentsline {subsection}{\numberline {8.1.2}Documents critiques et blocage automatique}{59}{subsection.8.1.2}%
+\contentsline {subsection}{\numberline {8.1.3}Frequence des notifications par niveau d'urgence}{59}{subsection.8.1.3}%
+\contentsline {subsection}{\numberline {8.1.4}Strategie de renouvellement proactif}{61}{subsection.8.1.4}%
+\contentsline {section}{\numberline {8.2}Calcul des KPIs --- Diagramme d'activite}{62}{section.8.2}%
+\contentsline {subsection}{\numberline {8.2.1}Architecture du module KPI}{62}{subsection.8.2.1}%
+\contentsline {subsubsection}{Categories de KPIs}{62}{subsection.8.2.1}%
+\contentsline {subsubsection}{Granularites temporelles}{62}{Item.113}%
+\contentsline {subsection}{\numberline {8.2.2}Algorithme de calcul parallelise}{63}{subsection.8.2.2}%
+\contentsline {subsection}{\numberline {8.2.3}Strategie de persistance et cache}{63}{subsection.8.2.3}%
+\contentsline {subsection}{\numberline {8.2.4}Formules de calcul des KPIs principaux}{64}{subsection.8.2.4}%
+\contentsline {subsection}{\numberline {8.2.5}Dashboard temps reel}{66}{subsection.8.2.5}%
+\contentsline {section}{\numberline {8.3}Algorithme de calcul du score de conduite}{67}{section.8.3}%
+\contentsline {part}{IV\hspace {1em}Implémentation, Frontend et Mode Offline}{68}{part.4}%
+\contentsline {chapter}{\numberline {9}Architecture Frontend Next.js}{69}{chapter.9}%
+\contentsline {section}{\numberline {9.1}Stack et organisation}{69}{section.9.1}%
+\contentsline {section}{\numberline {9.2}Couche API et authentification client}{69}{section.9.2}%
+\contentsline {section}{\numberline {9.3}Guards et contrôle d'accès UI}{69}{section.9.3}%
+\contentsline {chapter}{\numberline {10}Mode Offline et Synchronisation}{71}{chapter.10}%
+\contentsline {section}{\numberline {10.1}Contexte et objectifs}{71}{section.10.1}%
+\contentsline {section}{\numberline {10.2}Architecture PWA et persistance locale}{71}{section.10.2}%
+\contentsline {section}{\numberline {10.3}API de synchronisation backend}{71}{section.10.3}%
+\contentsline {chapter}{\numberline {11}Inscription KYC et Gestion des Abonnements}{73}{chapter.11}%
+\contentsline {section}{\numberline {11.1}Inscription publique des gestionnaires}{73}{section.11.1}%
+\contentsline {section}{\numberline {11.2}Workflow super-admin}{73}{section.11.2}%
+\contentsline {part}{V\hspace {1em}Résultats Techniques}{75}{part.5}%
+\contentsline {chapter}{\numberline {12}Stack Technique et Resultats}{76}{chapter.12}%
+\contentsline {section}{\numberline {12.1}Stack technique}{77}{section.12.1}%
+\contentsline {section}{\numberline {12.2}Recapitulatif des endpoints REST}{78}{section.12.2}%
+\contentsline {part}{VI\hspace {1em}Intégration au Kernel RT-Comops — Réalisée}{79}{part.6}%
+\contentsline {chapter}{\numberline {13}Intégration Kernel opérationnelle}{80}{chapter.13}%
+\contentsline {section}{\numberline {13.1}État de l'intégration}{80}{section.13.1}%
+\contentsline {section}{\numberline {13.2}Liaison base locale / Kernel}{80}{section.13.2}%
+\contentsline {section}{\numberline {13.3}Provisionnement démo}{81}{section.13.3}%
+\contentsline {section}{\numberline {13.4}Modes d'authentification}{81}{section.13.4}%
+\contentsline {chapter}{Conclusion Generale}{82}{chapter*.40}%

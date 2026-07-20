@@ -19,26 +19,18 @@ public record DriverResponse(
         String licenceNumber,
         String status,
         UUID assignedVehicleId,
-        String photoUrl
+        String photoUrl,
+        boolean onActiveTrip
 ) {
     public static DriverResponse from(Driver driver, UserLocalEntity user) {
-        return new DriverResponse(
-                driver.userId(),
-                driver.fleetId(),
-                null,
-                user != null ? user.getFirstName() : null,
-                user != null ? user.getLastName() : null,
-                user != null ? user.getEmail() : null,
-                null,
-                user != null ? user.getUsername() : null,
-                driver.licenceNumber(),
-                driver.status(),
-                driver.assignedVehicleId(),
-                driver.photoUrl()
-        );
+        return from(driver, user, null, false);
     }
 
     public static DriverResponse from(Driver driver, UserLocalEntity user, String phone) {
+        return from(driver, user, phone, false);
+    }
+
+    public static DriverResponse from(Driver driver, UserLocalEntity user, String phone, boolean onActiveTrip) {
         return new DriverResponse(
                 driver.userId(),
                 driver.fleetId(),
@@ -51,7 +43,8 @@ public record DriverResponse(
                 driver.licenceNumber(),
                 driver.status(),
                 driver.assignedVehicleId(),
-                driver.photoUrl()
+                driver.photoUrl(),
+                onActiveTrip
         );
     }
 

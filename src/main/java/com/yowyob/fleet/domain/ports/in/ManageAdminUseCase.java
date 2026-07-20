@@ -9,4 +9,6 @@ public interface ManageAdminUseCase {
     Flux<AuthPort.UserDetail> listFleetManagers(String token);
     Mono<AuthPort.UserDetail> getManagerDetails(UUID managerId, String token, boolean isSuperAdmin);
     Mono<Void> toggleManagerStatus(UUID managerId, UUID requesterId, boolean isSuperAdmin);
+    /** Créé directement un compte FLEET_MANAGER actif (pas de flux d'approbation). */
+    Mono<AuthPort.UserDetail> createManager(AuthUseCase.RegisterCommand command, String companyName);
 }

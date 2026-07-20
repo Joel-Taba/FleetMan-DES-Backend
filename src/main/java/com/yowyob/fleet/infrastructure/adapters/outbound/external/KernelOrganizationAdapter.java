@@ -69,7 +69,6 @@ public class KernelOrganizationAdapter implements ExternalOrganizationPort {
         return organizationClient.approveOrganization(
                         bearerHeader(bearerToken),
                         tenantId,
-                        organizationId.toString(),
                         organizationId,
                         new KernelOrganizationApiClient.GovernanceActionRequest(reason))
                 .flatMap(resp -> {
@@ -90,7 +89,6 @@ public class KernelOrganizationAdapter implements ExternalOrganizationPort {
         return organizationClient.subscribeService(
                         bearerHeader(bearerToken),
                         tenantId,
-                        organizationId.toString(),
                         organizationId,
                         body)
                 .flatMap(resp -> {

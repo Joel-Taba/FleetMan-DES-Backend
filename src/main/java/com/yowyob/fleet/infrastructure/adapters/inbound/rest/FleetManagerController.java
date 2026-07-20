@@ -7,6 +7,7 @@ import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.FleetManagerRes
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerSubscriptionResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerKpiResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.UpdateManagerRequest;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehicleGalleryUpdateRequest;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -65,5 +66,19 @@ public class FleetManagerController {
     @Operation(summary = "Mettre à jour mon nom d'entreprise")
     public Mono<Void> updateMyCompany(@Valid @RequestBody UpdateManagerRequest request, Authentication auth) {
         return managerUseCase.updateManagerCompany(getUserId(auth), request.companyName());
+    }
+
+    @PutMapping("/me/gallery")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(
+            summary = "Mettre à jour le logo et la galerie photo de l'organisation",
+            description = "Les fichiers doivent d'abord être uploadés via POST /api/v1/files/upload "
+                    + "(comme pour les véhicules) ; cet endpoint enregistre ensuite les URLs obtenues."
+    )
+    public Mono<Void> updateMyGallery(
+            @RequestBody VehicleGalleryUpdateRequest request,
+            Authentication auth
+    ) {
+        return managerUseCase.updateManagerGallery(getUserId(auth), request.photoUrl(), request.galleryUrls());
     }
 }

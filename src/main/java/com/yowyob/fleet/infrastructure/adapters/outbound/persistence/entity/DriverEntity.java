@@ -8,6 +8,8 @@ import org.springframework.data.annotation.Transient;
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
+
+import java.time.Instant;
 import java.util.UUID;
 
 @Table(name = "drivers", schema = "fleet")
@@ -35,6 +37,12 @@ public class DriverEntity implements Persistable<UUID> {
 
     @Column("kernel_actor_id")
     private UUID kernelActorId;
+
+    @Column("updated_at")
+    private Instant updatedAt;
+
+    @Column("deleted_at")
+    private Instant deletedAt;
 
     @Transient
     private boolean isNew = false;

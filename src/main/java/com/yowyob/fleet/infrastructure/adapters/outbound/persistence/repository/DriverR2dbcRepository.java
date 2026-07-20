@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Repository
@@ -38,4 +39,22 @@ public interface DriverR2dbcRepository extends ReactiveCrudRepository<DriverEnti
            "JOIN fleet.fleets f ON d.fleet_id = f.id " +
            "WHERE f.manager_id = :managerId")
     Mono<Long> countByManagerId(UUID managerId);
+
+    @Query("""
+            SELECT d.* FROM fleet.drivers d
+            INNER JOIN fleet.fleets f ON d.fleet_id = f.id
+            WHERE f.manager_id = :managerId
+              AND d.deleted_at IS NULL
+              AND d.updated_at > :since
+            """)
+    Flux<DriverEntity> findActiveByManagerIdUpdatedAfter(UUID managerId, Instant since);
+
+    @Query("""
+            SELECT d.* FROM fleet.drivers d
+            INNER JOIN fleet.fleets f ON d.fleet_id = f.id
+            WHERE f.manager_id = :managerId
+              AND d.deleted_at IS NOT NULL
+              AND d.deleted_at > :since
+            """)
+    Flux<DriverEntity> findDeletedByManagerIdSince(UUID managerId, Instant since);
 }

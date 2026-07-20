@@ -16,6 +16,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.support.WebClientAdapter;
 import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 import reactor.core.publisher.Mono;
+import io.netty.channel.ChannelOption;
+import java.time.Duration;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
@@ -36,6 +38,20 @@ public class WebClientConfig {
         });
     }
 
+  private static final Duration KERNEL_DEFAULT_RESPONSE_TIMEOUT = Duration.ofSeconds(10);
+  private static final Duration KERNEL_KYC_RESPONSE_TIMEOUT = Duration.ofSeconds(180);
+
+    private HttpClient kernelHttpClient() {
+        return kernelHttpClient(KERNEL_DEFAULT_RESPONSE_TIMEOUT);
+    }
+
+    private HttpClient kernelHttpClient(Duration responseTimeout) {
+        return HttpClient.create()
+                .resolver(DefaultAddressResolverGroup.INSTANCE)
+                .responseTimeout(responseTimeout)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000);
+    }
+
     // --- BUILDER DE BASE AVEC LOGGING ---
     @Bean
     @Primary // Pour que ce builder soit celui utilisé par défaut partout
@@ -49,16 +65,37 @@ public class WebClientConfig {
 
     // --- KERNEL RT-COMOPS ---
 
-    @Bean("kernelWebClient")
-    public WebClient kernelWebClient(
-            WebClient.Builder builder,
-            @Value("${application.kernel.url:http://kernel-core.yowyob.com}") String kernelUrl,
+    @Bean("kernelKycWebClient")
+    public WebClient kernelKycWebClient(
+            @Value("${application.kernel.url:https://kernel-core.yowyob.com/kernel-api}") String kernelUrl,
             @Value("${application.kernel.client-id:fleet-management-backend}") String clientId,
-            @Value("${application.kernel.api-key:fleet-api-key-2026}") String apiKey) {
-        return builder
+            @Value("${application.kernel.api-key:fleet-api-key-2026}") String apiKey,
+            @Value("${application.kernel.tenant-id:}") String tenantId) {
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(kernelHttpClient(KERNEL_KYC_RESPONSE_TIMEOUT)))
                 .baseUrl(kernelUrl)
                 .defaultHeader("X-Client-Id", clientId)
                 .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader("X-Tenant-Id", tenantId)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .filter(logRequest())
+                .build();
+    }
+
+    @Bean("kernelWebClient")
+    public WebClient kernelWebClient(
+            WebClient.Builder builder,
+            @Value("${application.kernel.url:https://kernel-core.yowyob.com/kernel-api}") String kernelUrl,
+            @Value("${application.kernel.client-id:fleet-management-backend}") String clientId,
+            @Value("${application.kernel.api-key:fleet-api-key-2026}") String apiKey,
+            @Value("${application.kernel.tenant-id:}") String tenantId) {
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(kernelHttpClient()))
+                .baseUrl(kernelUrl)
+                .defaultHeader("X-Client-Id", clientId)
+                .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader("X-Tenant-Id", tenantId)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .filter(logRequest())
@@ -67,13 +104,16 @@ public class WebClientConfig {
 
     @Bean
     public KernelAuthApiClient kernelAuthApiClient(
-            @Value("${application.kernel.url:http://kernel-core.yowyob.com}") String kernelUrl,
+            @Value("${application.kernel.url:https://kernel-core.yowyob.com/kernel-api}") String kernelUrl,
             @Value("${application.kernel.client-id:fleet-management-backend}") String clientId,
-            @Value("${application.kernel.api-key:fleet-api-key-2026}") String apiKey) {
+            @Value("${application.kernel.api-key:fleet-api-key-2026}") String apiKey,
+            @Value("${application.kernel.tenant-id:}") String tenantId) {
         WebClient webClient = WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(kernelHttpClient()))
                 .baseUrl(kernelUrl)
                 .defaultHeader("X-Client-Id", clientId)
                 .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader("X-Tenant-Id", tenantId)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .filter(logRequest())
@@ -85,11 +125,14 @@ public class WebClientConfig {
     public KernelAdminApiClient kernelAdminApiClient(
             @Value("${application.kernel.url}") String kernelUrl,
             @Value("${application.kernel.client-id}") String clientId,
-            @Value("${application.kernel.api-key}") String apiKey) {
+            @Value("${application.kernel.api-key}") String apiKey,
+            @Value("${application.kernel.tenant-id:}") String tenantId) {
         WebClient webClient = WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(kernelHttpClient()))
                 .baseUrl(kernelUrl)
                 .defaultHeader("X-Client-Id", clientId)
                 .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader("X-Tenant-Id", tenantId)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .filter(logRequest())
@@ -101,11 +144,14 @@ public class WebClientConfig {
     public KernelOrganizationApiClient kernelOrganizationApiClient(
             @Value("${application.kernel.url}") String kernelUrl,
             @Value("${application.kernel.client-id}") String clientId,
-            @Value("${application.kernel.api-key}") String apiKey) {
+            @Value("${application.kernel.api-key}") String apiKey,
+            @Value("${application.kernel.tenant-id:}") String tenantId) {
         WebClient webClient = WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(kernelHttpClient()))
                 .baseUrl(kernelUrl)
                 .defaultHeader("X-Client-Id", clientId)
                 .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader("X-Tenant-Id", tenantId)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .filter(logRequest())
                 .build();
@@ -116,11 +162,14 @@ public class WebClientConfig {
     public KernelResourceApiClient kernelResourceApiClient(
             @Value("${application.kernel.url}") String kernelUrl,
             @Value("${application.kernel.client-id}") String clientId,
-            @Value("${application.kernel.api-key}") String apiKey) {
+            @Value("${application.kernel.api-key}") String apiKey,
+            @Value("${application.kernel.tenant-id:}") String tenantId) {
         WebClient webClient = WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(kernelHttpClient()))
                 .baseUrl(kernelUrl)
                 .defaultHeader("X-Client-Id", clientId)
                 .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader("X-Tenant-Id", tenantId)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .filter(logRequest())
                 .build();
@@ -131,11 +180,14 @@ public class WebClientConfig {
     public KernelFileApiClient kernelFileApiClient(
             @Value("${application.kernel.url}") String kernelUrl,
             @Value("${application.kernel.client-id}") String clientId,
-            @Value("${application.kernel.api-key}") String apiKey) {
+            @Value("${application.kernel.api-key}") String apiKey,
+            @Value("${application.kernel.tenant-id:}") String tenantId) {
         WebClient webClient = WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(kernelHttpClient()))
                 .baseUrl(kernelUrl)
                 .defaultHeader("X-Client-Id", clientId)
                 .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader("X-Tenant-Id", tenantId)
                 .filter(logRequest())
                 .build();
         return createProxy(webClient, KernelFileApiClient.class);
@@ -220,5 +272,19 @@ public class WebClientConfig {
         } catch (Exception e) {
             throw new RuntimeException("Erreur configuration WebClient Insecure", e);
         }
+    }
+
+    @Bean(name = "syncInternalWebClient")
+    public WebClient syncInternalWebClient(@Value("${server.port:8081}") int serverPort) {
+        return WebClient.builder()
+                .baseUrl("http://127.0.0.1:" + serverPort)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                // Marque cet appel comme un replay interne de SyncPushService, qui gère
+                // déjà lui-même l'idempotence sur fleet.sync_mutations avec cette même
+                // clé — voir IdempotencyWebFilter.shouldApply().
+                .defaultHeader("X-Internal-Sync-Call", "true")
+                .clientConnector(new ReactorClientHttpConnector(HttpClient.create()))
+                .build();
     }
 }

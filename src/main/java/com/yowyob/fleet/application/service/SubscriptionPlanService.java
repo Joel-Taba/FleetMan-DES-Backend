@@ -2,6 +2,7 @@ package com.yowyob.fleet.application.service;
 
 import com.yowyob.fleet.domain.model.SubscriptionPlan;
 import com.yowyob.fleet.domain.ports.in.ManageSubscriptionPlanUseCase;
+import com.yowyob.fleet.domain.ports.out.ExternalActorPort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.SubscriptionPlanEntity;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ActiveSubscriptionDto;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.PendingSubscriptionDto;
@@ -37,6 +38,7 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
     private final FleetManagerR2dbcRepository managerRepo;
     private final DatabaseClient db;
     private final SubscriptionRegistrationService registrationService;
+    private final ExternalActorPort externalActorPort;
 
     @Override
     public Mono<SubscriptionPlan> createPlan(CreatePlanCommand cmd) {
@@ -118,7 +120,7 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
     public Flux<PendingSubscriptionDto> listPendingSubscriptions() {
         return db.sql("""
                 SELECT u.id, u.username, u.email, u.first_name, u.last_name,
-                       fm.company_name, fm.plan_id,
+                       fm.company_name, fm.requested_plan_id AS plan_id,
                        COALESCE(u.approved_at, NOW()) AS created_at
                 FROM fleet.users u
                 LEFT JOIN fleet.fleet_managers fm ON fm.user_id = u.id
@@ -201,7 +203,18 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
                 u.setNewRecord(false);
                 return userRepo.save(u);
             })
-            .then(cmd.planId() != null ? assignPlanToManager(cmd.managerId(), cmd.planId()) : Mono.empty());
+            .then(cmd.planId() != null ? assignPlanToManager(cmd.managerId(), cmd.planId()) : Mono.empty())
+            // Le gestionnaire s'est inscrit via /public/register-manager, qui crée le compte
+            // Kernel mais ne lui attribue aucun rôle (pas de scope organisation à ce stade).
+            // Sans cette assignation, le compte approuvé ne peut pas se connecter avec les
+            // permissions manager (JWT sans ROLE_FLEET_MANAGER). Best-effort : ne doit pas
+            // faire échouer l'approbation en base si le Kernel est indisponible.
+            .then(externalActorPort.assignPlatformRole(cmd.managerId(), "FLEET_MANAGER")
+                    .onErrorResume(e -> {
+                        log.warn("⚠️ Assignation rôle FLEET_MANAGER ignorée pour {} : {}",
+                                cmd.managerId(), e.getMessage());
+                        return Mono.empty();
+                    }));
     }
 
     @Override

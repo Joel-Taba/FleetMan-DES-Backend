@@ -29,19 +29,25 @@ public interface KernelOrganizationApiClient {
             @RequestHeader("X-Tenant-Id") String tenantId,
             @RequestBody CreateOrganizationRequest request);
 
+    /**
+     * Approuve une organisation nouvellement créée. Ne PAS envoyer
+     * X-Organization-Id = organizationId ici : tant que l'organisation n'est
+     * pas encore approuvée, le Kernel refuse (401) tout appel scopé sur son
+     * propre contexte organisation (problème de la poule et de l'œuf, vérifié
+     * en direct contre le Kernel). Header volontairement omis.
+     */
     @PostExchange("/api/organizations/{organizationId}/approve")
     Mono<ApiResponse<OrganizationResponse>> approveOrganization(
             @RequestHeader("Authorization") String bearerToken,
             @RequestHeader("X-Tenant-Id") String tenantId,
-            @RequestHeader("X-Organization-Id") String organizationIdHeader,
             @PathVariable("organizationId") UUID organizationId,
             @RequestBody GovernanceActionRequest request);
 
+    /** Même remarque que {@link #approveOrganization} : header org volontairement omis. */
     @PostExchange("/api/organizations/{organizationId}/services")
     Mono<ApiResponse<Object>> subscribeService(
             @RequestHeader("Authorization") String bearerToken,
             @RequestHeader("X-Tenant-Id") String tenantId,
-            @RequestHeader("X-Organization-Id") String organizationIdHeader,
             @PathVariable("organizationId") UUID organizationId,
             @RequestBody SubscribeServiceRequest request);
 

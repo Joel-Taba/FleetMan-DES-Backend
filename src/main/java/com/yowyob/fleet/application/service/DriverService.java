@@ -51,6 +51,7 @@ public class DriverService implements ManageDriverUseCase {
     private final ExternalActorPort externalActorPort;
     private final UserLocalR2dbcRepository userRepo;
     private final PlanLimitGuard planLimitGuard;
+    private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripR2dbcRepository tripRepository;
 
     private static final String SERVICE_NAME = "FLEET_MANAGEMENT";
 
@@ -290,20 +291,30 @@ public class DriverService implements ManageDriverUseCase {
     @Override
     public Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> getDriversEnriched(
             UUID fleetId, Boolean isAssigned, UUID requesterId) {
-        return getDriversWithFilters(fleetId, isAssigned, requesterId).flatMap(this::enrichDriver);
+        // Un seul aller-retour pour récupérer TOUS les chauffeurs actuellement
+        // mobilisés par un trajet (peu importe le nombre de chauffeurs listés),
+        // au lieu d'une requête par chauffeur (N+1).
+        return tripRepository.findActiveTripDriverIds()
+                .collect(java.util.stream.Collectors.toSet())
+                .flatMapMany(activeIds ->
+                        getDriversWithFilters(fleetId, isAssigned, requesterId)
+                                .flatMap(driver -> enrichDriver(driver, activeIds.contains(driver.userId())))
+                );
     }
 
     @Override
     public Mono<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> getDriverEnriched(UUID userId) {
         return driverPersistencePort.findById(userId)
                 .switchIfEmpty(Mono.error(new RuntimeException("Conducteur introuvable")))
-                .flatMap(this::enrichDriver);
+                .flatMap(driver -> tripRepository.existsActiveTripForDriver(userId)
+                        .flatMap(onTrip -> enrichDriver(driver, Boolean.TRUE.equals(onTrip))));
     }
 
-    private Mono<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> enrichDriver(Driver driver) {
+    private Mono<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> enrichDriver(
+            Driver driver, boolean onActiveTrip) {
         return userRepo.findById(driver.userId())
-                .map(user -> com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse.from(driver, user))
-                .defaultIfEmpty(com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse.from(driver, null));
+                .map(user -> com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse.from(driver, user, user.getPhone(), onActiveTrip))
+                .defaultIfEmpty(com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse.from(driver, null, null, onActiveTrip));
     }
 
     public Mono<Driver> searchDriver(String identifier) {
@@ -411,14 +422,15 @@ private Mono<Void> updateVehicleLink(UUID vehicleId, UUID driverId) {
                                 request.photoUrl() != null ? request.photoUrl() : driver.photoUrl(),
                                 driver.kernelActorId()
                         );
+                        // authPort.updateUserProfile n'est pas implémenté côté Kernel (voir
+                        // KernelAuthAdapter — un simple stub qui refait un getUserProfile) et
+                        // était en plus appelé avec un jeton "fake-token" littéral, garanti
+                        // rejeté (401) par le Kernel : ceci faisait systématiquement échouer
+                        // TOUTE la mise à jour (y compris la sauvegarde locale, jamais atteinte).
+                        // La mirroir locale (fleet.users) est la source de vérité pratique pour
+                        // ces champs chauffeur — voir syncLocalUserNames.
                         Mono<Void> profileUpdate = needsProfileUpdate(request)
-                                ? authPort.updateUserProfile(userId, "fake-token",
-                                        new AuthUseCase.UpdateProfileCommand(
-                                                request.firstName(),
-                                                request.lastName(),
-                                                request.phone(),
-                                                request.email()
-                                        )).then(syncLocalUserNames(userId, request))
+                                ? syncLocalUserNames(userId, request)
                                 : Mono.empty();
                         return fleetMove
                                 .then(driverPersistencePort.save(next))
@@ -439,6 +451,7 @@ private Mono<Void> updateVehicleLink(UUID vehicleId, UUID driverId) {
                     if (request.firstName() != null) user.setFirstName(request.firstName());
                     if (request.lastName() != null) user.setLastName(request.lastName());
                     if (request.email() != null) user.setEmail(request.email());
+                    if (request.phone() != null) user.setPhone(request.phone());
                     user.setNewRecord(false);
                     return userRepo.save(user);
                 }).then();

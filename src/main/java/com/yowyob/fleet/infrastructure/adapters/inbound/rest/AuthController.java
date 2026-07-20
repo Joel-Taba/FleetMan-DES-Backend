@@ -1,6 +1,7 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
 import com.yowyob.fleet.application.service.PasswordResetService;
+import com.yowyob.fleet.domain.exception.AuthException;
 import com.yowyob.fleet.domain.ports.in.AuthUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ApiResponse;
@@ -42,7 +43,9 @@ public class AuthController {
     @Operation(summary = "Rafraîchir le token JWT")
     public Mono<ApiResponse<AuthPort.AuthResponse>> refresh(
             @org.springframework.web.bind.annotation.RequestBody TokenRefreshRequest request) {
-        return authUseCase.refreshToken(request.refreshToken()).map(ApiResponse::ok);
+        return authUseCase.refreshToken(request.refreshToken())
+                .switchIfEmpty(Mono.error(AuthException.tokenExpired()))
+                .map(ApiResponse::ok);
     }
 
     @PostMapping(value = "/register", consumes = MediaType.APPLICATION_JSON_VALUE)

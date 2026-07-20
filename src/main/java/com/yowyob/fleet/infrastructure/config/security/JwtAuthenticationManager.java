@@ -1,13 +1,18 @@
 package com.yowyob.fleet.infrastructure.config.security;
 
 import com.yowyob.fleet.domain.exception.AuthException;
+import com.yowyob.fleet.domain.exception.DomainException;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.CredentialsExpiredException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.ReactiveAuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -47,10 +52,26 @@ public class JwtAuthenticationManager implements ReactiveAuthenticationManager {
                     );
                 })
                 .cast(Authentication.class)
+                .onErrorResume(AuthException.class, auth -> Mono.error(toAuthenticationException(auth)))
+                .onErrorResume(DomainException.class, domain -> Mono.error(toAuthenticationException(domain)))
                 .onErrorResume(e -> {
                     log.warn("🔐 Accès refusé : {}", e.getMessage());
-                    return Mono.error(e);
+                    return Mono.error(e instanceof AuthenticationException
+                            ? e
+                            : new BadCredentialsException(
+                                    e.getMessage() != null ? e.getMessage() : "Authentification refusée", e));
                 });
+    }
+
+    private AuthenticationException toAuthenticationException(DomainException ex) {
+        if (ex instanceof AuthException auth) {
+            return switch (auth.getBusinessCode()) {
+                case "AUTH_005" -> new CredentialsExpiredException(auth.getMessage(), auth);
+                case "AUTH_002", "AUTH_003" -> new DisabledException(auth.getMessage());
+                default -> new BadCredentialsException(auth.getMessage(), auth);
+            };
+        }
+        return new BadCredentialsException(ex.getMessage(), ex);
     }
 
     private Mono<AuthPort.UserDetail> resolveAndRebind(AuthPort.UserDetail userDetail) {

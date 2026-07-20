@@ -54,7 +54,17 @@ public interface KernelAdminApiClient {
             @RequestHeader("X-Organization-Id") String organizationId,
             @PathVariable("organizationId") UUID organizationIdPath);
 
+    /** Liste des rôles configurés côté Kernel (roles-core) pour le tenant courant. */
+    @GetExchange("/api/administration/roles")
+    Mono<KernelAuthApiClient.ApiResponse<List<RoleDto>>> listRoles(
+            @RequestHeader("Authorization") String bearerToken,
+            @RequestHeader("X-Tenant-Id") String tenantId,
+            @RequestHeader("X-Organization-Id") String organizationId);
+
     record AssignRoleRequest(UUID roleId, String scopeType, UUID scopeId, String scope) {}
+
+    /** Rôle Kernel (roles-core). {@code code} est l'identifiant stable (ex. FLEET_ADMIN). */
+    record RoleDto(UUID id, String code, String name, String scopeType) {}
 
     record CreateActorRequest(
             UUID organizationId,

@@ -1,50 +1,45 @@
 package com.yowyob.fleet.infrastructure.config;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 
 /**
- * Vérifie au démarrage que les role IDs Kernel sont configurés pour assignRole.
+ * Vérifie au démarrage que les 4 rôles FleetMan (DRIVER, MANAGER, ADMIN, SUPER_ADMIN) sont
+ * résolvables côté Kernel — soit via surcharge de configuration, soit dynamiquement via
+ * GET /api/administration/roles (voir {@link KernelRoleRegistry}).
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 @ConditionalOnProperty(name = "application.auth.mode", havingValue = "kernel")
 public class KernelRolesStartupValidator {
 
-    @Value("${application.kernel.roles.fleet-driver-id:}")
-    private String fleetDriverRoleId;
+    private static final String[] FLEET_ROLES = {
+            "FLEET_DRIVER", "FLEET_MANAGER", "FLEET_ADMIN", "FLEET_SUPER_ADMIN"
+    };
 
-    @Value("${application.kernel.roles.fleet-manager-id:}")
-    private String fleetManagerRoleId;
+    private final KernelRoleRegistry roleRegistry;
 
     @EventListener(ApplicationReadyEvent.class)
     public void validateRoleIds() {
-        if (isBlank(fleetDriverRoleId)) {
-            log.warn("""
-                    ⚠️ [KERNEL ROLES] KERNEL_ROLE_FLEET_DRIVER_ID non configuré.
-                    assignRole sera ignoré pour les chauffeurs.
-                    Récupérez l'UUID du rôle FLEET_DRIVER dans le Kernel et exportez :
-                    export KERNEL_ROLE_FLEET_DRIVER_ID=<uuid>
-                    """);
-        } else {
-            log.info("✅ [KERNEL ROLES] FLEET_DRIVER roleId configuré");
+        for (String role : FLEET_ROLES) {
+            roleRegistry.resolve(role)
+                    .doOnSuccess(id -> log.info("✅ [KERNEL ROLES] {} → {}", role, id))
+                    .switchIfEmpty(Mono.fromRunnable(() -> log.warn(
+                            "⚠️ [KERNEL ROLES] {} introuvable (ni configuré, ni résolu via "
+                                    + "GET /api/administration/roles). assignRole sera ignoré pour ce rôle.",
+                            role)))
+                    .onErrorResume(e -> {
+                        log.warn("⚠️ [KERNEL ROLES] Résolution de {} impossible au démarrage : {}",
+                                role, e.getMessage());
+                        return Mono.empty();
+                    })
+                    .subscribe();
         }
-        if (isBlank(fleetManagerRoleId)) {
-            log.warn("""
-                    ⚠️ [KERNEL ROLES] KERNEL_ROLE_FLEET_MANAGER_ID non configuré.
-                    assignRole sera ignoré pour les managers.
-                    export KERNEL_ROLE_FLEET_MANAGER_ID=<uuid>
-                    """);
-        } else {
-            log.info("✅ [KERNEL ROLES] FLEET_MANAGER roleId configuré");
-        }
-    }
-
-    private static boolean isBlank(String s) {
-        return s == null || s.isBlank();
     }
 }

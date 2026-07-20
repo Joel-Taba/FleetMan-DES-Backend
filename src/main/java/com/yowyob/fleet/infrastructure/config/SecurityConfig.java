@@ -1,12 +1,16 @@
 package com.yowyob.fleet.infrastructure.config;
 
+import com.yowyob.fleet.domain.exception.DomainException;
 import com.yowyob.fleet.infrastructure.config.security.BearerTokenServerAuthenticationConverter;
+import com.yowyob.fleet.infrastructure.config.security.IdempotencyWebFilter;
 import com.yowyob.fleet.infrastructure.config.security.JwtAuthenticationManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
@@ -21,6 +25,7 @@ import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import reactor.core.publisher.Mono;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Configuration
@@ -32,12 +37,34 @@ public class SecurityConfig {
 
     private final JwtAuthenticationManager authenticationManager;
     private final BearerTokenServerAuthenticationConverter authenticationConverter;
+    private final IdempotencyWebFilter idempotencyWebFilter;
 
     @Bean
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
 
         AuthenticationWebFilter jwtFilter = new AuthenticationWebFilter(authenticationManager);
         jwtFilter.setServerAuthenticationConverter(authenticationConverter);
+        jwtFilter.setAuthenticationFailureHandler((webFilterExchange, exception) -> {
+            Throwable cause = exception;
+            while (cause.getCause() != null && cause.getCause() != cause) {
+                cause = cause.getCause();
+            }
+            HttpStatus status = HttpStatus.UNAUTHORIZED;
+            String code = "AUTH_001";
+            String message = cause.getMessage() != null ? cause.getMessage() : "Authentification refusée";
+            if (cause instanceof DomainException domainException) {
+                status = domainException.getStatus();
+                code = domainException.getBusinessCode();
+                message = domainException.getMessage();
+            }
+            var response = webFilterExchange.getExchange().getResponse();
+            response.setStatusCode(status);
+            response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+            String escaped = message.replace("\\", "\\\\").replace("\"", "\\\"");
+            String json = "{\"detail\":\"" + escaped + "\",\"code\":\"" + code + "\",\"status\":" + status.value() + "}";
+            DataBuffer buffer = response.bufferFactory().wrap(json.getBytes(StandardCharsets.UTF_8));
+            return response.writeWith(Mono.just(buffer));
+        });
 
         jwtFilter.setRequiresAuthenticationMatcher(
                 new AndServerWebExchangeMatcher(
@@ -53,10 +80,16 @@ public class SecurityConfig {
         return http
                 // 1. ACTIVATION DU CORS ICI
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                
+
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
+                // Le viewer PDF intégré (iframe) du front sert /api/v1/files/**, servi
+                // depuis une origine distincte (autre port en dev, sous-domaine en prod).
+                // X-Frame-Options DENY (défaut Spring Security) bloque cet embed même en
+                // SAMEORIGIN puisque front et back n'ont jamais la même origine ici — cette
+                // API ne sert que du JSON/fichiers, pas de pages HTML sensibles au clickjacking.
+                .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()))
                 .authenticationManager(authenticationManager)
 
                 .exceptionHandling(handling -> handling
@@ -86,6 +119,7 @@ public class SecurityConfig {
                         .anyExchange().authenticated()
                 )
                 .addFilterAt(jwtFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+                .addFilterAfter(idempotencyWebFilter, SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();
     }
 

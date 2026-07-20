@@ -43,15 +43,6 @@ public class FleetController {
     // --- 10a. FLEETS | ADMINISTRATION (CRUD & STATS) ---
     // ========================================================================
 
-    @Tag(name = OpenApiConfig.TAG_FLEETS) // On garde le tag principal pour 10a
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Créer une flotte", description = "Initialise une nouvelle entité organisationnelle.")
-    public Mono<FleetResponse> create(@Valid @RequestBody FleetRequest request, Authentication auth) {
-        return fleetUseCase.createFleet(mapper.toDomain(request), getManagerId(auth))
-                .map(mapper::toResponse);
-    }
-
     @Tag(name = OpenApiConfig.TAG_FLEETS)
     @GetMapping
     @Operation(summary = "Lister mes flottes", description = "Récupère uniquement les flottes appartenant au manager connecté.")
@@ -75,21 +66,9 @@ public class FleetController {
         return fleetUseCase.getFleetStatistics(id, getManagerId(auth), false);
     }
 
-    @Tag(name = OpenApiConfig.TAG_FLEETS)
-    @PutMapping("/{id}")
-    @Operation(summary = "Modifier une flotte")
-    public Mono<FleetResponse> update(@PathVariable UUID id, @Valid @RequestBody FleetRequest request, Authentication auth) {
-        return fleetUseCase.updateFleet(id, mapper.toDomain(request), getManagerId(auth), false)
-                .map(mapper::toResponse);
-    }
-
-    @Tag(name = OpenApiConfig.TAG_FLEETS)
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Supprimer une flotte", description = "Interdit si la flotte contient encore des ressources.")
-    public Mono<Void> delete(@PathVariable UUID id, Authentication auth) {
-        return fleetUseCase.deleteFleet(id, getManagerId(auth), false);
-    }
+    // Création / modification / suppression de flotte : désormais réservées à
+    // l'administrateur (voir AdminFleetController) — le gestionnaire ne fait
+    // plus que consulter le détail des flottes qui lui ont été assignées.
 
     // ========================================================================
     // --- 10b. FLEETS | MES VÉHICULES (GESTION DU PARC) ---

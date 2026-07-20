@@ -24,6 +24,9 @@ public class FleetManagerEntity implements Persistable<UUID> {
     @Column("company_name")
     private String companyName;
 
+    @Column("logo_url")
+    private String logoUrl;
+
     @Transient // Ce champ n'est pas en base, il sert à la logique R2DBC
     private boolean isNew = false;
 

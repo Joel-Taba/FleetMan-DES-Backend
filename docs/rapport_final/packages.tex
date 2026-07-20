@@ -1,0 +1,187 @@
+% =============================================================================
+% packages.tex — FleetMan — Charte graphique bleue
+% =============================================================================
+
+% Encodage et langue
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+
+% Mise en page
+\usepackage[top=2.5cm, bottom=2.5cm, left=1.8cm, right=1.8cm, headheight=16pt]{geometry}
+
+% Typographie
+\usepackage{mathptmx}
+\usepackage{microtype}
+
+% Graphiques et figures
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tabularx}
+\usepackage{float}
+\usepackage{lscape}
+\usepackage{pdflscape}
+\usepackage{rotating}
+\usepackage{tikz}
+\usetikzlibrary{calc,shapes.geometric,arrows.meta,positioning,fit,backgrounds}
+
+% Couleurs — charte FleetMan (bleu)
+\usepackage[table,xcdraw]{xcolor}
+\definecolor{primaryColor}{RGB}{19,109,236}    % fleetblue
+\definecolor{secondaryColor}{RGB}{11,17,32}      % fleetdark
+\definecolor{darkGray}{RGB}{107,114,128}       % fleetgray
+\definecolor{fleetsuccess}{RGB}{16,185,129}
+\definecolor{fleetwarning}{RGB}{245,158,11}
+\definecolor{fleeterror}{RGB}{239,68,68}
+
+% Alias pour compatibilité avec le corps du rapport
+\definecolor{fleetblue}{RGB}{19,109,236}
+\definecolor{fleetdark}{RGB}{11,17,32}
+\definecolor{fleetgray}{RGB}{107,114,128}
+
+% Tableaux
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{multirow}
+\rowcolors{1}{white}{gray!8}
+
+% Liens hypertexte
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=black,
+    urlcolor=primaryColor,
+    citecolor=black,
+    pdftitle={FleetMan — Rapport d'Analyse et de Conception},
+    pdfauthor={Groupe 4GI — FleetMan},
+    pdfpagemode=FullScreen,
+}
+
+% En-têtes et pieds de page
+\usepackage{fancyhdr}
+\usepackage{emptypage}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{darkGray}{\leftmark}}
+\fancyhead[R]{\textcolor{primaryColor}{\textbf{FleetMan — Rapport A\&C}}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Espacement
+\usepackage{indentfirst}
+\setlength{\parindent}{0.5cm}
+\renewcommand{\baselinestretch}{1.3}
+\usepackage{parskip}
+
+% Glossaires, sommaires locaux
+\usepackage[nottoc]{tocbibind}
+\usepackage{etoc}
+\usepackage{lettrine}
+\renewcommand{\LettrineFontHook}{\fontfamily{ptm}\selectfont\color{primaryColor}\bfseries}
+\usepackage{csquotes}
+
+% Titres de chapitres
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\fontfamily{ptm}\selectfont\bfseries\color{secondaryColor}\raggedleft}
+  {%
+    \mbox{%
+      \raisebox{0.2cm}{\rotatebox{90}{\small\scshape C\,H\,A\,P\,I\,T\,R\,E}}%
+      \hspace{0.2cm}%
+      \colorbox{primaryColor}{\parbox[c][2cm][c]{2cm}{\centering\fontsize{60}{70}\selectfont\textcolor{white}{\thechapter}}}%
+    }%
+  }
+  {0.5cm}
+  {\LARGE\scshape}
+
+\titleformat{name=\chapter,numberless}[block]
+  {\fontfamily{ptm}\selectfont\bfseries\color{secondaryColor}\raggedleft}
+  {}
+  {0pt}
+  {\LARGE\scshape}
+
+\titleformat{\section}{\normalfont\Large\bfseries\color{primaryColor}}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries\color{secondaryColor}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalfont\normalsize\bfseries\color{darkGray}}{\thesubsubsection}{1em}{}
+
+% Listes
+\usepackage{enumitem}
+\usepackage{pifont}
+\setlist[itemize,1]{label=\textcolor{primaryColor}{\ding{43}}}
+\setlist[itemize,2]{label=---}
+
+% Boîtes personnalisées
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{skins,breakable}
+
+\newtcolorbox{problematique}{
+    enhanced,
+    colback=white!95!primaryColor,
+    colframe=primaryColor,
+    boxrule=1.5pt,
+    arc=4pt,
+    title=Problématique,
+    fonttitle=\bfseries\sffamily\large,
+    coltitle=white,
+    attach boxed title to top left={xshift=-2mm, yshift=-2mm},
+    boxed title style={
+        empty,
+        right=10mm,
+        underlay={
+            \fill[primaryColor]
+                (frame.north west) --
+                (frame.south west) --
+                ([xshift=8mm]frame.south east) --
+                (frame.north east) -- cycle;
+        }
+    }
+}
+
+\newtcolorbox{remarque}[1][]{
+    colback=primaryColor!5,colframe=primaryColor,
+    fonttitle=\bfseries,title={Remarque},breakable,#1
+}
+\newtcolorbox{definition}[2][]{
+    colback=secondaryColor!4,colframe=secondaryColor,
+    fonttitle=\bfseries\color{white},coltitle=white,title={#2},breakable,#1
+}
+\newtcolorbox{lecture}[1][]{
+    colback=fleetsuccess!5,colframe=fleetsuccess,
+    fonttitle=\bfseries\color{white},coltitle=white,
+    title={Lecture du diagramme},breakable,#1
+}
+
+% Sommaire local de chapitre
+\newcommand{\chapTOC}{
+    \etocsetnexttocdepth{2}
+    \etocsettocstyle{\vspace{0.5cm}\noindent\textbf{\Large Sommaire} \par\vspace{0.1cm}\noindent\rule{\textwidth}{0.5pt}\vspace{0.1cm}}{\vspace{0.2cm}\noindent\rule{\textwidth}{0.5pt}\vspace{0.5cm}}
+    \localtableofcontents
+    \clearpage
+}
+
+% Métadonnées page de garde (macros publiques)
+\newcommand{\FleetMembreA}{}
+\newcommand{\FleetMatriculeA}{}
+\newcommand{\FleetMembreB}{}
+\newcommand{\FleetMembreC}{}
+\newcommand{\FleetEncadrant}{}
+\newcommand{\FleetPromotion}{}
+\newcommand{\FleetAnneeAcad}{}
+
+\newcommand{\membre}[2]{\renewcommand{\FleetMembreA}{#1}\renewcommand{\FleetMatriculeA}{#2}}
+\newcommand{\membreB}[1]{\renewcommand{\FleetMembreB}{#1}}
+\newcommand{\membreC}[1]{\renewcommand{\FleetMembreC}{#1}}
+\newcommand{\encadrant}[1]{\renewcommand{\FleetEncadrant}{#1}}
+\newcommand{\promotion}[1]{\renewcommand{\FleetPromotion}{#1}}
+\newcommand{\anneeAcad}[1]{\renewcommand{\FleetAnneeAcad}{#1}}
+
+
+
+
+
+

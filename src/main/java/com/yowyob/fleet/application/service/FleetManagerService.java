@@ -6,16 +6,21 @@ import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.domain.ports.out.FleetManagerPersistencePort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.FleetManagerResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerKpiResponse;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.FleetManagerGalleryImageEntity;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.UserLocalEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetManagerGalleryImageR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetManagerR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.IncidentR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.MaintenanceR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FuelRechargeR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -34,6 +39,8 @@ public class FleetManagerService implements ManageFleetManagerUseCase {
     private final VehicleLocalR2dbcRepository vehicleRepository;
     private final DriverR2dbcRepository driverRepository;
     private final AuthPort authPort;
+    private final UserLocalR2dbcRepository userRepository;
+    private final FleetManagerGalleryImageR2dbcRepository galleryRepository;
 
     // ── Repositories Opérations Terrain (Phase 6) ─────────────────────────────
     private final MaintenanceR2dbcRepository maintenanceRepository;
@@ -57,26 +64,47 @@ public class FleetManagerService implements ManageFleetManagerUseCase {
     }
 
     private Mono<FleetManagerResponse> syncAndEnrich(AuthPort.UserDetail remoteUser) {
+        // Le Kernel ne porte ni nom/prénom/téléphone dans le JWT ni sur
+        // GET /api/users/me (vérifié) : remoteUser.firstName()/lastName()/phone()
+        // sont donc systématiquement null. La donnée fiable est notre propre
+        // fleet.users, alimentée à l'inscription (ou via les migrations de
+        // rattrapage pour les comptes de démo provisionnés hors flux applicatif).
         return Mono.zip(
             managerRepository.findById(remoteUser.id())
                 .switchIfEmpty(managerPersistencePort.createProfile(remoteUser.id(), "Société de " + remoteUser.lastName())
                     .then(managerRepository.findById(remoteUser.id()))),
-            fleetRepository.countByManagerId(remoteUser.id())
+            fleetRepository.countByManagerId(remoteUser.id()),
+            userRepository.findById(remoteUser.id())
+                .switchIfEmpty(userRepository.findByKernelId(remoteUser.id()))
+                .defaultIfEmpty(new UserLocalEntity()),
+            galleryRepository.findByManagerId(remoteUser.id())
+                .map(FleetManagerGalleryImageEntity::getImagePath)
+                .collectList()
         ).map(tuple -> {
             var localEntity = tuple.getT1();
             var fleetCount = tuple.getT2();
+            var localUser = tuple.getT3();
+            var gallery = tuple.getT4();
             return new FleetManagerResponse(
                 remoteUser.id(),
-                remoteUser.firstName(),
-                remoteUser.lastName(),
-                remoteUser.email(),
-                remoteUser.phone(),
+                nonBlank(remoteUser.firstName(), localUser.getFirstName()),
+                nonBlank(remoteUser.lastName(), localUser.getLastName()),
+                nonBlank(remoteUser.email(), localUser.getEmail()),
+                nonBlank(remoteUser.phone(), localUser.getPhone()),
                 localEntity.getCompanyName(),
                 "ACTIVE",
                 fleetCount.intValue(),
-                remoteUser.photoUrl()
+                // Logo entreprise (localEntity.logoUrl) distinct de la photo de
+                // profil personnelle (localUser.photoUrl) : on garde ce dernier
+                // en repli seulement si aucun logo dédié n'a encore été défini.
+                nonBlank(localEntity.getLogoUrl(), localUser.getPhotoUrl()),
+                gallery
             );
         });
+    }
+
+    private static String nonBlank(String value, String fallback) {
+        return (value != null && !value.isBlank()) ? value : fallback;
     }
 
     @Override
@@ -85,6 +113,34 @@ public class FleetManagerService implements ManageFleetManagerUseCase {
             return Mono.error(ManagerException.invalidCompanyData("Le nom ne peut pas être vide."));
         }
         return managerPersistencePort.updateCompany(userId, companyName);
+    }
+
+    @Override
+    @Transactional
+    public Mono<Void> updateManagerGallery(UUID userId, String photoUrl, java.util.List<String> galleryUrls) {
+        Mono<Void> logoUpdate = photoUrl != null
+                ? managerRepository.findById(userId)
+                        .flatMap(e -> {
+                            e.setLogoUrl(photoUrl);
+                            e.setNew(false);
+                            return managerRepository.save(e);
+                        })
+                        .then()
+                : Mono.empty();
+        Mono<Void> galleryUpdate = galleryUrls != null
+                ? replaceGallery(userId, galleryUrls)
+                : Mono.empty();
+        return logoUpdate.then(galleryUpdate);
+    }
+
+    private Mono<Void> replaceGallery(UUID managerId, java.util.List<String> galleryUrls) {
+        return galleryRepository.findByManagerId(managerId)
+                .flatMap(img -> galleryRepository.deleteById(img.getId()))
+                .then(Flux.fromIterable(galleryUrls)
+                        .filter(url -> url != null && !url.isBlank())
+                        .concatMap(url -> galleryRepository.save(
+                                new FleetManagerGalleryImageEntity(UUID.randomUUID(), managerId, url)))
+                        .then());
     }
 
     @Override

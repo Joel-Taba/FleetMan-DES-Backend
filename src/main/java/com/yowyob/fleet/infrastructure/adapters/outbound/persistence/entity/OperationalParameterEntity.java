@@ -13,20 +13,22 @@ import java.util.UUID;
 @Table(name = "operational_parameters", schema = "fleet")
 @Data @NoArgsConstructor @AllArgsConstructor
 public class OperationalParameterEntity {
+    // NB: cette entité doit correspondre EXACTEMENT aux colonnes réelles de
+    // fleet.operational_parameters (migration 004/012). Elle contenait
+    // auparavant trip_id/current_location/statut qui n'existent pas (ou plus)
+    // en base — Spring Data R2DBC génère le SELECT à partir de TOUS les champs
+    // de l'entité, donc le moindre champ orphelin fait échouer TOUTE lecture
+    // (findByVehicleId) avec un BadSqlGrammarException, y compris pendant
+    // l'enregistrement du retour d'un trajet.
     @Id
     private UUID id;
-    
+
     @Column("vehicle_id")
     private UUID vehicleId;
-    
-    @Column("trip_id")
-    private UUID tripId;
-    
+
+    @Column("status")
     private Boolean statut;
-    
-    @Column("current_location")
-    private String currentLocation;
-    
+
     @Column("current_speed")
     private BigDecimal currentSpeed;
     

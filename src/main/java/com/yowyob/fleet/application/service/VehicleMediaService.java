@@ -66,7 +66,7 @@ public class VehicleMediaService implements ManageVehicleMediaUseCase {
     @Transactional
     public Mono<Vehicle> addIllustrationImage(UUID vehicleId, FilePart file, String token) {
         return externalVehiclePort.addImage(vehicleId, file, token)
-                .flatMap(url -> galleryRepo.save(new VehicleIllustrationImageEntity(UUID.randomUUID(), vehicleId, url)))
+                .flatMap(url -> galleryRepo.save(new VehicleIllustrationImageEntity(UUID.randomUUID(), vehicleId, url, true)))
                 .then(vehicleUseCase.getVehicleDetails(vehicleId, token));
     }
 

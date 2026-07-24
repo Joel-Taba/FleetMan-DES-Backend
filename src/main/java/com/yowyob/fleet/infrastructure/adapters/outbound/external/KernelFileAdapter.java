@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yowyob.fleet.domain.exception.DocumentException;
 import com.yowyob.fleet.domain.ports.out.ExternalFilePort;
+import com.yowyob.fleet.infrastructure.adapters.outbound.kernel.exception.KernelException;
 import com.yowyob.fleet.infrastructure.config.KernelCallSupport;
 import com.yowyob.fleet.infrastructure.config.KernelTokenHolder;
 import lombok.extern.slf4j.Slf4j;
@@ -58,7 +59,7 @@ public class KernelFileAdapter implements ExternalFilePort {
         String originalName = file.filename();
         validateFileName(originalName);
 
-        return kernelCallSupport.run("kernel-file",
+        return kernelCallSupport.execute("kernel-file",
                 resolveToken(bearerToken)
                 .flatMap(token -> DataBufferUtils.join(file.content())
                         .flatMap(dataBuffer -> {
@@ -86,7 +87,14 @@ public class KernelFileAdapter implements ExternalFilePort {
                                     .flatMap(this::parseUploadResponse);
                         }))
                 .doOnSuccess(r -> log.info("✅ [KERNEL FILE] Upload OK : {} → {}", originalName, r.kernelFileId()))
-                .onErrorMap(this::wrapError));
+                .onErrorMap(this::wrapError),
+                // Un fallback vide (comportement par défaut de run()) transformerait un
+                // timeout/échec Kernel en réponse 200 à corps vide côté client — silence
+                // trompeur qui fait planter le JSON.parse() du frontend au lieu de
+                // renvoyer une erreur exploitable. Propager une vraie erreur ici.
+                Mono.error(KernelException.of(
+                        "FILE_UPLOAD_UNAVAILABLE",
+                        "Le service de stockage de fichiers Kernel est indisponible ou trop lent. Réessayez dans quelques instants.")));
     }
 
     @Override

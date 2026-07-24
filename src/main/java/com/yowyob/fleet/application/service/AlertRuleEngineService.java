@@ -225,6 +225,8 @@ public class AlertRuleEngineService implements ManageAlertRuleUseCase {
                 case MAINTENANCE_ALERT_DUE -> true;                 // Pas de seuil numérique
                 case INCIDENT_REPORTED  -> true;                    // Filtré par sévérité en amont
                 case TRIP_OVERDUE       -> value >= threshold;      // Alerte si retard ≥ seuil minutes
+                case MAINTENANCE_DECLARED -> true;                  // Toujours notifié, pas de seuil (jamais
+                                                                     // utilisé via AlertRule en pratique)
             };
         } catch (NumberFormatException e) {
             // Condition string (ex: sévérité incident) — on passe

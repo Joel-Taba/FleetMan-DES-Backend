@@ -207,6 +207,10 @@ resilience4j:
         slidingWindowSize: 10
         failureRateThreshold: 50
         waitDurationInOpenState: 30s
+      kernel-notification:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
       notification:
         slidingWindowSize: 10
         failureRateThreshold: 50
@@ -220,10 +224,18 @@ resilience4j:
       kernel-resource:
         timeoutDuration: 10s
       kernel-file:
-        timeoutDuration: 10s
+        # 10s était trop court pour l'upload de photos volumineuses (véhicules,
+        # documents scannés) depuis un smartphone — le timeout coupait la requête
+        # avant la fin de l'upload vers Kernel, et kernelCallSupport.run() (sans
+        # fallback dédié) transformait ça en réponse vide silencieuse côté client
+        # au lieu d'une erreur claire. Alignée sur kernel-kyc qui gère le même
+        # type de fichiers volumineux.
+        timeoutDuration: 60s
       kernel-kyc:
         timeoutDuration: 180s
       kernel-actor:
+        timeoutDuration: 10s
+      kernel-notification:
         timeoutDuration: 10s
 
 # Stockage fichiers (documents PDF / images)

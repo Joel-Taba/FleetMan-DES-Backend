@@ -26,4 +26,10 @@ public class AdminException extends DomainException {
     public static AdminException actionForbiddenOnUserType() {
         return new AdminException("Action interdite sur ce type d'utilisateur (réservé aux managers).", HttpStatus.FORBIDDEN, "ADMN_005");
     }
+
+    public static AdminException managerHasActiveFleets() {
+        return new AdminException(
+                "Impossible de supprimer ce gestionnaire : des flottes lui sont encore assignées. Désassignez-les d'abord.",
+                HttpStatus.CONFLICT, "ADMN_006");
+    }
 }

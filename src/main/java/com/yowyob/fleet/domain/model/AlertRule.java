@@ -25,7 +25,11 @@ public class AlertRule {
         DRIVER_SCORE_DROP,      // Score conducteur < seuil
         FUEL_ANOMALY,           // Consommation carburant anormale
         INCIDENT_REPORTED,      // Incident déclaré (selon sévérité)
-        TRIP_OVERDUE            // Trajet non terminé après délai
+        TRIP_OVERDUE,            // Trajet non terminé après délai
+        MAINTENANCE_DECLARED     // Nouvelle maintenance déclarée (distinct de MAINTENANCE_ALERT_DUE,
+                                  // qui concerne un rappel préventif). Toujours notifié directement,
+                                  // jamais utilisé dans une AlertRule configurable (pas de contrainte
+                                  // CHECK correspondante sur alert_rules.trigger_type).
     }
 
     /** Action déclenchée */

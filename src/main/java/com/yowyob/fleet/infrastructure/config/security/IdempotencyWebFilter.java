@@ -68,11 +68,19 @@ public class IdempotencyWebFilter implements WebFilter {
             return writeProblem(exchange, HttpStatus.BAD_REQUEST, "Clé Idempotency-Key invalide (UUID attendu)");
         }
 
+        // Piège Reactor : Mono<Void> n'émet jamais de valeur (même en cas de succès), donc
+        // switchIfEmpty(...) enchaîné directement après le flatMap le considère TOUJOURS
+        // comme "vide" et déclenche À NOUVEAU chain.filter(exchange) — la requête est alors
+        // traitée deux fois (ex: un toggle actif/inactif est appliqué deux fois de suite et
+        // s'annule lui-même). On neutralise l'ambiguïté en convertissant le résultat en
+        // Mono<Boolean> (jamais structurellement vide) avant le switchIfEmpty.
         return ReactiveSecurityContextHolder.getContext()
                 .map(ctx -> ctx.getAuthentication())
                 .filter(Authentication::isAuthenticated)
-                .flatMap(auth -> processAuthenticated(exchange, chain, request, auth, idempotencyKey))
-                .switchIfEmpty(chain.filter(exchange));
+                .flatMap(auth -> processAuthenticated(exchange, chain, request, auth, idempotencyKey)
+                        .then(Mono.just(true)))
+                .switchIfEmpty(chain.filter(exchange).then(Mono.just(false)))
+                .then();
     }
 
     private Mono<Void> processAuthenticated(

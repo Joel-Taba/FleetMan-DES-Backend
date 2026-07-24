@@ -11,4 +11,6 @@ public interface ManageAdminUseCase {
     Mono<Void> toggleManagerStatus(UUID managerId, UUID requesterId, boolean isSuperAdmin);
     /** Créé directement un compte FLEET_MANAGER actif (pas de flux d'approbation). */
     Mono<AuthPort.UserDetail> createManager(AuthUseCase.RegisterCommand command, String companyName);
+    /** Suppression logique (deleted_at) : bloquée si des flottes lui sont encore assignées. */
+    Mono<Void> deleteManager(UUID managerId);
 }

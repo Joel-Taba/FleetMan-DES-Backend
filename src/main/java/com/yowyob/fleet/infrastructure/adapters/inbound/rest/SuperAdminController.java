@@ -85,7 +85,12 @@ public class SuperAdminController {
 
     public record CreateAdminRequest(
         @NotBlank String username,
-        @NotBlank String password,
+        @NotBlank
+        @jakarta.validation.constraints.Pattern(
+            regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{10,}$",
+            message = "Le mot de passe doit contenir au moins 10 caractères, une majuscule, une minuscule, un chiffre et un symbole."
+        )
+        String password,
         @Email @NotBlank String email,
         @NotBlank
         @jakarta.validation.constraints.Pattern(

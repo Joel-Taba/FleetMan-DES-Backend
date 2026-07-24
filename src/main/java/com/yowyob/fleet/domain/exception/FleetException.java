@@ -36,4 +36,11 @@ public class FleetException extends DomainException {
     public static FleetException recruitmentFailed(String reason) {
         return new FleetException("Échec du recrutement : " + reason, HttpStatus.BAD_REQUEST, "FLT_006");
     }
+
+    public static FleetException alreadyAssignedToAnotherManager(String fleetName) {
+        return new FleetException(
+                "La flotte « " + fleetName + " » est déjà assignée à un autre gestionnaire. "
+                        + "Désassignez-la d'abord avant de la réassigner.",
+                HttpStatus.CONFLICT, "FLT_007");
+    }
 }

@@ -8,7 +8,6 @@ import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.AuthController;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelAdminApiClient;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelAuthApiClient;
-import com.yowyob.fleet.infrastructure.config.KernelCallSupport;
 import com.yowyob.fleet.infrastructure.config.KernelTokenHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,20 +42,17 @@ public class KernelAuthAdapter implements AuthPort {
     private final KernelAdminApiClient kernelAdminClient;
     private final KernelTokenHolder kernelTokenHolder;
     private final WebClient kernelWebClient;
-    private final KernelCallSupport kernelCallSupport;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public KernelAuthAdapter(
             KernelAuthApiClient kernelClient,
             KernelAdminApiClient kernelAdminClient,
             KernelTokenHolder kernelTokenHolder,
-            WebClient kernelWebClient,
-            KernelCallSupport kernelCallSupport) {
+            WebClient kernelWebClient) {
         this.kernelClient = kernelClient;
         this.kernelAdminClient = kernelAdminClient;
         this.kernelTokenHolder = kernelTokenHolder;
         this.kernelWebClient = kernelWebClient;
-        this.kernelCallSupport = kernelCallSupport;
     }
 
     @Value("${application.kernel.service:FLEET_MANAGEMENT}")
@@ -141,8 +137,9 @@ public class KernelAuthAdapter implements AuthPort {
     @Override
     public Mono<AuthResponse> registerInRemote(AuthUseCase.RegisterCommand command) {
         log.info("📝 [KERNEL AUTH] Inscription via owner : {}", command.email());
-        return kernelCallSupport.run("kernel-auth",
-                kernelTokenHolder.getValidAccessToken()
+        // Pas de circuit breaker ici (cf. refresh()) : un fallback vide ferait croire
+        // à la création d'un compte qui n'existe pas réellement côté Kernel.
+        return kernelTokenHolder.getValidAccessToken()
                 .flatMap(ownerToken -> kernelAdminClient.registerUser(
                         ensureBearer(ownerToken),
                         defaultTenantId,
@@ -168,7 +165,8 @@ public class KernelAuthAdapter implements AuthPort {
                     return Mono.just(new AuthResponse("", "", detail));
                 })
                 .onErrorResume(WebClientResponseException.class, this::mapWebClientError)
-                .doOnSuccess(r -> log.info("✅ [KERNEL AUTH] Inscription réussie : {}", command.email())));
+                .onErrorResume(this::mapConnectivityError)
+                .doOnSuccess(r -> log.info("✅ [KERNEL AUTH] Inscription réussie : {}", command.email()));
     }
 
     // ── Profil utilisateur ────────────────────────────────────────────────────

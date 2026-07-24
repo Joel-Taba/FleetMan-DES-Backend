@@ -9,6 +9,7 @@ import com.yowyob.fleet.domain.ports.out.FleetManagerPersistencePort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.FleetManagerEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.UserLocalEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetManagerR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,11 +31,13 @@ public class AdminService implements ManageAdminUseCase {
     private final AuthPort authPort;
     private final ExternalActorPort externalActorPort;
     private final FleetManagerPersistencePort managerPersistencePort;
+    private final FleetR2dbcRepository fleetRepo;
 
     @Override
     public Flux<AuthPort.UserDetail> listFleetManagers(String token) {
         return managerRepo.findAll()
                 .flatMap(mgr -> userRepo.findById(mgr.getUserId())
+                        .filter(user -> user.getDeletedAt() == null)
                         .map(user -> toManagerDetail(user, mgr)))
                 .sort((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(
                         safeName(a), safeName(b)));
@@ -43,10 +47,31 @@ public class AdminService implements ManageAdminUseCase {
     public Mono<AuthPort.UserDetail> getManagerDetails(UUID managerId, String token, boolean isSuperAdmin) {
         return userRepo.findById(managerId)
                 .switchIfEmpty(Mono.defer(() -> userRepo.findByKernelId(managerId)))
+                .filter(user -> user.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
                 .flatMap(user -> managerRepo.findById(user.getId())
                         .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
                         .map(mgr -> toManagerDetail(user, mgr)));
+    }
+
+    @Override
+    public Mono<Void> deleteManager(UUID managerId) {
+        return userRepo.findById(managerId)
+                .switchIfEmpty(Mono.defer(() -> userRepo.findByKernelId(managerId)))
+                .filter(user -> user.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
+                .flatMap(user -> fleetRepo.countByManagerId(user.getId())
+                        .flatMap(count -> {
+                            if (count > 0) {
+                                return Mono.error(AdminException.managerHasActiveFleets());
+                            }
+                            user.setDeletedAt(Instant.now());
+                            user.setActive(false);
+                            user.setNewRecord(false);
+                            return userRepo.save(user);
+                        }))
+                .doOnSuccess(u -> log.info("🗑️ Manager {} supprimé (soft delete)", managerId))
+                .then();
     }
 
     @Override

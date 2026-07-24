@@ -17,9 +17,19 @@ public class FleetManagerPersistenceAdapter implements FleetManagerPersistencePo
 
     @Override
     public Mono<Void> createProfile(UUID userId, String companyName) {
-        // Utilisation du constructeur qui met isNew = true
-        FleetManagerEntity entity = new FleetManagerEntity(userId, companyName);
-        return repository.save(entity).then();
+        // Idempotent : le Kernel peut renvoyer l'ID d'un compte existant lors d'une
+        // inscription (dédoublonnage par téléphone), auquel cas le profil local existe
+        // déjà — on met simplement à jour plutôt que de violer la contrainte PK.
+        return repository.findById(userId)
+                .flatMap(existing -> {
+                    existing.setCompanyName(companyName);
+                    return repository.save(existing);
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    FleetManagerEntity entity = new FleetManagerEntity(userId, companyName);
+                    return repository.save(entity);
+                }))
+                .then();
     }
 
     @Override

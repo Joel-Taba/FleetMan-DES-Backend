@@ -1,13 +1,17 @@
 package com.yowyob.fleet.application.service;
 
 import com.yowyob.fleet.domain.exception.OperationException;
+import com.yowyob.fleet.domain.model.AlertEvent;
+import com.yowyob.fleet.domain.model.AlertRule;
 import com.yowyob.fleet.domain.model.Coordinates;
 import com.yowyob.fleet.domain.model.Incident;
 import com.yowyob.fleet.domain.ports.in.ManageIncidentUseCase;
 import com.yowyob.fleet.domain.ports.out.DriverPersistencePort;
 import com.yowyob.fleet.domain.ports.out.IncidentPersistencePort;
 import com.yowyob.fleet.domain.ports.out.OperationEventPort;
+import com.yowyob.fleet.domain.ports.out.SendAlertPort;
 import com.yowyob.fleet.domain.ports.out.VehiclePersistencePort;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,6 +32,8 @@ public class IncidentService implements ManageIncidentUseCase {
     private final VehiclePersistencePort vehiclePersistence;
     private final DriverPersistencePort driverPersistence;
     private final OperationEventPort eventPort;
+    private final SendAlertPort sendAlertPort;
+    private final UserLocalR2dbcRepository userRepo;
 
     // ── 1. CRÉATION ──────────────────────────────────────────────────────────
 
@@ -77,8 +83,9 @@ public class IncidentService implements ManageIncidentUseCase {
                     return incidentPersistence.save(incident);
                 })
                 .flatMap(saved -> {
-                    // 3. Publication événement → notification Fleet Manager (fire & forget)
-                    // Prioritaire si l'incident est CRITICAL ou HIGH
+                    // 3. Publication événement (Kafka, best-effort — no-op si Kafka indisponible)
+                    // 4. Notification in-app immédiate au Fleet Manager (toujours active,
+                    //    ne dépend d'aucune AlertRule configurable ni de Kafka)
                     vehiclePersistence.getLocalDataById(saved.getVehicleId())
                             .flatMap(v -> {
                                 OperationEventPort.IncidentReportedEvent event =
@@ -92,10 +99,18 @@ public class IncidentService implements ManageIncidentUseCase {
                                                 v.managerId(),
                                                 saved.isCritical()
                                         );
-                                return eventPort.publishIncidentReported(event);
+                                Mono<Void> kafkaPublish = eventPort.publishIncidentReported(event)
+                                        .doOnError(e -> log.warn("⚠️ Échec publication événement incident {}: {}",
+                                                saved.getId(), e.getMessage()))
+                                        .onErrorResume(e -> Mono.empty());
+
+                                Mono<AlertEvent> notify = notifyManagerOfIncident(saved, v.managerId());
+
+                                return Mono.when(kafkaPublish, notify);
                             })
-                            .doOnError(e -> log.warn("⚠️ Échec publication événement incident {}: {}",
+                            .doOnError(e -> log.warn("⚠️ Échec notification incident {}: {}",
                                     saved.getId(), e.getMessage()))
+                            .onErrorResume(e -> Mono.empty())
                             .subscribe();
 
                     if (saved.isCritical()) {
@@ -247,5 +262,38 @@ public class IncidentService implements ManageIncidentUseCase {
             return new Coordinates(longitude, latitude);
         }
         return null;
+    }
+
+    private Mono<AlertEvent> notifyManagerOfIncident(Incident incident, java.util.UUID managerId) {
+        String title = incident.isCritical()
+                ? "🚨 Incident CRITIQUE signalé"
+                : "Incident signalé sur un véhicule";
+        String message = String.format("Incident %s (%s) sur le véhicule %s.",
+                incident.getType(), incident.getSeverity(), incident.getVehicleRegistration());
+
+        AlertEvent event = new AlertEvent(
+                null, null, null,
+                managerId, AlertRule.TriggerType.INCIDENT_REPORTED, AlertRule.ActionType.IN_APP_NOTIFICATION,
+                title, message,
+                incident.getId(), "INCIDENT",
+                AlertEvent.ReadStatus.UNREAD,
+                java.time.LocalDateTime.now(), null
+        );
+        return sendAlertPort.sendInApp(event)
+                .doOnSuccess(saved -> notifyManagerByEmail(saved, managerId));
+    }
+
+    /**
+     * Email au gestionnaire, en plus du in-app — toujours actif comme le in-app
+     * (pas conditionné par une AlertRule configurable). Fire & forget : un échec
+     * d'envoi email ne doit jamais faire échouer la création de l'incident.
+     */
+    private void notifyManagerByEmail(AlertEvent event, java.util.UUID managerId) {
+        userRepo.findById(managerId)
+                .mapNotNull(u -> u.getEmail())
+                .flatMap(email -> sendAlertPort.sendEmail(event, email))
+                .doOnError(e -> log.warn("⚠️ Échec envoi email incident {} : {}", event.getId(), e.getMessage()))
+                .onErrorResume(e -> Mono.empty())
+                .subscribe();
     }
 }

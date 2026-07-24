@@ -1,5 +1,6 @@
 package com.yowyob.fleet.domain.model;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -8,6 +9,7 @@ public record Fleet(
     UUID managerId,
     String name,
     String phoneNumber,
+    BigDecimal monthlyBudget,
     Instant createdAt,
     Integer vehicleCount,
     UUID kernelOrganizationId

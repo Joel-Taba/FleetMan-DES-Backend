@@ -162,7 +162,7 @@ public class SubscriptionRegistrationService {
         return documentRepo.findById(documentId)
                 .filter(doc -> doc.getUserId().equals(userId))
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("Document introuvable pour cette demande.")))
-                .flatMap(doc -> loadDocumentBytes(doc, bearerToken)
+                .flatMap(doc -> loadDocumentBytes(doc, null)
                         .flatMap(file -> kycPort.verify(
                                 file.content(),
                                 file.fileName(),

@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -24,7 +25,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -246,19 +249,47 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
     }
 
     @Override
+    @Transactional
     public Mono<Void> replacePlanFeatures(UUID planId, List<ManageSubscriptionPlanUseCase.PlanFeatureCommand> features) {
-        return featureRepo.deleteByPlanId(planId)
-                .thenMany(Flux.fromIterable(features)
-                        .flatMap(f -> {
-                            PlanFeatureEntity e = new PlanFeatureEntity();
-                            e.setId(UUID.randomUUID());
-                            e.setPlanId(planId);
-                            e.setFeatureKey(f.key());
-                            e.setFeatureLabel(f.label());
-                            e.setEnabled(f.enabled());
-                            e.setNew(true);
-                            return featureRepo.save(e);
-                        }))
+        // Upsert ligne par ligne (au lieu d'un DELETE global suivi de INSERT concurrents) :
+        // évite la violation de la contrainte unique (plan_id, feature_key) — via GlobalExceptionHandler,
+        // DataIntegrityViolationException remonte en 400 — qui pouvait survenir si deux requêtes de
+        // remplacement se chevauchaient (double clic, requête réseau relancée...).
+        List<String> newKeys = features.stream()
+                .map(ManageSubscriptionPlanUseCase.PlanFeatureCommand::key)
+                .toList();
+
+        return featureRepo.findByPlanId(planId)
+                .collectList()
+                .flatMap(existing -> {
+                    Map<String, PlanFeatureEntity> existingByKey = existing.stream()
+                            .collect(Collectors.toMap(PlanFeatureEntity::getFeatureKey, e -> e));
+
+                    Flux<PlanFeatureEntity> upserts = Flux.fromIterable(features)
+                            .concatMap(f -> {
+                                PlanFeatureEntity e = existingByKey.get(f.key());
+                                if (e == null) {
+                                    e = new PlanFeatureEntity();
+                                    e.setId(UUID.randomUUID());
+                                    e.setPlanId(planId);
+                                    e.setFeatureKey(f.key());
+                                    e.setNew(true);
+                                }
+                                e.setFeatureLabel(f.label());
+                                e.setEnabled(f.enabled());
+                                return featureRepo.save(e);
+                            });
+
+                    List<UUID> staleIds = existing.stream()
+                            .filter(e -> !newKeys.contains(e.getFeatureKey()))
+                            .map(PlanFeatureEntity::getId)
+                            .toList();
+                    Mono<Void> deleteStale = staleIds.isEmpty()
+                            ? Mono.empty()
+                            : featureRepo.deleteAllById(staleIds);
+
+                    return upserts.then(deleteStale);
+                })
                 .then();
     }
 

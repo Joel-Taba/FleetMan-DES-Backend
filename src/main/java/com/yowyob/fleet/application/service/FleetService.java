@@ -25,6 +25,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 
@@ -50,6 +52,7 @@ public class FleetService implements ManageFleetUseCase {
     private final PlanLimitGuard planLimitGuard;
     private final ExternalOrganizationPort externalOrganizationPort;
     private final KernelTokenHolder kernelTokenHolder;
+    private final ExpensePersistencePort expensePersistence;
 
     @Value("${application.kernel.organization-sync:true}")
     private boolean organizationSync;
@@ -145,9 +148,38 @@ public class FleetService implements ManageFleetUseCase {
     @Override
     @Transactional
     public Mono<Void> assignFleetsToManager(java.util.List<UUID> fleetIds, UUID managerId) {
+        // Cardinalité : un gestionnaire peut avoir plusieurs flottes, mais une flotte
+        // ne peut être assignée qu'à un seul gestionnaire à la fois. Une flotte déjà
+        // prise par un AUTRE gestionnaire doit d'abord être désassignée.
         return repository.findAllById(fleetIds)
+                .collectList()
+                .flatMap(entities -> {
+                    var alreadyTaken = entities.stream()
+                            .filter(e -> e.getManagerId() != null && !e.getManagerId().equals(managerId))
+                            .findFirst();
+                    if (alreadyTaken.isPresent()) {
+                        return Mono.error(FleetException.alreadyAssignedToAnotherManager(alreadyTaken.get().getName()));
+                    }
+                    return Flux.fromIterable(entities)
+                            .flatMap(entity -> {
+                                entity.setManagerId(managerId);
+                                entity.setNew(false);
+                                return repository.save(entity);
+                            })
+                            .then();
+                });
+    }
+
+    @Override
+    @Transactional
+    public Mono<Void> unassignFleetFromManager(UUID fleetId, UUID managerId) {
+        return repository.findById(fleetId)
+                .switchIfEmpty(Mono.error(FleetException.notFound(fleetId)))
+                .filter(e -> managerId.equals(e.getManagerId()))
+                .switchIfEmpty(Mono.error(FleetException.invalidResourceStatus(
+                        "cette flotte n'est pas assignée à ce gestionnaire.")))
                 .flatMap(entity -> {
-                    entity.setManagerId(managerId);
+                    entity.setManagerId(null);
                     entity.setNew(false);
                     return repository.save(entity);
                 })
@@ -197,6 +229,7 @@ public class FleetService implements ManageFleetUseCase {
                 .flatMap(existing -> {
                     existing.setName(fleet.name());
                     existing.setPhoneNumber(fleet.phoneNumber());
+                    existing.setMonthlyBudget(fleet.monthlyBudget());
                     existing.setNew(false);
                     return repository.save(existing);
                 }).map(mapper::toDomain);
@@ -222,15 +255,21 @@ public class FleetService implements ManageFleetUseCase {
 
     @Override
     public Mono<FleetStatsResponse> getFleetStatistics(UUID fleetId, UUID requesterId, boolean isAdmin) {
+        LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
+        LocalDateTime monthEnd = monthStart.plusMonths(1);
         return getFleetById(fleetId, requesterId, isAdmin)
-                .then(Mono.zip(
+                .flatMap(fleet -> Mono.zip(
                     driverRepo.countByFleetId(fleetId),
                     tripRepo.getTotalDistanceByFleetId(fleetId).defaultIfEmpty(0.0),
                     vehicleRepo.countByFleetIdAndStatus(fleetId, "AVAILABLE"),
                     vehicleRepo.countByFleetIdAndStatus(fleetId, "ON_TRIP"),
-                    vehicleRepo.countByFleetIdAndStatus(fleetId, "MAINTENANCE")
-                ).map(t -> new FleetStatsResponse(fleetId, t.getT1(), t.getT2(), 
-                        Map.of("AVAILABLE", t.getT3(), "ON_TRIP", t.getT4(), "MAINTENANCE", t.getT5()))));
+                    vehicleRepo.countByFleetIdAndStatus(fleetId, "MAINTENANCE"),
+                    vehicleRepo.countByFleetId(fleetId),
+                    expensePersistence.getTotalApprovedByFleetAndMonth(fleetId, monthStart, monthEnd)
+                            .defaultIfEmpty(java.math.BigDecimal.ZERO)
+                ).map(t -> new FleetStatsResponse(fleetId, t.getT1(), t.getT6(), t.getT2(),
+                        Map.of("AVAILABLE", t.getT3(), "ON_TRIP", t.getT4(), "MAINTENANCE", t.getT5()),
+                        fleet.monthlyBudget(), t.getT7())));
     }
 
     // ========================================================================

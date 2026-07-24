@@ -140,6 +140,15 @@ public class SecurityConfig {
         // Autoriser l'envoi de cookies/credentials (si besoin)
         configuration.setAllowCredentials(true);
 
+        // Sans maxAge, le navigateur ne met JAMAIS en cache la réponse au pre-flight OPTIONS
+        // et en renvoie un avant CHAQUE requête POST/PUT/DELETE/PATCH — sur la même connexion
+        // keep-alive, immédiatement suivi de la requête réelle. Sous Reactor Netty, cet
+        // enchaînement quasi simultané (OPTIONS puis méthode réelle) provoque parfois une
+        // désynchronisation de lecture du corps de la VRAIE requête ("No request body"),
+        // qui crashe ensuite en réponse déjà validée → connexion fermée. Mettre en cache le
+        // pre-flight (1h) élimine la quasi-totalité de ces doublons OPTIONS+requête.
+        configuration.setMaxAge(3600L);
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;

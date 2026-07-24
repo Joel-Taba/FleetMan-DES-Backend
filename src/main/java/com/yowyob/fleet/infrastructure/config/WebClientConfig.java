@@ -12,6 +12,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.support.WebClientAdapter;
 import org.springframework.web.service.invoker.HttpServiceProxyFactory;
@@ -40,6 +41,18 @@ public class WebClientConfig {
 
   private static final Duration KERNEL_DEFAULT_RESPONSE_TIMEOUT = Duration.ofSeconds(10);
   private static final Duration KERNEL_KYC_RESPONSE_TIMEOUT = Duration.ofSeconds(180);
+
+  // Alignée sur fleetman.uploads.max-bytes (10 Mo) : le buffer en mémoire par défaut de
+  // WebClient (256 Ko) est trop petit pour les fichiers KYC (photos de CNI, PDF scannés)
+  // téléchargés depuis le file-core Kernel — cause un DataBufferLimitException silencieux
+  // qui remonte en erreur réseau opaque (channel fermé / refCnt).
+  private static final int KERNEL_MAX_IN_MEMORY_SIZE = 10 * 1024 * 1024;
+
+  private ExchangeStrategies kernelExchangeStrategies() {
+      return ExchangeStrategies.builder()
+              .codecs(c -> c.defaultCodecs().maxInMemorySize(KERNEL_MAX_IN_MEMORY_SIZE))
+              .build();
+  }
 
     private HttpClient kernelHttpClient() {
         return kernelHttpClient(KERNEL_DEFAULT_RESPONSE_TIMEOUT);
@@ -74,6 +87,7 @@ public class WebClientConfig {
         return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(kernelHttpClient(KERNEL_KYC_RESPONSE_TIMEOUT)))
                 .baseUrl(kernelUrl)
+                .exchangeStrategies(kernelExchangeStrategies())
                 .defaultHeader("X-Client-Id", clientId)
                 .defaultHeader("X-Api-Key", apiKey)
                 .defaultHeader("X-Tenant-Id", tenantId)
@@ -93,6 +107,7 @@ public class WebClientConfig {
         return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(kernelHttpClient()))
                 .baseUrl(kernelUrl)
+                .exchangeStrategies(kernelExchangeStrategies())
                 .defaultHeader("X-Client-Id", clientId)
                 .defaultHeader("X-Api-Key", apiKey)
                 .defaultHeader("X-Tenant-Id", tenantId)
@@ -191,6 +206,25 @@ public class WebClientConfig {
                 .filter(logRequest())
                 .build();
         return createProxy(webClient, KernelFileApiClient.class);
+    }
+
+    @Bean
+    public KernelNotificationApiClient kernelNotificationApiClient(
+            @Value("${application.kernel.url}") String kernelUrl,
+            @Value("${application.kernel.client-id}") String clientId,
+            @Value("${application.kernel.api-key}") String apiKey,
+            @Value("${application.kernel.tenant-id:}") String tenantId) {
+        WebClient webClient = WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(kernelHttpClient()))
+                .baseUrl(kernelUrl)
+                .defaultHeader("X-Client-Id", clientId)
+                .defaultHeader("X-Api-Key", apiKey)
+                .defaultHeader("X-Tenant-Id", tenantId)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .filter(logRequest())
+                .build();
+        return createProxy(webClient, KernelNotificationApiClient.class);
     }
 
     // --- CLIENTS STANDARDS ---

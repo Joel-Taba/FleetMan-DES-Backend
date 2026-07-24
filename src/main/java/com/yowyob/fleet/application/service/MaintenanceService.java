@@ -1,14 +1,18 @@
 package com.yowyob.fleet.application.service;
 
 import com.yowyob.fleet.domain.exception.OperationException;
+import com.yowyob.fleet.domain.model.AlertEvent;
+import com.yowyob.fleet.domain.model.AlertRule;
 import com.yowyob.fleet.domain.model.Coordinates;
 import com.yowyob.fleet.domain.model.Maintenance;
 import com.yowyob.fleet.domain.ports.in.ManageMaintenanceUseCase;
 import com.yowyob.fleet.domain.ports.out.DriverPersistencePort;
 import com.yowyob.fleet.domain.ports.out.MaintenancePersistencePort;
 import com.yowyob.fleet.domain.ports.out.OperationEventPort;
+import com.yowyob.fleet.domain.ports.out.SendAlertPort;
 import com.yowyob.fleet.domain.ports.out.VehiclePersistencePort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.MaintenanceParameterR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,7 +33,9 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
     private final VehiclePersistencePort vehiclePersistence;
     private final DriverPersistencePort driverPersistence;
     private final OperationEventPort eventPort;
+    private final SendAlertPort sendAlertPort;
     private final MaintenanceParameterR2dbcRepository maintenanceParamRepo;
+    private final UserLocalR2dbcRepository userRepo;
 
     // ── 1. CRÉATION ──────────────────────────────────────────────────────────
 
@@ -76,7 +82,8 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
                     // 3. Synchronisation maintenance_parameters du véhicule
                     Mono<Void> syncParams = syncMaintenanceParameters(saved.getVehicleId());
 
-                    // 4. Publication événement → notification Fleet Manager (fire & forget)
+                    // 4. Publication événement (Kafka, best-effort — no-op si Kafka indisponible)
+                    //    + notification in-app immédiate au Fleet Manager (toujours active)
                     vehiclePersistence.getLocalDataById(saved.getVehicleId())
                             .flatMap(v -> {
                                 OperationEventPort.MaintenanceCreatedEvent event =
@@ -88,10 +95,18 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
                                                 saved.getDriverId(),
                                                 v.managerId()
                                         );
-                                return eventPort.publishMaintenanceCreated(event);
+                                Mono<Void> kafkaPublish = eventPort.publishMaintenanceCreated(event)
+                                        .doOnError(e -> log.warn("⚠️ Échec publication événement maintenance {}: {}",
+                                                saved.getId(), e.getMessage()))
+                                        .onErrorResume(e -> Mono.empty());
+
+                                Mono<AlertEvent> notify = notifyManagerOfMaintenance(saved, v.managerId());
+
+                                return Mono.when(kafkaPublish, notify);
                             })
-                            .doOnError(e -> log.warn("⚠️ Échec publication événement maintenance {}: {}",
+                            .doOnError(e -> log.warn("⚠️ Échec notification maintenance {}: {}",
                                     saved.getId(), e.getMessage()))
+                            .onErrorResume(e -> Mono.empty())
                             .subscribe();
 
                     return syncParams.thenReturn(saved);
@@ -192,5 +207,36 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
                 .doOnError(e -> log.warn("⚠️ Impossible de mettre à jour maintenance_parameters pour {}: {}",
                         vehicleId, e.getMessage()))
                 .then();
+    }
+
+    private Mono<AlertEvent> notifyManagerOfMaintenance(Maintenance maintenance, UUID managerId) {
+        String title = "Nouvelle maintenance déclarée";
+        String message = String.format("Une maintenance a été enregistrée pour le véhicule %s : \"%s\"",
+                maintenance.getVehicleRegistrationNumber(), maintenance.getSubject());
+
+        AlertEvent event = new AlertEvent(
+                null, null, null,
+                managerId, AlertRule.TriggerType.MAINTENANCE_DECLARED, AlertRule.ActionType.IN_APP_NOTIFICATION,
+                title, message,
+                maintenance.getId(), "MAINTENANCE",
+                AlertEvent.ReadStatus.UNREAD,
+                LocalDateTime.now(), null
+        );
+        return sendAlertPort.sendInApp(event)
+                .doOnSuccess(saved -> notifyManagerByEmail(saved, managerId));
+    }
+
+    /**
+     * Email au gestionnaire, en plus du in-app — toujours actif comme le in-app
+     * (pas conditionné par une AlertRule configurable). Fire & forget : un échec
+     * d'envoi email ne doit jamais faire échouer la création de la maintenance.
+     */
+    private void notifyManagerByEmail(AlertEvent event, UUID managerId) {
+        userRepo.findById(managerId)
+                .mapNotNull(u -> u.getEmail())
+                .flatMap(email -> sendAlertPort.sendEmail(event, email))
+                .doOnError(e -> log.warn("⚠️ Échec envoi email maintenance {} : {}", event.getId(), e.getMessage()))
+                .onErrorResume(e -> Mono.empty())
+                .subscribe();
     }
 }

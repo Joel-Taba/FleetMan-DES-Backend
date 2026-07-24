@@ -297,7 +297,7 @@ public class VehicleService implements ManageVehicleUseCase {
                 .flatMap(img -> galleryRepo.deleteById(img.getId()))
                 .then(Flux.fromIterable(galleryUrls == null ? List.of() : galleryUrls)
                         .filter(url -> url != null && !url.isBlank())
-                        .concatMap(url -> galleryRepo.save(new VehicleIllustrationImageEntity(UUID.randomUUID(), vehicleId, url)))
+                        .concatMap(url -> galleryRepo.save(new VehicleIllustrationImageEntity(UUID.randomUUID(), vehicleId, url, true)))
                         .then());
     }
 

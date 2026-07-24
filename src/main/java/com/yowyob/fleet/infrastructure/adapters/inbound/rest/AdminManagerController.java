@@ -65,9 +65,20 @@ public class AdminManagerController {
         return adminUseCase.toggleManagerStatus(id, currentUser.id(), isSuper(auth));
     }
 
+    @DeleteMapping("/managers/{id}")
+    @Operation(summary = "Supprimer un Fleet Manager", description = "Suppression logique, bloquée si des flottes lui sont encore assignées.")
+    public Mono<Void> delete(@PathVariable UUID id) {
+        return adminUseCase.deleteManager(id);
+    }
+
     public record CreateManagerRequest(
         @NotBlank String username,
-        @NotBlank String password,
+        @NotBlank
+        @Pattern(
+            regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{10,}$",
+            message = "Le mot de passe doit contenir au moins 10 caractères, une majuscule, une minuscule, un chiffre et un symbole."
+        )
+        String password,
         @Email @NotBlank String email,
         @NotBlank
         @Pattern(
@@ -109,5 +120,11 @@ public class AdminManagerController {
     @Operation(summary = "Assigner une ou plusieurs flottes à un gestionnaire")
     public Mono<Void> assignFleets(@PathVariable UUID id, @Valid @RequestBody AssignFleetsRequest req) {
         return fleetUseCase.assignFleetsToManager(req.fleetIds(), id);
+    }
+
+    @DeleteMapping("/managers/{id}/fleets/{fleetId}")
+    @Operation(summary = "Désassigner une flotte d'un gestionnaire (libère la flotte)")
+    public Mono<Void> unassignFleet(@PathVariable UUID id, @PathVariable UUID fleetId) {
+        return fleetUseCase.unassignFleetFromManager(fleetId, id);
     }
 }

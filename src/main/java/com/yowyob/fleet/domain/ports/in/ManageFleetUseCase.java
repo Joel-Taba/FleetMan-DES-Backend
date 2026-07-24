@@ -27,6 +27,8 @@ public interface ManageFleetUseCase {
     Mono<FleetStatsResponse> getFleetStatistics(UUID fleetId, UUID requesterId, boolean isAdmin);
     /** Assigne (ou réassigne) une ou plusieurs flottes existantes à un gestionnaire. */
     Mono<Void> assignFleetsToManager(java.util.List<UUID> fleetIds, UUID managerId);
+    /** Libère une flotte de son gestionnaire actuel (managerId remis à null). */
+    Mono<Void> unassignFleetFromManager(UUID fleetId, UUID managerId);
 
     // --- 10b. GESTION DU PARC (VEHICULES) ---
     Flux<Vehicle> getFleetVehicles(UUID fleetId, UUID requesterId);

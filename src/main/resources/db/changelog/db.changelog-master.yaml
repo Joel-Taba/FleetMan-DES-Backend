@@ -177,3 +177,7 @@ databaseChangeLog:
   # 46. manager_id nullable sur fleets (création par l'admin puis assignation).
   - include:
       file: db/changelog/changes/046-fleet-manager-nullable-assignable.sql
+
+  # 47. Budget mensuel alloué à la flotte (saisi par l'admin à la création).
+  - include:
+      file: db/changelog/changes/047-fleet-monthly-budget.sql

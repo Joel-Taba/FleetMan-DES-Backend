@@ -1,6 +1,13 @@
 # Profil « fake-auth » — Auth simulée en mémoire (sans Kernel)
 # Démarrage : SPRING_PROFILES_ACTIVE=local,demo,fake-auth
-# COMPTES DISPONIBLES (mot de passe : FleetMan2026!) :
+#
+# Comptes seed (UUID = fleet.users.id) — mot de passe <username>@123
+#   admin1@gmail.com … admin3@gmail.com
+#   manager11@gmail.com … manager35@gmail.com
+#   driver101@gmail.com … driver352@gmail.com
+# Tous acceptent aussi FleetMan2026!
+#
+# Comptes démo historiques (mot de passe : FleetMan2026!) :
 #   superadmin@fleetman.cm  → FLEET_SUPER_ADMIN  (alias joeltaba4@gmail.com)
 #   admin@fleetman.cm       → FLEET_ADMIN
 #   manager1@fleetman.cm    → FLEET_MANAGER  (Jean Dupont)

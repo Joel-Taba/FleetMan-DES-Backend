@@ -11,7 +11,10 @@ public interface DriverPersistencePort {
     Mono<Driver> findById(UUID userId);
     Mono<Driver> findByAssignedVehicleId(UUID vehicleId); 
     Flux<Driver> findAllByFleetId(UUID fleetId);
+    Flux<Driver> findAllByManagerId(UUID managerId);
+    Flux<Driver> findAllByOrganizationAdminId(UUID adminId);
     Mono<Void> updateVehicleAssignment(UUID userId, UUID vehicleId);
     Mono<Void> updateFleetAssignment(UUID driverId, UUID fleetId);
     Flux<Driver> findAll();
+    Mono<Void> softDelete(UUID userId);
 }

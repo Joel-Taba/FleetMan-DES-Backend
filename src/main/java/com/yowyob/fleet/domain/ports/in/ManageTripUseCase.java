@@ -146,6 +146,10 @@ public interface ManageTripUseCase {
     /** Récupère le détail d'un trajet. */
     Mono<Trip> getTripById(UUID tripId);
 
+    default Mono<Trip> getTripById(UUID tripId, UUID actorId) {
+        return getTripById(tripId);
+    }
+
     // ── Télémétrie (conservée pour usage futur app mobile chauffeur) ─────────
 
     /** Enregistre un point GPS et vérifie les zones de géofencing. */

@@ -18,8 +18,8 @@ public interface ManageFleetUseCase {
 
     // --- 10a. ADMINISTRATION CRUD ---
     Mono<Fleet> createFleet(Fleet fleet, UUID managerId);
-    /** Création par un administrateur : managerId optionnel (flotte assignée plus tard). */
-    Mono<Fleet> createFleetAsAdmin(Fleet fleet, UUID managerId);
+    /** Création par un administrateur : managerId optionnel, createdByAdminId = admin connecté. */
+    Mono<Fleet> createFleetAsAdmin(Fleet fleet, UUID managerId, UUID createdByAdminId);
     Mono<Fleet> getFleetById(UUID fleetId, UUID requesterId, boolean isAdmin);
     Flux<Fleet> getFleets(UUID requesterId, boolean isAdmin);
     Mono<Fleet> updateFleet(UUID fleetId, Fleet fleet, UUID requesterId, boolean isAdmin);

@@ -34,6 +34,7 @@ public class AuthService implements AuthUseCase {
     private final FleetManagerR2dbcRepository managerRepo;
     private final FleetR2dbcRepository fleetRepo;
     private final ManageDriverUseCase driverUseCase;
+    private final LocalFileStorageService localFileStorageService;
 
     @Value("${application.kernel.tenant-id:}")
     private String defaultTenantId;
@@ -61,11 +62,14 @@ public class AuthService implements AuthUseCase {
                             .then(checkUserAccessByLocalId(localId))
                             .then(userRepo.findById(localId))
                     )
-                    .map(local -> new AuthPort.AuthResponse(
-                            response.accessToken(),
-                            response.refreshToken(),
-                            mergeLocalIdentity(response.user(), local)
-                    ))
+                    .flatMap(local ->
+                        enrichWithLocalData(mergeLocalIdentity(response.user(), local))
+                            .map(enriched -> new AuthPort.AuthResponse(
+                                    response.accessToken(),
+                                    response.refreshToken(),
+                                    enriched
+                            ))
+                    )
             );
     }
 
@@ -84,11 +88,14 @@ public class AuthService implements AuthUseCase {
                             .then(checkUserAccessByLocalId(localId))
                             .then(userRepo.findById(localId))
                     )
-                    .map(local -> new AuthPort.AuthResponse(
-                            response.accessToken(),
-                            response.refreshToken(),
-                            mergeLocalIdentity(response.user(), local)
-                    ))
+                    .flatMap(local ->
+                        enrichWithLocalData(mergeLocalIdentity(response.user(), local))
+                            .map(enriched -> new AuthPort.AuthResponse(
+                                    response.accessToken(),
+                                    response.refreshToken(),
+                                    enriched
+                            ))
+                    )
             );
     }
 
@@ -187,41 +194,29 @@ public class AuthService implements AuthUseCase {
         if (user.roles().contains("FLEET_MANAGER")) {
             return managerRepo.existsById(localUserId).flatMap(exists -> {
                 if (exists) return Mono.empty();
-                // Créer le profil manager avec l'UUID local (pas l'UUID Kernel)
-                return managerPort
-                    .createProfile(localUserId, "Société de " + user.lastName())
-                    .then(
-                        userRepo
-                            .findById(localUserId)
-                            .switchIfEmpty(Mono.defer(() -> userRepo.findByKernelId(user.id())))
-                            .flatMap(localUser -> {
-                                localUser.setActive(false);
-                                localUser.setApprovalStatus("PENDING");
-                                localUser.setNew(false);
-                                return userRepo.save(localUser);
-                            })
-                            .then()
-                    );
+                // Un manager doit être créé par un admin (created_by_admin_id NOT NULL).
+                log.warn("Profil FLEET_MANAGER absent pour {} — création ignorée (rattachement admin obligatoire)", localUserId);
+                return Mono.empty();
             });
         }
         if (user.roles().contains("FLEET_DRIVER")) {
-            return driverPort
-                .findById(localUserId)
-                .flatMap(exists -> Mono.<Void>empty())
-                .switchIfEmpty(
-                    Mono.defer(() -> {
+            return driverPort.findById(localUserId)
+                    .hasElement()
+                    .flatMap(exists -> {
+                        if (Boolean.TRUE.equals(exists)) {
+                            return Mono.empty();
+                        }
                         Driver d = new Driver(
-                            localUserId,
-                            null,
-                            "PENDING-" + localUserId.toString().substring(0, 8),
-                            "ACTIVE",
-                            null,
-                            "",
-                            null
+                                localUserId,
+                                null,
+                                "PENDING-" + localUserId,
+                                "ACTIVE",
+                                null,
+                                "",
+                                null
                         );
                         return driverPort.save(d).then();
-                    })
-                );
+                    });
         }
         return Mono.empty();
     }
@@ -243,11 +238,14 @@ public class AuthService implements AuthUseCase {
                             ensureRoleProfileExistsForLocalId(user, localId)
                                 .then(userRepo.findById(localId))
                         )
-                        .map(local -> new AuthPort.AuthResponse(
-                                response.accessToken(),
-                                response.refreshToken(),
-                                mergeLocalIdentity(user, local)
-                        ))
+                        .flatMap(local ->
+                            enrichWithLocalData(mergeLocalIdentity(user, local))
+                                .map(enriched -> new AuthPort.AuthResponse(
+                                        response.accessToken(),
+                                        response.refreshToken(),
+                                        enriched
+                                ))
+                        )
                 );
             });
     }
@@ -291,11 +289,76 @@ public class AuthService implements AuthUseCase {
         String token,
         FileContent file
     ) {
-        return authPort
-            .updateProfilePicture(userId, token, file)
-            .delayElement(Duration.ofMillis(600))
-            .then(authPort.getUserById(userId, token))
-            .flatMap(remote -> resolveLocalUser(remote).then());
+        String filename = sanitizeUploadFilename(file);
+        String mime = normalizeImageMime(file.contentType(), filename);
+        return localFileStorageService
+            .storeBytes(file.data(), filename, mime, "avatar")
+            .flatMap(stored -> findLocalUser(userId, token)
+                .flatMap(local -> {
+                    local.setPhotoUrl(stored.publicUrl());
+                    local.setNew(false);
+                    return userRepo.save(local);
+                })
+                .doOnNext(saved -> log.info("📸 Photo locale enregistrée user={} url={}",
+                        saved.getId(), saved.getPhotoUrl()))
+            )
+            .then(authPort.updateProfilePicture(userId, token, file)
+                .onErrorResume(e -> {
+                    log.warn("📸 Photo Kernel ignorée (mode local/fake) : {}", e.getMessage());
+                    return Mono.empty();
+                }))
+            .then();
+    }
+
+    private Mono<UserLocalEntity> findLocalUser(UUID userId, String token) {
+        return userRepo.findByKernelId(userId)
+            .switchIfEmpty(Mono.defer(() -> userRepo.findById(userId)))
+            .switchIfEmpty(Mono.defer(() ->
+                authPort.getUserProfile(token)
+                    .flatMap(remote -> userRepo.findByEmail(remote.email()))
+            ))
+            .switchIfEmpty(Mono.error(new AuthException(
+                    "Utilisateur local introuvable pour la photo de profil.",
+                    HttpStatus.NOT_FOUND,
+                    "ACC_003")));
+    }
+
+    private static String sanitizeUploadFilename(FileContent file) {
+        String name = file.filename() != null ? file.filename().trim() : "avatar.jpg";
+        name = name.replace('\\', '/');
+        int slash = name.lastIndexOf('/');
+        if (slash >= 0) {
+            name = name.substring(slash + 1);
+        }
+        int query = name.indexOf('?');
+        if (query >= 0) {
+            name = name.substring(0, query);
+        }
+        if (name.isBlank() || !name.contains(".")) {
+            String ext = switch (file.contentType() == null ? "" : file.contentType().toLowerCase()) {
+                case "image/png" -> ".png";
+                case "image/webp" -> ".webp";
+                default -> ".jpg";
+            };
+            name = (name.isBlank() ? "avatar" : name) + ext;
+        }
+        return name;
+    }
+
+    private static String normalizeImageMime(String contentType, String filename) {
+        if (contentType != null
+                && !contentType.isBlank()
+                && !contentType.toLowerCase().contains("octet-stream")) {
+            return contentType;
+        }
+        String ext = filename.contains(".")
+                ? filename.substring(filename.lastIndexOf('.')).toLowerCase()
+                : ".jpg";
+        return switch (ext) {
+            case ".png" -> "image/png";
+            case ".webp" -> "image/webp";
+            default -> "image/jpeg";
+        };
     }
 
     @Override

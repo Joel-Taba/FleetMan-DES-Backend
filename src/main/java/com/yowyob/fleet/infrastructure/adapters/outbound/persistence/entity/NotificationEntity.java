@@ -15,7 +15,7 @@ import java.util.UUID;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Table("notifications")
+@Table(name = "notifications", schema = "fleet")
 public class NotificationEntity implements Persistable<UUID> {
     @Id
     private UUID id;

@@ -1,5 +1,6 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
+import com.yowyob.fleet.application.service.AccessScopeService;
 import com.yowyob.fleet.domain.model.Incident;
 import com.yowyob.fleet.domain.ports.in.ManageIncidentUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
@@ -8,6 +9,7 @@ import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.IncidentRespons
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.IncidentStatusRequest;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.IncidentUpdateRequest;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
+import com.yowyob.fleet.infrastructure.config.security.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -33,16 +35,22 @@ import java.util.UUID;
 public class IncidentController {
 
     private final ManageIncidentUseCase incidentUseCase;
+    private final AccessScopeService accessScope;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
+    }
+
+    private Mono<Void> requireIncidentAccess(UUID incidentId, Authentication auth) {
+        return incidentUseCase.getById(incidentId)
+                .flatMap(inc -> accessScope.assertVehicleAccess(getUserId(auth), inc.getVehicleId()));
     }
 
     // ── CRÉATION ─────────────────────────────────────────────────────────────
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Déclarer un incident",
                description = "Enregistre un incident terrain. Publie une alerte prioritaire si la sévérité est HIGH ou CRITICAL.")
     public Mono<IncidentResponse> create(
@@ -63,13 +71,16 @@ public class IncidentController {
                         request.vehicleId(),
                         request.driverId()
                 );
-        return incidentUseCase.createIncident(cmd).map(IncidentResponse::from);
+        Mono<Void> scope = AuthPrincipal.isFleetDriver(auth)
+                ? Mono.empty()
+                : accessScope.assertVehicleAccess(getUserId(auth), request.vehicleId());
+        return scope.then(incidentUseCase.createIncident(cmd)).map(IncidentResponse::from);
     }
 
     // ── LECTURE ───────────────────────────────────────────────────────────────
 
     @GetMapping
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Lister mes incidents",
                description = "Retourne tous les incidents des véhicules gérés par le manager connecté.")
     public Flux<IncidentResponse> listAll(Authentication auth) {
@@ -77,23 +88,37 @@ public class IncidentController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Détail d'un incident")
     public Mono<IncidentResponse> getById(
-            @Parameter(description = "ID de l'incident") @PathVariable UUID id) {
-        return incidentUseCase.getById(id).map(IncidentResponse::from);
+            @Parameter(description = "ID de l'incident") @PathVariable UUID id,
+            Authentication auth) {
+        if (AuthPrincipal.isFleetDriver(auth)) {
+            UUID caller = getUserId(auth);
+            return incidentUseCase.getById(id)
+                    .filter(inc -> caller.equals(inc.getDriverId())
+                            || (inc.getReportedBy() != null && caller.toString().equals(inc.getReportedBy())))
+                    .switchIfEmpty(Mono.error(new org.springframework.security.access.AccessDeniedException(
+                            "Incident hors périmètre.")))
+                    .map(IncidentResponse::from);
+        }
+        return requireIncidentAccess(id, auth)
+                .then(incidentUseCase.getById(id))
+                .map(IncidentResponse::from);
     }
 
     @GetMapping("/vehicle/{vehicleId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Incidents d'un véhicule")
     public Flux<IncidentResponse> getByVehicle(
-            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
-        return incidentUseCase.getByVehicleId(vehicleId).map(IncidentResponse::from);
+            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
+            Authentication auth) {
+        return accessScope.assertVehicleAccess(getUserId(auth), vehicleId)
+                .thenMany(incidentUseCase.getByVehicleId(vehicleId).map(IncidentResponse::from));
     }
 
     @GetMapping("/driver/{driverId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Incidents d'un chauffeur")
     public Flux<IncidentResponse> getByDriver(
             @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId) {
@@ -101,7 +126,7 @@ public class IncidentController {
     }
 
     @GetMapping("/open")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Incidents ouverts",
                description = "Retourne uniquement les incidents en statut REPORTED ou UNDER_INVESTIGATION. Utile pour le tableau de bord.")
     public Flux<IncidentResponse> getOpen(Authentication auth) {
@@ -109,7 +134,7 @@ public class IncidentController {
     }
 
     @GetMapping("/filter")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Filtrer les incidents",
                description = "Filtre par type, sévérité ou statut. Fournir un seul paramètre à la fois.")
     public Flux<IncidentResponse> filter(
@@ -131,7 +156,7 @@ public class IncidentController {
     }
 
     @GetMapping("/range")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Incidents par plage de dates")
     public Flux<IncidentResponse> getByDateRange(
             @Parameter(description = "Date de début (ISO 8601)", example = "2026-01-01T00:00:00")
@@ -145,26 +170,29 @@ public class IncidentController {
     // ── KPIs ──────────────────────────────────────────────────────────────────
 
     @GetMapping("/vehicle/{vehicleId}/cost")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Coût total des incidents d'un véhicule",
                description = "Retourne la somme des coûts de tous les incidents pour un véhicule donné.")
     public Mono<BigDecimal> getTotalCostByVehicle(
-            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
-        return incidentUseCase.getTotalCostByVehicleId(vehicleId);
+            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
+            Authentication auth) {
+        return accessScope.assertVehicleAccess(getUserId(auth), vehicleId)
+                .then(incidentUseCase.getTotalCostByVehicleId(vehicleId));
     }
 
     // ── MISE À JOUR ───────────────────────────────────────────────────────────
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Mettre à jour un incident",
                description = "Met à jour les informations d'un incident (description, coût, témoins, numéros officiels). Interdit sur un incident CLOSED.")
     public Mono<IncidentResponse> update(
             @Parameter(description = "ID de l'incident") @PathVariable UUID id,
-            @Valid @RequestBody IncidentUpdateRequest request) {
+            @Valid @RequestBody IncidentUpdateRequest request,
+            Authentication auth) {
 
-        ManageIncidentUseCase.UpdateIncidentCommand cmd =
-                new ManageIncidentUseCase.UpdateIncidentCommand(
+        return requireIncidentAccess(id, auth)
+                .then(incidentUseCase.update(new ManageIncidentUseCase.UpdateIncidentCommand(
                         id,
                         request.description(),
                         request.severity(),
@@ -176,28 +204,32 @@ public class IncidentController {
                         request.insuranceClaimNumber(),
                         request.longitude(),
                         request.latitude()
-                );
-        return incidentUseCase.update(cmd).map(IncidentResponse::from);
+                )))
+                .map(IncidentResponse::from);
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Changer le statut d'un incident",
                description = "Fait avancer l'incident dans son cycle de vie : REPORTED → UNDER_INVESTIGATION → RESOLVED → CLOSED.")
     public Mono<IncidentResponse> updateStatus(
             @Parameter(description = "ID de l'incident") @PathVariable UUID id,
-            @Valid @RequestBody IncidentStatusRequest request) {
-        return incidentUseCase.updateStatus(id, request.status()).map(IncidentResponse::from);
+            @Valid @RequestBody IncidentStatusRequest request,
+            Authentication auth) {
+        return requireIncidentAccess(id, auth)
+                .then(incidentUseCase.updateStatus(id, request.status()))
+                .map(IncidentResponse::from);
     }
 
     // ── SUPPRESSION ───────────────────────────────────────────────────────────
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Supprimer un incident")
     public Mono<Void> delete(
-            @Parameter(description = "ID de l'incident") @PathVariable UUID id) {
-        return incidentUseCase.delete(id);
+            @Parameter(description = "ID de l'incident") @PathVariable UUID id,
+            Authentication auth) {
+        return requireIncidentAccess(id, auth).then(incidentUseCase.delete(id));
     }
 }

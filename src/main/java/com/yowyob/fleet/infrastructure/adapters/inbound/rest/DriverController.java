@@ -44,8 +44,8 @@ public class DriverController {
 
     @PostMapping("/drivers")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Créer un chauffeur (JSON Manager UI)")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Créer un chauffeur")
     public Mono<DriverResponse> createDriver(
             @org.springframework.web.bind.annotation.RequestBody ManagerDriverCreateRequest request,
             Authentication auth
@@ -54,14 +54,22 @@ public class DriverController {
     }
 
     @PutMapping("/drivers/{userId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Mettre à jour un chauffeur (JSON Manager UI)")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Mettre à jour un chauffeur")
     public Mono<DriverResponse> updateDriver(
             @PathVariable UUID userId,
             @org.springframework.web.bind.annotation.RequestBody ManagerDriverUpdateRequest request,
             Authentication auth
     ) {
         return driverUseCase.updateDriverForManager(userId, request, getUserId(auth));
+    }
+
+    @DeleteMapping("/drivers/{userId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Supprimer un chauffeur", description = "Suppression logique (deleted_at). Admin : toute l'organisation.")
+    public Mono<Void> deleteDriver(@PathVariable UUID userId, Authentication auth) {
+        return driverUseCase.deleteDriverForManager(userId, getUserId(auth));
     }
 
     @PostMapping(value = "/fleets/{fleetId}/drivers/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

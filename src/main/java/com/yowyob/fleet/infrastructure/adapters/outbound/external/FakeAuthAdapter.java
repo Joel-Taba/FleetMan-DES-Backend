@@ -74,7 +74,7 @@ public class FakeAuthAdapter implements AuthPort {
             return override.equals(password);
         }
         if (DemoTestAccounts.findById(acc.id()).isPresent()) {
-            return DemoTestAccounts.isDemoPassword(password);
+            return DemoTestAccounts.passwordMatches(acc, password);
         }
         // Compte dynamique : mdp stocké dans overrides au register
         return false;
@@ -138,13 +138,13 @@ public class FakeAuthAdapter implements AuthPort {
                 account.id(),
                 account.username(),
                 account.email(),
-                "+237600000000",
+                null,
                 account.firstName(),
                 account.lastName(),
                 "FLEET_MANAGEMENT",
                 account.roles(),
                 List.of("fleet:read", "fleet:write", "fleet:admin"),
-                "https://i.pravatar.cc/150?u=" + account.id(),
+                null,
                 null,
                 null,
                 null,

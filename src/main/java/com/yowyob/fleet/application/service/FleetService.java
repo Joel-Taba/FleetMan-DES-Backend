@@ -53,6 +53,7 @@ public class FleetService implements ManageFleetUseCase {
     private final ExternalOrganizationPort externalOrganizationPort;
     private final KernelTokenHolder kernelTokenHolder;
     private final ExpensePersistencePort expensePersistence;
+    private final AccessScopeService accessScope;
 
     @Value("${application.kernel.organization-sync:true}")
     private boolean organizationSync;
@@ -104,10 +105,15 @@ public class FleetService implements ManageFleetUseCase {
     }
 
     private Mono<Fleet> saveFleetLocally(Fleet fleet, UUID managerId, UUID kernelOrganizationId) {
+        return saveFleetLocally(fleet, managerId, kernelOrganizationId, managerId);
+    }
+
+    private Mono<Fleet> saveFleetLocally(Fleet fleet, UUID managerId, UUID kernelOrganizationId, UUID createdBy) {
         FleetEntity entity = mapper.toEntity(fleet);
         entity.setId(UUID.randomUUID());
         entity.setManagerId(managerId);
         entity.setKernelOrganizationId(kernelOrganizationId);
+        entity.setCreatedBy(createdBy);
         entity.setCreatedAt(Instant.now());
         entity.setNew(true);
         return repository.save(entity).map(mapper::toDomain);
@@ -137,12 +143,8 @@ public class FleetService implements ManageFleetUseCase {
 
     @Override
     @Transactional
-    public Mono<Fleet> createFleetAsAdmin(Fleet fleet, UUID managerId) {
-        // Création administrative : ni limite de plan (le manager n'a pas encore
-        // forcément la flotte à sa charge), ni provisioning d'organisation Kernel
-        // (réservé au flux d'auto-inscription du gestionnaire) — juste l'entité
-        // locale, assignée ou non à ce stade.
-        return saveFleetLocally(fleet, managerId, null);
+    public Mono<Fleet> createFleetAsAdmin(Fleet fleet, UUID managerId, UUID createdByAdminId) {
+        return saveFleetLocally(fleet, managerId, null, createdByAdminId);
     }
 
     @Override
@@ -190,8 +192,9 @@ public class FleetService implements ManageFleetUseCase {
     public Mono<Fleet> getFleetById(UUID id, UUID requesterId, boolean isAdmin) {
         return repository.findById(id)
                 .switchIfEmpty(Mono.error(FleetException.notFound(id)))
-                .filter(f -> isAdmin || f.getManagerId().equals(requesterId))
-                .switchIfEmpty(Mono.error(FleetException.accessDenied()))
+                .filter(f -> f.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(FleetException.notFound(id)))
+                .flatMap(f -> accessScope.assertFleetAccess(requesterId, id).thenReturn(f))
                 .flatMap(this::enrichFromKernelIfLinked)
                 .map(mapper::toDomain);
     }
@@ -216,8 +219,12 @@ public class FleetService implements ManageFleetUseCase {
 
     @Override
     public Flux<Fleet> getFleets(UUID requesterId, boolean isAdmin) {
-        return isAdmin ? repository.findAll().map(mapper::toDomain) 
-                       : repository.findAllByManagerId(requesterId).map(mapper::toDomain);
+        Flux<FleetEntity> source = isAdmin
+                ? repository.findAllByOrganizationAdminId(requesterId)
+                : repository.findAllByManagerId(requesterId);
+        return source
+                .filter(f -> f.getDeletedAt() == null)
+                .map(mapper::toDomain);
     }
 
     @Override
@@ -225,7 +232,7 @@ public class FleetService implements ManageFleetUseCase {
     public Mono<Fleet> updateFleet(UUID id, Fleet fleet, UUID requesterId, boolean isAdmin) {
         return repository.findById(id)
                 .switchIfEmpty(Mono.error(FleetException.notFound(id)))
-                .filter(f -> isAdmin || f.getManagerId().equals(requesterId))
+                .flatMap(existing -> accessScope.assertFleetAccess(requesterId, id).thenReturn(existing))
                 .flatMap(existing -> {
                     existing.setName(fleet.name());
                     existing.setPhoneNumber(fleet.phoneNumber());
@@ -240,17 +247,15 @@ public class FleetService implements ManageFleetUseCase {
     public Mono<Void> deleteFleet(UUID id, UUID requesterId, boolean isAdmin) {
         return repository.findById(id)
                 .switchIfEmpty(Mono.error(FleetException.notFound(id)))
-                .filter(f -> isAdmin || f.getManagerId().equals(requesterId))
-                .flatMap(fleet -> 
-                    // Sécurité : Vérifier si la flotte est vide
-                    Mono.zip(vehicleRepo.countByFleetId(id), driverRepo.countByFleetId(id))
-                        .flatMap(tuple -> {
-                            if (tuple.getT1() > 0 || tuple.getT2() > 0) {
-                                return Mono.error(FleetException.cannotDeleteNotEmpty());
-                            }
-                            return repository.delete(fleet);
-                        })
-                );
+                .filter(f -> f.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(FleetException.notFound(id)))
+                .flatMap(fleet -> accessScope.assertFleetAccess(requesterId, id).thenReturn(fleet))
+                .flatMap(fleet -> {
+                    fleet.setDeletedAt(java.time.Instant.now());
+                    fleet.setNew(false);
+                    return repository.save(fleet);
+                })
+                .then();
     }
 
     @Override

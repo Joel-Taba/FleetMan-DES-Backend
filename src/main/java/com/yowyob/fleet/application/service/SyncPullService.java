@@ -72,8 +72,8 @@ public class SyncPullService {
 
         Flux<SyncChange> changes = switch (scope) {
             case "manager" -> pullManager(userId, token);
-            case "admin" -> pullAdmin(token);
-            case "super-admin" -> pullSuperAdmin(token);
+            case "admin" -> pullAdmin(userId, token, false);
+            case "super-admin" -> pullSuperAdmin(userId, token);
             case "driver" -> pullDriver(userId, token);
             default -> Flux.error(new IllegalArgumentException("Scope sync inconnu : " + scope));
         };
@@ -127,8 +127,8 @@ public class SyncPullService {
         return Flux.merge(profile, assignments, trips, vehicles);
     }
 
-    private Flux<SyncChange> pullAdmin(String token) {
-        Flux<SyncChange> managers = adminUseCase.listFleetManagers(token)
+    private Flux<SyncChange> pullAdmin(UUID adminId, String token, boolean isSuperAdmin) {
+        Flux<SyncChange> managers = adminUseCase.listFleetManagers(adminId, isSuperAdmin)
                 .map(this::fleetManagerChange);
 
         Flux<SyncChange> references = Flux.merge(
@@ -146,8 +146,8 @@ public class SyncPullService {
         return Flux.merge(managers, references);
     }
 
-    private Flux<SyncChange> pullSuperAdmin(String token) {
-        Flux<SyncChange> adminScope = pullAdmin(token);
+    private Flux<SyncChange> pullSuperAdmin(UUID adminId, String token) {
+        Flux<SyncChange> adminScope = pullAdmin(adminId, token, true);
         Flux<SyncChange> plans = subscriptionPlanUseCase.listPlans()
                 .map(plan -> change("subscriptionPlan", plan.getId(), plan));
         Flux<SyncChange> pending = subscriptionPlanUseCase.listPendingSubscriptions()

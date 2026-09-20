@@ -11,7 +11,7 @@ import org.springframework.data.relational.core.mapping.Table;
 
 import java.util.UUID;
 
-@Table("notification_settings")
+@Table(name = "notification_settings", schema = "fleet")
 @AllArgsConstructor
 @NoArgsConstructor
 @Data

@@ -79,4 +79,37 @@ public interface FuelRechargeR2dbcRepository extends ReactiveCrudRepository<Fuel
               AND fr.recharge_date_time >= :start AND fr.recharge_date_time < :end
             """)
     Mono<BigDecimal> sumCostByVehicleAndPeriod(UUID vehicleId, LocalDateTime start, LocalDateTime end);
+
+    @Query("""
+            SELECT fr.* FROM fleet.fuel_recharges fr
+            JOIN fleet.vehicles v ON fr.vehicle_id = v.id
+            JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+            ORDER BY fr.recharge_date_time DESC
+            """)
+    Flux<FuelRechargeEntity> findAllByOrganizationAdminId(UUID adminId);
+
+    @Query("""
+            SELECT COALESCE(SUM(fr.price), 0) FROM fleet.fuel_recharges fr
+            JOIN fleet.vehicles v ON fr.vehicle_id = v.id
+            JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+            """)
+    Mono<BigDecimal> sumCostByOrganizationAdminId(UUID adminId);
+
+    @Query("""
+            SELECT COALESCE(SUM(fr.quantity), 0) FROM fleet.fuel_recharges fr
+            JOIN fleet.vehicles v ON fr.vehicle_id = v.id
+            JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+            """)
+    Mono<BigDecimal> sumQuantityByOrganizationAdminId(UUID adminId);
+
+    @Query("""
+            SELECT COUNT(*) FROM fleet.fuel_recharges fr
+            JOIN fleet.vehicles v ON fr.vehicle_id = v.id
+            JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+            """)
+    Mono<Long> countByOrganizationAdminId(UUID adminId);
 }

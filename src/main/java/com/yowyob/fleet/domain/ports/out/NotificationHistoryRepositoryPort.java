@@ -11,6 +11,10 @@ public interface NotificationHistoryRepositoryPort {
     // Retourne une structure paginée simplifiée
     Mono<PagedResult<Notification>> getUserNotifications(UUID userId, int page, int size);
 
+    Mono<Notification> markAsRead(UUID notificationId, UUID userId);
+
+    Mono<Long> markAllAsRead(UUID userId);
+
     // Record Helper pour la pagination
     record PagedResult<T>(List<T> content, long totalElements, int totalPages, int currentPage) {}
 }

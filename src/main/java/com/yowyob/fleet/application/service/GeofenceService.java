@@ -34,6 +34,7 @@ public class GeofenceService implements ManageGeofenceUseCase {
     private final GeofenceR2dbcRepository zoneRepo;
     private final VehiclePersistencePort vehiclePersistencePort;
     private final FleetRepositoryPort fleetRepositoryPort;
+    private final AccessScopeService accessScope;
     
 
     @Override
@@ -175,7 +176,7 @@ private Flux<Map<String, Object>> getFilteredRemoteZones(UUID managerId, String 
 
     Flux<GeofenceZoneEntity> localQuery = (optionalFleetId == null)
             ? zoneRepo.findByManagerId(managerId)
-            : zoneRepo.findAllByManagerIdAndFleetId(managerId, optionalFleetId);
+            : zoneRepo.findAllByFleetId(optionalFleetId);
 
     return localQuery
             .map(entity -> entity.getId().toString().toLowerCase()) // Conversion String minuscule
@@ -228,13 +229,8 @@ private Flux<Map<String, Object>> getFilteredRemoteZones(UUID managerId, String 
         log.info("ðŸ”  Récupération des zones pour la flotte {} (Manager: {})", fleetId, managerId);
         
         // 1. Vérification de la souveraineté (Est-ce ma flotte ?)
-        return fleetRepositoryPort.existsByIdAndManagerId(fleetId, managerId)
-                .flatMapMany(exists -> {
-                    if (!exists) return Flux.error(FleetException.accessDenied());
-                    
-                    // 2. Utilisation du moteur de filtrage hybride
-                    return getFilteredRemoteZones(managerId, "all", fleetId);
-                });
+        return accessScope.assertFleetAccess(managerId, fleetId)
+                .thenMany(getFilteredRemoteZones(managerId, "all", fleetId));
     }
 
 
@@ -253,9 +249,10 @@ private Flux<Map<String, Object>> getFilteredRemoteZones(UUID managerId, String 
     @Override
     public Mono<Void> deleteZone(UUID zoneId, String type, UUID managerId) {
         return zoneRepo.findById(zoneId)
-                .filter(z -> z.getManagerId().equals(managerId))
-                .flatMap(link -> externalApi.deleteRemoteZone(type, zoneId)
-                        .then(zoneRepo.deleteById(zoneId)));
+                .switchIfEmpty(Mono.error(FleetException.accessDenied()))
+                .flatMap(z -> accessScope.assertZoneAccess(managerId, z.getFleetId(), z.getManagerId())
+                        .then(externalApi.deleteRemoteZone(type, zoneId)
+                                .then(zoneRepo.deleteById(zoneId))));
     }
 
     @Override
@@ -282,6 +279,13 @@ private Flux<Map<String, Object>> getFilteredRemoteZones(UUID managerId, String 
         return externalApi.updateRemoteZone(t, id, u);
     }
 
+    public Mono<Void> updateRemoteZone(String t, UUID id, Map<String, Object> u, UUID actorId) {
+        return zoneRepo.findById(id)
+                .switchIfEmpty(Mono.error(new RuntimeException("Zone introuvable ou accès refusé.")))
+                .flatMap(z -> accessScope.assertZoneAccess(actorId, z.getFleetId(), z.getManagerId()))
+                .then(externalApi.updateRemoteZone(t, id, u));
+    }
+
     // @Override
     // public Flux<GeofenceEventEntity> getEvents(UUID v, UUID z, String t, LocalDate d) {
     //     return localPersistence.findEventsWithFilters(v, z, t, d);
@@ -291,8 +295,10 @@ private Flux<Map<String, Object>> getFilteredRemoteZones(UUID managerId, String 
     @Transactional
     public Mono<Void> assignZoneToFleet(UUID zoneId, UUID fleetId, UUID managerId) {
         return zoneRepo.findById(zoneId)
-                .filter(z -> z.getManagerId().equals(managerId)) // Sécurité propriétaire
                 .switchIfEmpty(Mono.error(new RuntimeException("Zone introuvable ou non autorisée")))
+                .flatMap(z -> accessScope.assertZoneAccess(managerId, z.getFleetId(), z.getManagerId())
+                        .then(accessScope.assertFleetAccess(managerId, fleetId))
+                        .thenReturn(z))
                 .flatMap(z -> {
                     // 1. Mise à jour locale
                     z.setFleetId(fleetId);

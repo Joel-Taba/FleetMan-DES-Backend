@@ -4,6 +4,7 @@ import com.yowyob.fleet.domain.model.Driver;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.UserLocalEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Schema(description = "Conducteur enrichi avec identité utilisateur")
@@ -20,17 +21,33 @@ public record DriverResponse(
         String status,
         UUID assignedVehicleId,
         String photoUrl,
-        boolean onActiveTrip
+        boolean onActiveTrip,
+        Boolean isActive,
+        Instant lastLoginAt,
+        String approvalStatus,
+        String fleetName,
+        String assignedVehicleLabel
 ) {
     public static DriverResponse from(Driver driver, UserLocalEntity user) {
-        return from(driver, user, null, false);
+        return from(driver, user, null, false, null, null);
     }
 
     public static DriverResponse from(Driver driver, UserLocalEntity user, String phone) {
-        return from(driver, user, phone, false);
+        return from(driver, user, phone, false, null, null);
     }
 
     public static DriverResponse from(Driver driver, UserLocalEntity user, String phone, boolean onActiveTrip) {
+        return from(driver, user, phone, onActiveTrip, null, null);
+    }
+
+    public static DriverResponse from(
+            Driver driver,
+            UserLocalEntity user,
+            String phone,
+            boolean onActiveTrip,
+            String fleetName,
+            String assignedVehicleLabel
+    ) {
         return new DriverResponse(
                 driver.userId(),
                 driver.fleetId(),
@@ -43,8 +60,13 @@ public record DriverResponse(
                 driver.licenceNumber(),
                 driver.status(),
                 driver.assignedVehicleId(),
-                driver.photoUrl(),
-                onActiveTrip
+                driver.photoUrl() != null ? driver.photoUrl() : (user != null ? user.getPhotoUrl() : null),
+                onActiveTrip,
+                user != null ? user.isActive() : null,
+                user != null ? user.getLastLoginAt() : null,
+                user != null ? user.getApprovalStatus() : null,
+                fleetName,
+                assignedVehicleLabel
         );
     }
 

@@ -53,4 +53,29 @@ public interface MaintenanceR2dbcRepository extends ReactiveCrudRepository<Maint
               AND m.date_time >= :start AND m.date_time < :end
             """)
     Mono<BigDecimal> sumCostByVehicleAndPeriod(UUID vehicleId, LocalDateTime start, LocalDateTime end);
+
+    @Query("""
+            SELECT m.* FROM fleet.maintenances m
+            JOIN fleet.vehicles v ON m.vehicle_id = v.id
+            JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+            ORDER BY m.date_time DESC
+            """)
+    Flux<MaintenanceEntity> findAllByOrganizationAdminId(UUID adminId);
+
+    @Query("""
+            SELECT COALESCE(SUM(m.cost), 0) FROM fleet.maintenances m
+            JOIN fleet.vehicles v ON m.vehicle_id = v.id
+            JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+            """)
+    Mono<BigDecimal> sumCostByOrganizationAdminId(UUID adminId);
+
+    @Query("""
+            SELECT COUNT(*) FROM fleet.maintenances m
+            JOIN fleet.vehicles v ON m.vehicle_id = v.id
+            JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+            """)
+    Mono<Long> countByOrganizationAdminId(UUID adminId);
 }

@@ -36,3 +36,40 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Outils IA (ne pas versionner)
+.cursor/
+.claude/
+.aider/
+.codex/
+.continue/
+.windsurf/
+.gemini/
+.codeium/
+.tabnine/
+.roo/
+.cline/
+.clinerules/
+.agent/
+.agents/
+.copilot/
+.openai/
+.anthropic/
+.grok/
+.factory/
+.amp/
+.opencode/
+.crush/
+.specstory/
+.trae/
+.kiro/
+.augment/
+.void/
+.pearai/
+.claude-code/
+.cursorrules
+.cursorignore
+.aider*
+CLAUDE.md
+GEMINI.md
+AGENTS.md

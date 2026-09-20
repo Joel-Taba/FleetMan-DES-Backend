@@ -1,12 +1,11 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
 import com.yowyob.fleet.domain.model.Driver;
-import com.yowyob.fleet.domain.model.Fleet;
 import com.yowyob.fleet.domain.model.Vehicle;
 import com.yowyob.fleet.domain.ports.in.ManageFleetUseCase;
-import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.*;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
+import com.yowyob.fleet.infrastructure.config.security.AuthPrincipal;
 import com.yowyob.fleet.infrastructure.mappers.FleetMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -26,7 +25,7 @@ import java.util.UUID;
 @RequestMapping("/api/v1/fleets")
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasRole('FLEET_MANAGER')") // Souveraineté : Seul le Manager accède à ses flottes
+@PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
 public class FleetController {
 
     private final ManageFleetUseCase fleetUseCase;
@@ -36,7 +35,7 @@ public class FleetController {
      * Helper pour extraire l'ID du Fleet Manager connecté
      */
     private UUID getManagerId(Authentication auth) {
-        return ((AuthPort.UserDetail) auth.getPrincipal()).id();
+        return AuthPrincipal.userId(auth);
     }
 
     // ========================================================================
@@ -45,9 +44,10 @@ public class FleetController {
 
     @Tag(name = OpenApiConfig.TAG_FLEETS)
     @GetMapping
-    @Operation(summary = "Lister mes flottes", description = "Récupère uniquement les flottes appartenant au manager connecté.")
+    @Operation(summary = "Lister les flottes", description = "Manager : ses flottes. Admin : toutes les flottes.")
     public Flux<FleetResponse> getMyFleets(Authentication auth) {
-        return fleetUseCase.getFleets(getManagerId(auth), false)
+        boolean isAdmin = AuthPrincipal.isFleetAdmin(auth);
+        return fleetUseCase.getFleets(getManagerId(auth), isAdmin)
                 .map(mapper::toResponse);
     }
 
@@ -55,7 +55,8 @@ public class FleetController {
     @GetMapping("/{id}")
     @Operation(summary = "Détails d'une flotte")
     public Mono<FleetResponse> getById(@PathVariable UUID id, Authentication auth) {
-        return fleetUseCase.getFleetById(id, getManagerId(auth), false)
+        boolean isAdmin = AuthPrincipal.isFleetAdmin(auth);
+        return fleetUseCase.getFleetById(id, getManagerId(auth), isAdmin)
                 .map(mapper::toResponse);
     }
 
@@ -63,7 +64,8 @@ public class FleetController {
     @GetMapping("/{id}/stats")
     @Operation(summary = "KPIs de la flotte", description = "Km totaux, distribution des statuts véhicules et nombre de chauffeurs.")
     public Mono<FleetStatsResponse> getStats(@PathVariable UUID id, Authentication auth) {
-        return fleetUseCase.getFleetStatistics(id, getManagerId(auth), false);
+        boolean isAdmin = AuthPrincipal.isFleetAdmin(auth);
+        return fleetUseCase.getFleetStatistics(id, getManagerId(auth), isAdmin);
     }
 
     // Création / modification / suppression de flotte : désormais réservées à
@@ -84,6 +86,7 @@ public class FleetController {
     @Tag(name =OpenApiConfig.TAG_FLEETS_VHC)
     @PostMapping("/{id}/vehicles")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Assigner un véhicule existant", description = "Lie un véhicule à cette flotte et synchronise le Geofencing.")
     public Mono<Void> assignVehicle(@PathVariable UUID id, @Valid @RequestBody FleetAssignVehicleRequest request, Authentication auth) {
         return fleetUseCase.assignVehicle(id, request.vehicleId(), getManagerId(auth));
@@ -92,6 +95,7 @@ public class FleetController {
     @Tag(name =OpenApiConfig.TAG_FLEETS_VHC)
     @DeleteMapping("/{id}/vehicles/{vehicleId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Retirer un véhicule de la flotte")
     public Mono<Void> detachVehicle(@PathVariable UUID id, @PathVariable UUID vehicleId, Authentication auth) {
         return fleetUseCase.detachVehicle(id, vehicleId, getManagerId(auth));
@@ -111,6 +115,7 @@ public class FleetController {
     @Tag(name =OpenApiConfig.TAG_FLEETS_DRV)
     @PostMapping("/{id}/drivers")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Recruter un chauffeur existant", description = "Recherche par email/username et l'ajoute à la flotte.")
     public Mono<Void> recruit(@PathVariable UUID id, @Valid @RequestBody RecruitDriverRequest request, Authentication auth) {
         return fleetUseCase.recruitDriver(id, request.identifier(), getManagerId(auth));
@@ -119,6 +124,7 @@ public class FleetController {
     @Tag(name =OpenApiConfig.TAG_FLEETS_DRV)
     @PostMapping("/{id}/drivers/register")
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Créer et intégrer un nouveau chauffeur", description = "Crée le compte Auth + Profil local dans cette flotte.")
     public Mono<Driver> registerInFleet(@PathVariable UUID id, @Valid @RequestBody DriverRegistrationRequest request, Authentication auth) {
         return fleetUseCase.registerDriverInFleet(id, request, getManagerId(auth));
@@ -127,6 +133,7 @@ public class FleetController {
     @Tag(name =OpenApiConfig.TAG_FLEETS_DRV)
     @DeleteMapping("/{id}/drivers/{driverId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Retirer un chauffeur de la flotte")
     public Mono<Void> detachDriver(@PathVariable UUID id, @PathVariable UUID driverId, Authentication auth) {
         return fleetUseCase.detachDriver(id, driverId, getManagerId(auth));

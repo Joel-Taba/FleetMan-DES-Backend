@@ -43,6 +43,38 @@ public class LocalFileStorageService {
         Files.createDirectories(uploadRoot);
     }
 
+    public Mono<StoredFile> storeBytes(byte[] data, String originalName, String mimeType, String category) {
+        validateFileName(originalName);
+        String rawMime = mimeType != null && !mimeType.isBlank()
+                ? mimeType
+                : resolveMimeFromName(originalName);
+        int semicolon = rawMime.indexOf(';');
+        String strippedMime = semicolon >= 0 ? rawMime.substring(0, semicolon).trim() : rawMime;
+        final String mime = strippedMime.toLowerCase(Locale.ROOT).contains("octet-stream")
+                ? resolveMimeFromName(originalName)
+                : strippedMime;
+        validateMimeType(mime, originalName);
+        if (data == null || data.length == 0) {
+            throw DocumentException.invalidFileType("fichier vide");
+        }
+        if (data.length > maxBytes) {
+            throw DocumentException.fileTooLarge(maxBytes);
+        }
+        String ext = extensionOf(originalName);
+        String storedName = category + "-" + UUID.randomUUID() + ext;
+        Path target = uploadRoot.resolve(storedName);
+        return Mono.fromCallable(() -> {
+            Files.write(target, data, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            return new StoredFile(
+                    storedName,
+                    "/api/v1/files/" + storedName,
+                    originalName,
+                    mime,
+                    data.length
+            );
+        });
+    }
+
     public Mono<StoredFile> store(FilePart filePart, String category) {
         String originalName = filePart.filename();
         validateFileName(originalName);
@@ -89,8 +121,16 @@ public class LocalFileStorageService {
     }
 
     private void validateMimeType(String mime, String originalName) {
-        if (mime == null || !ALLOWED_MIME_TYPES.contains(mime.toLowerCase(Locale.ROOT))) {
-            throw DocumentException.invalidFileType(mime != null ? mime : originalName);
+        if (mime == null) {
+            throw DocumentException.invalidFileType(originalName);
+        }
+        String normalized = mime.toLowerCase(Locale.ROOT);
+        int semicolon = normalized.indexOf(';');
+        if (semicolon >= 0) {
+            normalized = normalized.substring(0, semicolon).trim();
+        }
+        if (!ALLOWED_MIME_TYPES.contains(normalized)) {
+            throw DocumentException.invalidFileType(mime);
         }
     }
 
@@ -98,6 +138,10 @@ public class LocalFileStorageService {
         if (filePart.headers().getContentType() != null) {
             return filePart.headers().getContentType().toString();
         }
+        return resolveMimeFromName(originalName);
+    }
+
+    private String resolveMimeFromName(String originalName) {
         String ext = extensionOf(originalName).toLowerCase(Locale.ROOT);
         return switch (ext) {
             case ".pdf" -> "application/pdf";

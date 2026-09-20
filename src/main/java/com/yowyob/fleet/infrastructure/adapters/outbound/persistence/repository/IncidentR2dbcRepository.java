@@ -23,8 +23,11 @@ public interface IncidentR2dbcRepository extends ReactiveCrudRepository<Incident
      */
     @Query("SELECT i.* FROM fleet.incidents i " +
            "JOIN fleet.vehicles v ON i.vehicle_id = v.id " +
-           "WHERE v.manager_id = :managerId " +
-           "ORDER BY i.incident_date_time DESC")
+           "WHERE v.deleted_at IS NULL AND (" +
+           "  v.manager_id = :managerId OR v.fleet_id IN (" +
+           "    SELECT f.id FROM fleet.fleets f WHERE f.manager_id = :managerId AND f.deleted_at IS NULL" +
+           "  )" +
+           ") ORDER BY i.incident_date_time DESC")
     Flux<IncidentEntity> findAllByManagerId(UUID managerId);
 
     /**
@@ -135,4 +138,21 @@ public interface IncidentR2dbcRepository extends ReactiveCrudRepository<Incident
               AND i.incident_date_time >= :start AND i.incident_date_time < :end
             """)
     Mono<Long> countByDriverAndPeriod(UUID driverId, LocalDateTime start, LocalDateTime end);
+
+    @Query("""
+            SELECT i.* FROM fleet.incidents i
+            JOIN fleet.vehicles v ON i.vehicle_id = v.id
+            JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+            ORDER BY i.incident_date_time DESC
+            """)
+    Flux<IncidentEntity> findAllByOrganizationAdminId(UUID adminId);
+
+    @Query("""
+            SELECT COUNT(*) FROM fleet.incidents i
+            JOIN fleet.vehicles v ON i.vehicle_id = v.id
+            JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+            """)
+    Mono<Long> countByOrganizationAdminId(UUID adminId);
 }

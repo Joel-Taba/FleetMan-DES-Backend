@@ -33,4 +33,6 @@ public interface ManageDriverUseCase {
             UUID userId,
             com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerDriverUpdateRequest request,
             UUID managerId);
+
+    Mono<Void> deleteDriverForManager(UUID userId, UUID callerId);
 }

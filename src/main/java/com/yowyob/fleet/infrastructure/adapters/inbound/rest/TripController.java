@@ -113,7 +113,7 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @PostMapping
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Créer un trajet (départ) — réservé au Fleet Manager")
     public Mono<Trip> createTrip(
@@ -162,7 +162,7 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @PostMapping("/{id}/start")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Lancer un trajet créé — capture la date/heure réelle de départ")
     public Mono<Trip> startTrip(@PathVariable UUID id, Authentication auth) {
         return tripUseCase.startTrip(id, getUserId(auth));
@@ -170,7 +170,7 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @PostMapping("/return")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Enregistrer le retour d'un trajet par son code")
     public Mono<Trip> registerReturn(
         @Valid @RequestBody RegisterReturnRequest req
@@ -206,7 +206,7 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @GetMapping("/code/{code}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Retrouver un trajet par son code (TRJ-2026-XXXX)")
     public Mono<Trip> getByCode(@PathVariable String code) {
         return tripUseCase.getTripByCode(code);
@@ -214,7 +214,7 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @GetMapping("/open")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Trajets non clôturés (départ enregistré, retour en attente)")
     public Flux<Trip> listOpen(Authentication auth) {
         return tripUseCase.getOpenTrips(getUserId(auth));
@@ -222,7 +222,7 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @PatchMapping("/{id}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Modifier un trajet non clôturé")
     public Mono<Trip> updateTrip(
         @PathVariable UUID id,
@@ -251,7 +251,7 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @PatchMapping("/{id}/vehicle")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Changer le véhicule d'un trajet non clôturé")
     public Mono<Trip> updateVehicle(
         @PathVariable UUID id,
@@ -267,7 +267,7 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @PatchMapping("/{id}/driver")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Changer le conducteur d'un trajet planifié")
     public Mono<Trip> updateDriver(
         @PathVariable UUID id,
@@ -283,7 +283,7 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @PatchMapping("/{id}/cancel")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Annuler un trajet")
     public Mono<Trip> cancel(
         @PathVariable UUID id,
@@ -296,16 +296,16 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Détail d'un trajet")
-    public Mono<Trip> getById(@PathVariable UUID id) {
-        return tripUseCase.getTripById(id);
+    public Mono<Trip> getById(@PathVariable UUID id, Authentication auth) {
+        return tripUseCase.getTripById(id, getUserId(auth));
     }
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Supprimer un trajet (SCHEDULED/CANCELLED)")
     public Mono<Void> deleteTrip(@PathVariable UUID id, Authentication auth) {
         return tripUseCase.deleteTrip(id, getUserId(auth));
@@ -313,7 +313,7 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @GetMapping
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(
         summary = "Lister les trajets du manager (filtres fleetId/status/vehicleId)"
     )
@@ -353,7 +353,7 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @PatchMapping("/submissions/{submissionId}/approve")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Valider un complément conducteur")
     public Mono<Trip> approveSubmission(
         @PathVariable UUID submissionId,
@@ -367,7 +367,7 @@ public class TripController {
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @PatchMapping("/submissions/{submissionId}/reject")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Rejeter un complément conducteur")
     public Mono<Void> rejectSubmission(
         @PathVariable UUID submissionId,

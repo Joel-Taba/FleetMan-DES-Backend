@@ -66,16 +66,14 @@ public class AccountController {
                 ));
     }
 
-    @PostMapping(value = "/picture", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PostMapping(value = {"/picture", "/photo"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Changer ma photo de profil")
-    public Mono<Void> updatePicture(
+    public Mono<AuthPort.UserDetail> updatePicture(
             @Parameter(hidden = true) @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @RequestPart("file") Part filePart 
     ) {
         return authUseCase.me(token)
                 .flatMap(user -> {
-                    // FIX: Extraction sécurisée du nom de fichier
                     String filename = (filePart instanceof FilePart file) ? file.filename() : "avatar.jpg";
                     
                     return DataBufferUtils.join(filePart.content())
@@ -90,7 +88,8 @@ public class AccountController {
                             );
                         })
                         .flatMap(fileContent -> authUseCase.updateProfilePicture(user.id(), token, fileContent));
-                });
+                })
+                .then(authUseCase.me(token));
     }
 
     @DeleteMapping

@@ -6,10 +6,10 @@ import com.yowyob.fleet.domain.ports.in.ManageFleetUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.FleetResponse;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
+import com.yowyob.fleet.infrastructure.config.security.AuthPrincipal;
 import com.yowyob.fleet.infrastructure.mappers.FleetMapper;
 
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -19,7 +19,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -42,33 +41,36 @@ public class AdminManagerController {
     private final ManageFleetUseCase fleetUseCase;
     private final FleetMapper fleetMapper;
 
+    private UUID getUserId(Authentication auth) {
+        return AuthPrincipal.userId(auth);
+    }
+
     private boolean isSuper(Authentication a) {
         return a.getAuthorities().stream().anyMatch(ga -> ga.getAuthority().equals("ROLE_FLEET_SUPER_ADMIN"));
     }
 
     @GetMapping("/managers")
-    @Operation(summary = "Lister les Fleet Managers")
-    public Flux<AuthPort.UserDetail> list(@Parameter(hidden = true) @RequestHeader(HttpHeaders.AUTHORIZATION) String t) {
-        return adminUseCase.listFleetManagers(t);
+    @Operation(summary = "Lister les Fleet Managers", description = "Admin : uniquement les managers qu'il a créés. Super-admin : tous.")
+    public Flux<AuthPort.UserDetail> list(Authentication auth) {
+        return adminUseCase.listFleetManagers(getUserId(auth), isSuper(auth));
     }
 
     @GetMapping("/managers/{id}")
     @Operation(summary = "Détails d'un Fleet Manager")
-    public Mono<AuthPort.UserDetail> getOne(@PathVariable UUID id, @Parameter(hidden = true) @RequestHeader(HttpHeaders.AUTHORIZATION) String t, Authentication auth) {
-        return adminUseCase.getManagerDetails(id, t, isSuper(auth));
+    public Mono<AuthPort.UserDetail> getOne(@PathVariable UUID id, Authentication auth) {
+        return adminUseCase.getManagerDetails(id, getUserId(auth), isSuper(auth));
     }
 
     @PatchMapping("/managers/{id}/toggle")
     @Operation(summary = "Activer/Désactiver un Fleet Manager")
     public Mono<Void> toggle(@PathVariable UUID id, Authentication auth) {
-        AuthPort.UserDetail currentUser = (AuthPort.UserDetail) auth.getPrincipal();
-        return adminUseCase.toggleManagerStatus(id, currentUser.id(), isSuper(auth));
+        return adminUseCase.toggleManagerStatus(id, getUserId(auth), isSuper(auth));
     }
 
     @DeleteMapping("/managers/{id}")
     @Operation(summary = "Supprimer un Fleet Manager", description = "Suppression logique, bloquée si des flottes lui sont encore assignées.")
-    public Mono<Void> delete(@PathVariable UUID id) {
-        return adminUseCase.deleteManager(id);
+    public Mono<Void> delete(@PathVariable UUID id, Authentication auth) {
+        return adminUseCase.deleteManager(id, getUserId(auth), isSuper(auth));
     }
 
     public record CreateManagerRequest(
@@ -99,13 +101,13 @@ public class AdminManagerController {
 
     @PostMapping("/managers")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Créer un gestionnaire de flotte", description = "Compte FLEET_MANAGER actif immédiatement, sans flux d'approbation.")
-    public Mono<AuthPort.UserDetail> createManager(@Valid @RequestBody CreateManagerRequest req) {
+    @Operation(summary = "Créer un gestionnaire de flotte", description = "Compte FLEET_MANAGER actif immédiatement. created_by_admin_id = l'admin connecté, qui doit exister dans platform_admins.")
+    public Mono<AuthPort.UserDetail> createManager(@Valid @RequestBody CreateManagerRequest req, Authentication auth) {
         var command = new AuthUseCase.RegisterCommand(
                 req.username(), req.password(), req.email(), req.phone(),
                 req.firstName(), req.lastName(), List.of("FLEET_MANAGER"), null
         );
-        return adminUseCase.createManager(command, req.companyName());
+        return adminUseCase.createManager(command, req.companyName(), getUserId(auth));
     }
 
     @GetMapping("/managers/{id}/fleets")

@@ -181,3 +181,11 @@ databaseChangeLog:
   # 47. Budget mensuel alloué à la flotte (saisi par l'admin à la création).
   - include:
       file: db/changelog/changes/047-fleet-monthly-budget.sql
+
+  # 48. Manager rattaché à l'admin (organisation) qui l'a créé.
+  - include:
+      file: db/changelog/changes/048-manager-created-by-admin.sql
+
+  # 49. created_by_admin_id NOT NULL + FK vers platform_admins.
+  - include:
+      file: db/changelog/changes/049-manager-admin-id-not-null.sql

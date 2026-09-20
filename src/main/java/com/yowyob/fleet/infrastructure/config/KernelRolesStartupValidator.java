@@ -1,5 +1,6 @@
 package com.yowyob.fleet.infrastructure.config;
 
+import com.yowyob.fleet.domain.model.FleetRole;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -9,7 +10,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 /**
- * Vérifie au démarrage que les 4 rôles FleetMan (DRIVER, MANAGER, ADMIN, SUPER_ADMIN) sont
+ * Vérifie au démarrage que les 4 rôles {@link FleetRole} sont
  * résolvables côté Kernel — soit via surcharge de configuration, soit dynamiquement via
  * GET /api/administration/roles (voir {@link KernelRoleRegistry}).
  */
@@ -19,9 +20,7 @@ import reactor.core.publisher.Mono;
 @ConditionalOnProperty(name = "application.auth.mode", havingValue = "kernel")
 public class KernelRolesStartupValidator {
 
-    private static final String[] FLEET_ROLES = {
-            "FLEET_DRIVER", "FLEET_MANAGER", "FLEET_ADMIN", "FLEET_SUPER_ADMIN"
-    };
+    private static final String[] FLEET_ROLES = FleetRole.codes();
 
     private final KernelRoleRegistry roleRegistry;
 

@@ -2,26 +2,20 @@ package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
 import com.yowyob.fleet.domain.model.Notification;
 import com.yowyob.fleet.domain.ports.out.NotificationHistoryRepositoryPort;
-import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.GeofenceEventEntity;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
-
-
-import org.springframework.http.MediaType;
+import com.yowyob.fleet.infrastructure.config.security.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.context.ReactiveSecurityContextHolder;
-import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor
+@SecurityRequirement(name = "bearerAuth")
 @Tag(name = OpenApiConfig.TAG_ACCOUNT, description = "In-app notifications history")
 public class NotificationController {
 
@@ -39,17 +33,23 @@ public class NotificationController {
     @Operation(summary = "Get my notifications", description = "Paginated list of notifications for the connected user.")
     public Mono<NotificationHistoryRepositoryPort.PagedResult<Notification>> getMyNotifications(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        
-        return ReactiveSecurityContextHolder.getContext()
-                .map(SecurityContext::getAuthentication)
-                .flatMap(auth -> {
-                    try {
-                        UUID userId = UUID.fromString(auth.getName());
-                        return historyPort.getUserNotifications(userId, page, size);
-                    } catch (Exception e) {
-                        return Mono.error(new IllegalStateException("Invalid User Context"));
-                    }
-                });
+            @RequestParam(defaultValue = "50") int size,
+            Authentication auth) {
+        return historyPort.getUserNotifications(AuthPrincipal.userId(auth), page, size);
+    }
+
+    @PatchMapping("/{id}/read")
+    @Operation(summary = "Marquer une notification comme lue")
+    public Mono<Notification> markAsRead(
+            @PathVariable java.util.UUID id,
+            Authentication auth) {
+        return historyPort.markAsRead(id, AuthPrincipal.userId(auth));
+    }
+
+    @PatchMapping("/read-all")
+    @Operation(summary = "Marquer toutes mes notifications comme lues")
+    public Mono<java.util.Map<String, Long>> markAllAsRead(Authentication auth) {
+        return historyPort.markAllAsRead(AuthPrincipal.userId(auth))
+                .map(updated -> java.util.Map.of("updated", updated));
     }
 }

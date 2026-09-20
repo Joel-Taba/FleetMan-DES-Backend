@@ -48,6 +48,7 @@ public class TripService implements ManageTripUseCase {
     private final DistanceCalculatorPort distanceCalculator;
     private final ExternalGeofencePort geofenceApi;
     private final DatabaseClient db;
+    private final AccessScopeService accessScope;
 
     // ── Création d'un trajet (Manager) ────────────────────────────────────────
 
@@ -91,7 +92,8 @@ public class TripService implements ManageTripUseCase {
                     cmd.details()
             );
 
-            return assertNoActiveTripForDriver(cmd.driverId(), null)
+            return accessScope.assertTripFleetAccess(cmd.managerId(), fleetId)
+                .then(assertNoActiveTripForDriver(cmd.driverId(), null))
                 .then(assertNoActiveTripForVehicle(cmd.vehicleId(), null))
                 // Le véhicule est réservé dès la planification (statut SCHEDULED), pas
                 // seulement au départ effectif : sinon il reste affichable comme
@@ -147,10 +149,8 @@ public class TripService implements ManageTripUseCase {
         return tripRepository
             .findById(tripId)
             .switchIfEmpty(Mono.error(TripException.notFound(tripId)))
+            .flatMap(trip -> accessScope.assertTripFleetAccess(managerId, trip.getFleetId()).thenReturn(trip))
             .flatMap(trip -> {
-                if (!managerId.equals(trip.getCreatedBy())) {
-                    return Mono.error(TripException.forbidden());
-                }
                 if (!"SCHEDULED".equals(trip.getStatus())) {
                     return Mono.error(TripException.invalidStartState());
                 }
@@ -344,6 +344,7 @@ public class TripService implements ManageTripUseCase {
         return tripRepository
             .findById(tripId)
             .switchIfEmpty(Mono.error(TripException.notFound(tripId)))
+            .flatMap(trip -> accessScope.assertTripFleetAccess(managerId, trip.getFleetId()).thenReturn(trip))
             .flatMap(trip -> {
                 if (!isModifiable(trip.getStatus())) {
                     return Mono.error(TripException.tripNotModifiable());
@@ -378,6 +379,7 @@ public class TripService implements ManageTripUseCase {
         return tripRepository
             .findById(tripId)
             .switchIfEmpty(Mono.error(TripException.notFound(tripId)))
+            .flatMap(trip -> accessScope.assertTripFleetAccess(managerId, trip.getFleetId()).thenReturn(trip))
             .flatMap(trip -> {
                 if (
                     "COMPLETED".equals(trip.getStatus()) ||
@@ -423,9 +425,13 @@ public class TripService implements ManageTripUseCase {
 
     @Override
     public Flux<Trip> getManagerTrips(UUID managerId, UUID fleetId) {
-        Flux<TripEntity> source = (fleetId != null)
-            ? tripRepository.findAllByCreatedByAndFleetId(managerId, fleetId)
-            : tripRepository.findAllByCreatedBy(managerId);
+        Flux<TripEntity> source;
+        if (fleetId != null) {
+            source = accessScope.assertTripFleetAccess(managerId, fleetId)
+                    .thenMany(tripRepository.findAllByFleetId(fleetId));
+        } else {
+            source = tripRepository.findAllByFleetManagerId(managerId);
+        }
         return source.flatMap(e -> loadTripWithDetails(e.getId()));
     }
 
@@ -435,17 +441,14 @@ public class TripService implements ManageTripUseCase {
         return tripRepository
             .findById(tripId)
             .switchIfEmpty(Mono.error(TripException.notFound(tripId)))
-            .flatMap(trip -> {
-                if (!managerId.equals(trip.getCreatedBy())) {
-                    return Mono.error(new AccessDeniedException("Ce trajet ne vous appartient pas."));
-                }
+            .flatMap(trip -> accessScope.assertTripFleetAccess(managerId, trip.getFleetId()).then(Mono.defer(() -> {
                 String status = trip.getStatus();
                 if ("SCHEDULED".equals(status) || "CANCELLED".equals(status)) {
                     return tripRepository.deleteById(tripId);
                 }
                 return Mono.error(new IllegalStateException(
                         "Seuls les trajets SCHEDULED ou CANCELLED peuvent être supprimés. Annulez-le d'abord."));
-            });
+            })));
     }
 
     @Override
@@ -457,9 +460,21 @@ public class TripService implements ManageTripUseCase {
     }
 
     @Override
+    public Mono<Trip> getTripById(UUID id, UUID actorId) {
+        return tripRepository
+            .findById(id)
+            .switchIfEmpty(Mono.error(TripException.notFound(id)))
+            .flatMap(e -> accessScope.assertTripFleetAccess(actorId, e.getFleetId())
+                    .then(loadTripWithDetails(e.getId())));
+    }
+
+    @Override
     public Flux<Trip> getOpenTrips(UUID managerId) {
         return tripRepository
-            .findOpenTripsByCreatedBy(managerId)
+            .findAllByFleetManagerId(managerId)
+            .filter(t -> "SCHEDULED".equals(t.getStatus())
+                    || "DEPARTED".equals(t.getStatus())
+                    || "RETURNING".equals(t.getStatus()))
             .flatMap(e -> loadTripWithDetails(e.getId()));
     }
 
@@ -473,6 +488,7 @@ public class TripService implements ManageTripUseCase {
         return tripRepository
             .findById(tripId)
             .switchIfEmpty(Mono.error(TripException.notFound(tripId)))
+            .flatMap(trip -> accessScope.assertTripFleetAccess(managerId, trip.getFleetId()).thenReturn(trip))
             .flatMap(trip -> {
                 if (!isModifiable(trip.getStatus())) {
                     return Mono.error(TripException.tripNotModifiable());
@@ -519,6 +535,7 @@ public class TripService implements ManageTripUseCase {
         return tripRepository
             .findById(tripId)
             .switchIfEmpty(Mono.error(TripException.notFound(tripId)))
+            .flatMap(trip -> accessScope.assertTripFleetAccess(cmd.managerId(), trip.getFleetId()).thenReturn(trip))
             .flatMap(trip -> {
                 if (!isModifiable(trip.getStatus())) {
                     return Mono.error(TripException.tripNotModifiable());

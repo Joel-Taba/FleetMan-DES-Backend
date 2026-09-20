@@ -44,6 +44,7 @@ class TripServiceConflictTest {
     @Mock DistanceCalculatorPort distanceCalculator;
     @Mock ExternalGeofencePort geofenceApi;
     @Mock DatabaseClient db;
+    @Mock AccessScopeService accessScope;
 
     private TripService tripService;
     private UUID vehicleId;
@@ -62,7 +63,8 @@ class TripServiceConflictTest {
                 redisTelemetry,
                 distanceCalculator,
                 geofenceApi,
-                db
+                db,
+                accessScope
         );
         vehicleId = UUID.randomUUID();
         driverId = UUID.randomUUID();

@@ -67,15 +67,11 @@ public class GeofenceController {
             centerLatitude = request.center().coordinates().get(1);
         }
 
-        UUID fleetManagerId = getUserId(auth);
-        // Create zone with the fleetManagerId as the fleetId (zones belong to fleet
-        // managers)
+        UUID actorId = getUserId(auth);
         GeofenceZone domainZone = new GeofenceZone(
                 null,
-                null, // On gère l'association zone-fleet dans le service, pas besoin de l'ID de
-                      // flotte ici
-                fleetManagerId, // Use fleetManagerId as managerId since zones are managed at fleet manager
-                                // level
+                null,
+                actorId,
                 request.title(),
                 request.description(),
                 request.type(),
@@ -98,21 +94,21 @@ public class GeofenceController {
 
     @GetMapping("/circles")
     @Operation(summary = "Lister mes zones circulaires")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     public Flux<Map<String, Object>> listCircles(Authentication auth) {
         return geofenceService.getMyExternalZones(getUserId(auth), "CIRCLE");
     }
 
     @GetMapping("/polygons")
     @Operation(summary = "Lister mes zones polygonales")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     public Flux<Map<String, Object>> listPolygons(Authentication auth) {
         return geofenceService.getMyExternalZones(getUserId(auth), "POLYGON");
     }
 
         @GetMapping("/fleet/{fleetId}")
     @Operation(summary = "Lister les zones d'une flotte spécifique", description = "Retourne les zones enrichies avec la géométrie du moteur externe.")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     public Flux<Map<String, Object>> listByFleet(@PathVariable UUID fleetId, Authentication auth) {
         return geofenceService.getZonesByFleet(getUserId(auth), fleetId);
     }
@@ -135,13 +131,14 @@ public class GeofenceController {
     public Mono<Void> update(
             @PathVariable String type, 
             @PathVariable UUID id, 
-            @RequestBody GeofenceUpdateDTO updates) { // Utilisation du DTO ici
+            @RequestBody GeofenceUpdateDTO updates,
+            Authentication auth) { // Utilisation du DTO ici
         
         // Conversion DTO -> Map pour le service
         @SuppressWarnings("unchecked")
         Map<String, Object> updateMap = objectMapper.convertValue(updates, Map.class);
         
-        return geofenceService.updateRemoteZone(type, id, updateMap);
+        return ((GeofenceService) geofenceService).updateRemoteZone(type, id, updateMap, getUserId(auth));
     }
 
 
@@ -164,9 +161,9 @@ public class GeofenceController {
 
      @GetMapping
     @Operation(summary = "Lister toutes les zones du service")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     public  Flux<Map<String, Object>> listAll(Authentication auth) {
-        return geofenceService.getAllExternalZones("all");
+        return geofenceService.getMyExternalZones(getUserId(auth), "all");
     }
 
     @GetMapping("/alerts/all")

@@ -20,6 +20,34 @@ public interface TripR2dbcRepository
 
     Flux<TripEntity> findAllByCreatedBy(UUID createdBy);
     Flux<TripEntity> findAllByCreatedByAndFleetId(UUID createdBy, UUID fleetId);
+
+    @Query("""
+            SELECT t.* FROM fleet.trips t
+            WHERE t.deleted_at IS NULL AND t.fleet_id = :fleetId
+            ORDER BY t.start_date DESC NULLS LAST
+            """)
+    Flux<TripEntity> findAllByFleetId(UUID fleetId);
+
+    @Query("""
+            SELECT t.* FROM fleet.trips t
+            WHERE t.deleted_at IS NULL
+              AND t.fleet_id IN (
+                SELECT f.id FROM fleet.fleets f
+                WHERE f.manager_id = :managerId AND f.deleted_at IS NULL
+              )
+            ORDER BY t.start_date DESC NULLS LAST
+            """)
+    Flux<TripEntity> findAllByFleetManagerId(UUID managerId);
+
+    @Query("""
+            SELECT COUNT(*) FROM fleet.trips t
+            WHERE t.deleted_at IS NULL
+              AND t.fleet_id IN (
+                SELECT f.id FROM fleet.fleets f
+                WHERE f.manager_id = :managerId AND f.deleted_at IS NULL
+              )
+            """)
+    Mono<Long> countByFleetManagerId(UUID managerId);
     Flux<TripEntity> findAllByDriverId(UUID driverId);
 
     @Query(
@@ -121,4 +149,97 @@ public interface TripR2dbcRepository
             "AND t.start_date >= :start AND t.start_date <= :end"
     )
     Mono<Long> countTripsByDriverAndPeriod(UUID driverId, LocalDate start, LocalDate end);
+
+    @Query("""
+            SELECT t.* FROM fleet.trips t
+            WHERE t.deleted_at IS NULL
+              AND (
+                t.created_by IN (
+                    SELECT fm.user_id FROM fleet.fleet_managers fm WHERE fm.created_by_admin_id = :adminId
+                )
+                OR t.fleet_id IN (
+                    SELECT f.id FROM fleet.fleets f
+                    JOIN fleet.fleet_managers fm ON f.manager_id = fm.user_id
+                    WHERE fm.created_by_admin_id = :adminId
+                )
+              )
+            ORDER BY t.start_date DESC NULLS LAST
+            """)
+    Flux<TripEntity> findAllByOrganizationAdminId(UUID adminId);
+
+    @Query("""
+            SELECT t.* FROM fleet.trips t
+            WHERE t.deleted_at IS NULL
+              AND t.fleet_id IN (
+                SELECT f.id FROM fleet.fleets f
+                WHERE f.manager_id = :managerId AND f.deleted_at IS NULL
+              )
+              AND EXISTS (
+                SELECT 1 FROM fleet.fleet_managers fm
+                WHERE fm.user_id = :managerId AND fm.created_by_admin_id = :adminId
+              )
+            ORDER BY t.start_date DESC NULLS LAST
+            """)
+    Flux<TripEntity> findAllByOrganizationAdminIdAndManagerId(UUID adminId, UUID managerId);
+
+    @Query("""
+            SELECT COUNT(*) FROM fleet.trips t
+            WHERE t.created_by IN (
+                SELECT fm.user_id FROM fleet.fleet_managers fm WHERE fm.created_by_admin_id = :adminId
+            )
+               OR t.fleet_id IN (
+                SELECT f.id FROM fleet.fleets f
+                JOIN fleet.fleet_managers fm ON f.manager_id = fm.user_id
+                WHERE fm.created_by_admin_id = :adminId
+            )
+            """)
+    Mono<Long> countByOrganizationAdminId(UUID adminId);
+
+    @Query("""
+            SELECT t.* FROM fleet.trips t
+            WHERE t.deleted_at IS NULL
+              AND t.status IN ('COMPLETED', 'CANCELLED')
+              AND (
+                t.created_by IN (
+                    SELECT fm.user_id FROM fleet.fleet_managers fm WHERE fm.created_by_admin_id = :adminId
+                )
+                OR t.fleet_id IN (
+                    SELECT f.id FROM fleet.fleets f
+                    JOIN fleet.fleet_managers fm ON f.manager_id = fm.user_id
+                    WHERE fm.created_by_admin_id = :adminId
+                )
+              )
+            ORDER BY t.start_date DESC NULLS LAST
+            """)
+    Flux<TripEntity> findHistoryByOrganizationAdminId(UUID adminId);
+
+    @Query("""
+            SELECT t.* FROM fleet.trips t
+            WHERE t.deleted_at IS NULL
+              AND t.status IN ('COMPLETED', 'CANCELLED')
+              AND t.fleet_id IN (
+                SELECT f.id FROM fleet.fleets f
+                WHERE f.manager_id = :managerId AND f.deleted_at IS NULL
+              )
+              AND EXISTS (
+                SELECT 1 FROM fleet.fleet_managers fm
+                WHERE fm.user_id = :managerId AND fm.created_by_admin_id = :adminId
+              )
+            ORDER BY t.start_date DESC NULLS LAST
+            """)
+    Flux<TripEntity> findHistoryByOrganizationAdminIdAndManagerId(UUID adminId, UUID managerId);
+
+    @Query("""
+            SELECT COALESCE(SUM(COALESCE(t.computed_distance_km, t.distance_km::numeric, 0)), 0)
+            FROM fleet.trips t
+            WHERE t.created_by IN (
+                SELECT fm.user_id FROM fleet.fleet_managers fm WHERE fm.created_by_admin_id = :adminId
+            )
+               OR t.fleet_id IN (
+                SELECT f.id FROM fleet.fleets f
+                JOIN fleet.fleet_managers fm ON f.manager_id = fm.user_id
+                WHERE fm.created_by_admin_id = :adminId
+            )
+            """)
+    Mono<java.math.BigDecimal> sumDistanceByOrganizationAdminId(UUID adminId);
 }

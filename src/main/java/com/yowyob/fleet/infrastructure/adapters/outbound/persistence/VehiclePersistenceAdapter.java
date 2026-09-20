@@ -4,6 +4,7 @@ import com.yowyob.fleet.domain.exception.VehicleException;
 import com.yowyob.fleet.domain.model.Vehicle;
 import com.yowyob.fleet.domain.ports.out.VehiclePersistencePort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.*;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.*;
 import com.yowyob.fleet.infrastructure.mappers.VehicleLocalMapper;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,6 +26,7 @@ public class VehiclePersistenceAdapter implements VehiclePersistencePort {
     private final FinancialParameterR2dbcRepository financialRepo;
     private final MaintenanceParameterR2dbcRepository maintenanceRepo;
     private final VehicleIllustrationImageR2dbcRepository galleryRepo;
+    private final DriverR2dbcRepository driverRepo;
     private final VehicleLocalMapper mapper;
 
     @Override
@@ -63,7 +66,12 @@ public class VehiclePersistenceAdapter implements VehiclePersistencePort {
                 maintenanceRepo.findByVehicleId(vehicleId)
                     .map(existing -> { maint.setId(existing.getId()); maint.setNew(false); return maint; })
                     .defaultIfEmpty(maint).flatMap(maintenanceRepo::save)
-        ).thenReturn(new VehicleLocalEntity(vehicleId, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, false));
+        ).then(Mono.fromSupplier(() -> {
+            VehicleLocalEntity stub = new VehicleLocalEntity();
+            stub.setId(vehicleId);
+            stub.setNew(false);
+            return stub;
+        }));
     }
 
     @Override
@@ -78,17 +86,42 @@ public class VehiclePersistenceAdapter implements VehiclePersistencePort {
 
     @Override
     public Mono<Void> deleteLocalData(UUID id) {
-        return vehicleRepo.deleteById(id);
+        return vehicleRepo.findById(id)
+                .flatMap(entity -> {
+                    if (entity.getDeletedAt() != null) {
+                        return Mono.just(entity);
+                    }
+                    entity.setDeletedAt(Instant.now());
+                    entity.setCurrentDriverId(null);
+                    entity.setNew(false);
+                    return vehicleRepo.save(entity);
+                })
+                .then(driverRepo.findByAssignedVehicleId(id)
+                        .flatMap(driver -> {
+                            driver.setAssignedVehicleId(null);
+                            driver.markAsExisting();
+                            return driverRepo.save(driver);
+                        })
+                        .then());
     }
 
     @Override
     public Flux<Vehicle> getVehiclesByManager(UUID managerId) {
-        return vehicleRepo.findByManagerId(managerId).flatMap(v -> getLocalDataById(v.getId()));
+        return vehicleRepo.findAllInAssignedFleets(managerId)
+                .flatMap(v -> getLocalDataById(v.getId()));
+    }
+
+    @Override
+    public Flux<Vehicle> getVehiclesByOrganizationAdminId(UUID adminId) {
+        return vehicleRepo.findAllByOrganizationAdminId(adminId)
+                .flatMap(v -> getLocalDataById(v.getId()));
     }
 
     @Override
     public Flux<Vehicle> getAllVehicles() {
-        return vehicleRepo.findAll().flatMap(v -> getLocalDataById(v.getId()));
+        return vehicleRepo.findAll()
+                .filter(v -> v.getDeletedAt() == null)
+                .flatMap(v -> getLocalDataById(v.getId()));
     }
 
     @Override

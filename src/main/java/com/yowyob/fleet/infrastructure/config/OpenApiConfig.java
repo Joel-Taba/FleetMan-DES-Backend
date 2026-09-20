@@ -30,6 +30,7 @@ public class OpenApiConfig {
     public static final String TAG_ACCOUNT = "03. Account";
     public static final String TAG_SUPER_ADMIN = "04. Super Admin | Gestion des Administrateurs";
     public static final String TAG_ADMIN_MANAGERS = "05. Admin | Gestion des Fleet Managers";
+    public static final String TAG_ORGANIZATION = "05b. Organisation | Ressources de l'admin";
     public static final String TAG_ADMIN_RESOURCES = "06. Admin | Gestion des Ressources";
     public static final String TAG_FLEET_MANAGERS = "07. Fleet Managers";
     public static final String TAG_DRIVERS = "08. Drivers";
@@ -115,6 +116,7 @@ public class OpenApiConfig {
                     TAG_ACCOUNT,
                     TAG_SUPER_ADMIN,
                     TAG_ADMIN_MANAGERS,
+                    TAG_ORGANIZATION,
                     TAG_ADMIN_RESOURCES,
                     TAG_RES_TYPES ,
                     TAG_RES_MFR,

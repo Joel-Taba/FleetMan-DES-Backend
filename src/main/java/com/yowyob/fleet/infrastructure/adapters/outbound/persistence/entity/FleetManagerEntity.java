@@ -27,14 +27,18 @@ public class FleetManagerEntity implements Persistable<UUID> {
     @Column("logo_url")
     private String logoUrl;
 
+    /** Admin (organisation) qui a créé ce gestionnaire. */
+    @Column("created_by_admin_id")
+    private UUID createdByAdminId;
+
     @Transient // Ce champ n'est pas en base, il sert à la logique R2DBC
     private boolean isNew = false;
 
-    // Constructeur utilitaire pour la création
-    public FleetManagerEntity(UUID userId, String companyName) {
+    public FleetManagerEntity(UUID userId, String companyName, UUID createdByAdminId) {
         this.userId = userId;
         this.companyName = companyName;
-        this.isNew = true; // On marque l'objet comme nouveau à la création
+        this.createdByAdminId = createdByAdminId;
+        this.isNew = true;
     }
 
     @Override

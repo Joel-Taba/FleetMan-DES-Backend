@@ -23,9 +23,10 @@ CREATE TABLE IF NOT EXISTS public.user_has_roles (
 
 -- 2. Insertion des Rôles
 INSERT INTO public.roles (name) VALUES 
-('FLEET_ADMIN'), 
-('FLEET_MANAGER'), 
-('FLEET_DRIVER')
+('FLEET_DRIVER'),
+('FLEET_MANAGER'),
+('FLEET_ADMIN'),
+('FLEET_SUPER_ADMIN')
 ON CONFLICT DO NOTHING;
 
 -- 3. Insertion des Types de Véhicules

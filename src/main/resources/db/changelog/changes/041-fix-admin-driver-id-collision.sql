@@ -21,7 +21,15 @@ WHERE id = 'a1000003-0000-4000-8000-000000000003' AND email = 'driver4@fleetman.
 UPDATE fleet.users SET username = 'driver.bella', first_name = 'Claire', last_name = 'Bella'
 WHERE id = 'a1000004-0000-4000-8000-000000000004' AND email = 'driver5@fleetman.cm';
 
--- 2) On (re)crée les 4 administrateurs de démo manquants avec des IDs qui
+-- 2) Sur une base fraîche, la migration 039 a déjà inséré les admin avec les
+--    anciens IDs (a1000001...). On les supprime pour pouvoir les recréer avec
+--    les bons IDs (ad000001...).
+DELETE FROM fleet.users
+WHERE username IN ('admin.kamga', 'admin.ndongo', 'admin.moussa', 'admin.fotso')
+  AND id NOT IN ('ad000001-0000-4000-8000-000000000001', 'ad000002-0000-4000-8000-000000000002',
+                 'ad000003-0000-4000-8000-000000000003', 'ad000004-0000-4000-8000-000000000004');
+
+-- 3) On (re)crée les 4 administrateurs de démo manquants avec des IDs qui
 --    n'entrent en collision avec AUCUNE autre plage utilisée par les seeds
 --    (préfixe 'ad' non utilisé ailleurs — vérifié sur tous les fichiers de seed).
 INSERT INTO fleet.users (id, username, email, first_name, last_name, phone, is_active, last_login_at, approval_status, approved_at)

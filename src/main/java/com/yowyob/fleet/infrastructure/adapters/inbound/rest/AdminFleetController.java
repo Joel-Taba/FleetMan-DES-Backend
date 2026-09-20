@@ -5,6 +5,7 @@ import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.FleetRequest;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.FleetResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.FleetStatsResponse;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
+import com.yowyob.fleet.infrastructure.config.security.AuthPrincipal;
 import com.yowyob.fleet.infrastructure.mappers.FleetMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -13,6 +14,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -36,43 +38,47 @@ public class AdminFleetController {
     private final ManageFleetUseCase fleetUseCase;
     private final FleetMapper mapper;
 
+    private UUID actorId(Authentication auth) {
+        return AuthPrincipal.userId(auth);
+    }
+
     @GetMapping
-    @Operation(summary = "Lister toutes les flottes", description = "Toutes flottes confondues, assignées ou non.")
-    public Flux<FleetResponse> list() {
-        return fleetUseCase.getFleets(null, true).map(mapper::toResponse);
+    @Operation(summary = "Lister les flottes de l'organisation")
+    public Flux<FleetResponse> list(Authentication auth) {
+        return fleetUseCase.getFleets(actorId(auth), true).map(mapper::toResponse);
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Détails d'une flotte")
-    public Mono<FleetResponse> getById(@PathVariable UUID id) {
-        return fleetUseCase.getFleetById(id, null, true).map(mapper::toResponse);
+    public Mono<FleetResponse> getById(@PathVariable UUID id, Authentication auth) {
+        return fleetUseCase.getFleetById(id, actorId(auth), true).map(mapper::toResponse);
     }
 
     @GetMapping("/{id}/stats")
     @Operation(summary = "KPIs d'une flotte")
-    public Mono<FleetStatsResponse> getStats(@PathVariable UUID id) {
-        return fleetUseCase.getFleetStatistics(id, null, true);
+    public Mono<FleetStatsResponse> getStats(@PathVariable UUID id, Authentication auth) {
+        return fleetUseCase.getFleetStatistics(id, actorId(auth), true);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Créer une flotte", description = "managerId optionnel dans le body via /managers/{id}/fleets pour l'assignation initiale.")
-    public Mono<FleetResponse> create(@Valid @RequestBody FleetRequest request) {
-        return fleetUseCase.createFleetAsAdmin(mapper.toDomain(request), null)
+    public Mono<FleetResponse> create(@Valid @RequestBody FleetRequest request, Authentication auth) {
+        return fleetUseCase.createFleetAsAdmin(mapper.toDomain(request), null, actorId(auth))
                 .map(mapper::toResponse);
     }
 
     @PutMapping("/{id}")
     @Operation(summary = "Modifier une flotte")
-    public Mono<FleetResponse> update(@PathVariable UUID id, @Valid @RequestBody FleetRequest request) {
-        return fleetUseCase.updateFleet(id, mapper.toDomain(request), null, true)
+    public Mono<FleetResponse> update(@PathVariable UUID id, @Valid @RequestBody FleetRequest request, Authentication auth) {
+        return fleetUseCase.updateFleet(id, mapper.toDomain(request), actorId(auth), true)
                 .map(mapper::toResponse);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Supprimer une flotte", description = "Interdit si la flotte contient encore des ressources.")
-    public Mono<Void> delete(@PathVariable UUID id) {
-        return fleetUseCase.deleteFleet(id, null, true);
+    @Operation(summary = "Supprimer une flotte", description = "Suppression logique (deleted_at).")
+    public Mono<Void> delete(@PathVariable UUID id, Authentication auth) {
+        return fleetUseCase.deleteFleet(id, actorId(auth), true);
     }
 }

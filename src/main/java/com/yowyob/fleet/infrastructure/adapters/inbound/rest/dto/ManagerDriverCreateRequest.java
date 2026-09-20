@@ -14,5 +14,8 @@ public record ManagerDriverCreateRequest(
         @NotBlank String lastName,
         @NotBlank String licenceNumber,
         String email,
-        String phone
+        String phone,
+        String username,
+        String password,
+        String status
 ) {}

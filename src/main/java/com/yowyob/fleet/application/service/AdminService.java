@@ -10,6 +10,7 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.Flee
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.UserLocalEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetManagerR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.PlatformAdminR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,10 +33,16 @@ public class AdminService implements ManageAdminUseCase {
     private final ExternalActorPort externalActorPort;
     private final FleetManagerPersistencePort managerPersistencePort;
     private final FleetR2dbcRepository fleetRepo;
+    private final PlatformAdminR2dbcRepository platformAdminRepo;
 
     @Override
-    public Flux<AuthPort.UserDetail> listFleetManagers(String token) {
-        return managerRepo.findAll()
+    public Flux<AuthPort.UserDetail> listFleetManagers(UUID requesterId, boolean isSuperAdmin) {
+        Flux<FleetManagerEntity> source = isSuperAdmin
+                ? managerRepo.findAll()
+                : resolveLocalUserId(requesterId)
+                        .flatMapMany(managerRepo::findByCreatedByAdminId);
+
+        return source
                 .flatMap(mgr -> userRepo.findById(mgr.getUserId())
                         .filter(user -> user.getDeletedAt() == null)
                         .map(user -> toManagerDetail(user, mgr)))
@@ -44,27 +51,20 @@ public class AdminService implements ManageAdminUseCase {
     }
 
     @Override
-    public Mono<AuthPort.UserDetail> getManagerDetails(UUID managerId, String token, boolean isSuperAdmin) {
-        return userRepo.findById(managerId)
-                .switchIfEmpty(Mono.defer(() -> userRepo.findByKernelId(managerId)))
-                .filter(user -> user.getDeletedAt() == null)
-                .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
-                .flatMap(user -> managerRepo.findById(user.getId())
-                        .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
-                        .map(mgr -> toManagerDetail(user, mgr)));
+    public Mono<AuthPort.UserDetail> getManagerDetails(UUID managerId, UUID requesterId, boolean isSuperAdmin) {
+        return loadOwnedManager(managerId, requesterId, isSuperAdmin)
+                .map(pair -> toManagerDetail(pair.user(), pair.manager()));
     }
 
     @Override
-    public Mono<Void> deleteManager(UUID managerId) {
-        return userRepo.findById(managerId)
-                .switchIfEmpty(Mono.defer(() -> userRepo.findByKernelId(managerId)))
-                .filter(user -> user.getDeletedAt() == null)
-                .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
-                .flatMap(user -> fleetRepo.countByManagerId(user.getId())
+    public Mono<Void> deleteManager(UUID managerId, UUID requesterId, boolean isSuperAdmin) {
+        return loadOwnedManager(managerId, requesterId, isSuperAdmin)
+                .flatMap(pair -> fleetRepo.countActiveByManagerId(pair.user().getId())
                         .flatMap(count -> {
                             if (count > 0) {
                                 return Mono.error(AdminException.managerHasActiveFleets());
                             }
+                            UserLocalEntity user = pair.user();
                             user.setDeletedAt(Instant.now());
                             user.setActive(false);
                             user.setNewRecord(false);
@@ -76,10 +76,9 @@ public class AdminService implements ManageAdminUseCase {
 
     @Override
     public Mono<Void> toggleManagerStatus(UUID managerId, UUID requesterId, boolean isSuperAdmin) {
-        return userRepo.findById(managerId)
-                .switchIfEmpty(Mono.defer(() -> userRepo.findByKernelId(managerId)))
-                .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
-                .flatMap(u -> {
+        return loadOwnedManager(managerId, requesterId, isSuperAdmin)
+                .flatMap(pair -> {
+                    UserLocalEntity u = pair.user();
                     u.setActive(!u.isActive());
                     u.setNewRecord(false);
                     return userRepo.save(u);
@@ -89,30 +88,67 @@ public class AdminService implements ManageAdminUseCase {
     }
 
     @Override
-    public Mono<AuthPort.UserDetail> createManager(AuthUseCase.RegisterCommand command, String companyName) {
-        return authPort.registerInRemote(command)
-                .flatMap(res -> {
-                    // registerInRemote ne renvoie pas de session exploitable (voir
-                    // SuperAdminService.createAdmin) : on utilise directement le detail
-                    // renvoyé (id/username/email/phone Kernel + firstName/lastName/roles
-                    // de la commande) plutôt que de re-fetcher avec un token vide.
-                    UUID userId = res.user().id();
+    public Mono<AuthPort.UserDetail> createManager(
+            AuthUseCase.RegisterCommand command, String companyName, UUID createdByAdminId) {
+        return requireExistingPlatformAdmin(createdByAdminId)
+                .flatMap(localAdminId -> authPort.registerInRemote(command)
+                        .flatMap(res -> {
+                            UUID userId = res.user().id();
 
-                    Mono<Void> roleFlow = externalActorPort.assignPlatformRole(userId, "FLEET_MANAGER")
-                            .onErrorResume(e -> {
-                                log.warn("⚠️ Assignation rôle FLEET_MANAGER ignorée pour {} : {}", userId, e.getMessage());
-                                return Mono.empty();
-                            });
+                            Mono<Void> roleFlow = externalActorPort.assignPlatformRole(userId, "FLEET_MANAGER")
+                                    .onErrorResume(e -> {
+                                        log.warn("⚠️ Assignation rôle FLEET_MANAGER ignorée pour {} : {}", userId, e.getMessage());
+                                        return Mono.empty();
+                                    });
 
-                    // syncNewManagerIdentity DOIT s'exécuter avant createProfile : la table
-                    // fleet.fleet_managers a une FK vers fleet.users(id), qui n'existe pas
-                    // encore tant que le mirroir local n'a pas été créé.
-                    return roleFlow
-                            .then(syncNewManagerIdentity(res.user()))
-                            .flatMap(detail -> managerPersistencePort.createProfile(userId, companyName)
-                                    .thenReturn(detail));
-                });
+                            return roleFlow
+                                    .then(syncNewManagerIdentity(res.user()))
+                                    .flatMap(detail -> managerPersistencePort
+                                            .createProfile(userId, companyName, localAdminId)
+                                            .thenReturn(detail));
+                        }));
     }
+
+    private Mono<UUID> requireExistingPlatformAdmin(UUID adminId) {
+        if (adminId == null) {
+            return Mono.error(AdminException.createdByMustBeAdmin());
+        }
+        return resolveLocalUserId(adminId)
+                .flatMap(localId -> platformAdminRepo.existsById(localId)
+                        .flatMap(exists -> exists
+                                ? Mono.just(localId)
+                                : Mono.error(AdminException.createdByMustBeAdmin())));
+    }
+
+    private Mono<UUID> resolveLocalUserId(UUID id) {
+        if (id == null) {
+            return Mono.empty();
+        }
+        return userRepo.findById(id)
+                .switchIfEmpty(Mono.defer(() -> userRepo.findByKernelId(id)))
+                .map(UserLocalEntity::getId)
+                .defaultIfEmpty(id);
+    }
+
+    private Mono<OwnedManager> loadOwnedManager(UUID managerId, UUID requesterId, boolean isSuperAdmin) {
+        return userRepo.findById(managerId)
+                .switchIfEmpty(Mono.defer(() -> userRepo.findByKernelId(managerId)))
+                .filter(user -> user.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
+                .flatMap(user -> managerRepo.findById(user.getId())
+                        .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
+                        .flatMap(mgr -> {
+                            if (isSuperAdmin) {
+                                return Mono.just(new OwnedManager(user, mgr));
+                            }
+                            return resolveLocalUserId(requesterId)
+                                    .filter(localAdminId -> localAdminId.equals(mgr.getCreatedByAdminId()))
+                                    .switchIfEmpty(Mono.error(AdminException.managerNotFound()))
+                                    .thenReturn(new OwnedManager(user, mgr));
+                        }));
+    }
+
+    private record OwnedManager(UserLocalEntity user, FleetManagerEntity manager) {}
 
     private Mono<AuthPort.UserDetail> syncNewManagerIdentity(AuthPort.UserDetail remote) {
         return userRepo.findById(remote.id())

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Component
@@ -74,11 +75,41 @@ public class DriverPersistenceAdapter implements DriverPersistencePort {
 
     @Override
     public Flux<Driver> findAllByFleetId(UUID fleetId) {
-        return repository.findByFleetId(fleetId).map(mapper::toDomain);
+        return repository.findByFleetId(fleetId)
+                .filter(e -> e.getDeletedAt() == null)
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Flux<Driver> findAllByManagerId(UUID managerId) {
+        return repository.findAllByManagerId(managerId).map(mapper::toDomain);
+    }
+
+    @Override
+    public Flux<Driver> findAllByOrganizationAdminId(UUID adminId) {
+        return repository.findAllByOrganizationAdminId(adminId).map(mapper::toDomain);
     }
 
     @Override
     public Flux<Driver> findAll() {
-        return repository.findAll().map(mapper::toDomain);
+        return repository.findAll()
+                .filter(e -> e.getDeletedAt() == null)
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Mono<Void> softDelete(UUID userId) {
+        return repository.findById(userId)
+                .flatMap(entity -> {
+                    if (entity.getDeletedAt() != null) {
+                        return Mono.just(entity);
+                    }
+                    entity.setDeletedAt(Instant.now());
+                    entity.setAssignedVehicleId(null);
+                    entity.setStatus("INACTIVE");
+                    entity.markAsExisting();
+                    return repository.save(entity);
+                })
+                .then();
     }
 }

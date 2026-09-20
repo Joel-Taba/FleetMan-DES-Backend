@@ -1,13 +1,16 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
+import com.yowyob.fleet.application.service.AccessScopeService;
 import com.yowyob.fleet.domain.model.Vehicle;
 import com.yowyob.fleet.domain.model.VehicleParameters;
 import com.yowyob.fleet.domain.ports.in.ManageVehicleUseCase;
-import com.yowyob.fleet.domain.ports.out.AuthPort;
+import com.yowyob.fleet.domain.ports.out.DriverPersistencePort;
+import org.springframework.security.access.AccessDeniedException;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.MaintenanceUpdateRequest;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehicleGalleryUpdateRequest;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehicleRequest;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
+import com.yowyob.fleet.infrastructure.config.security.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,6 +37,8 @@ import java.util.UUID;
 public class VehicleController {
 
     private final ManageVehicleUseCase vehicleUseCase;
+    private final DriverPersistencePort driverPersistencePort;
+    private final AccessScopeService accessScope;
     private final ObjectMapper objectMapper;
 
     /**
@@ -44,7 +49,11 @@ public class VehicleController {
     }
 
     private UUID getUserId(Authentication auth) {
-        return ((AuthPort.UserDetail) auth.getPrincipal()).id();
+        return AuthPrincipal.userId(auth);
+    }
+
+    private Mono<Void> requireVehicleAccess(UUID vehicleId, Authentication auth) {
+        return accessScope.assertVehicleAccess(getUserId(auth), vehicleId);
     }
 
     // ========================================================================
@@ -54,8 +63,8 @@ public class VehicleController {
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @PostMapping("/vehicles")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Créer un véhicule", description = "Enregistrement distant (Pynfi) et initialisation locale. Acteur: Manager.")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Créer un véhicule", description = "Enregistrement local. Manager : ses flottes. Admin : flottes/managers de l'organisation.")
     public Mono<Vehicle> create(@Valid @RequestBody VehicleRequest request, Authentication auth) {
         return vehicleUseCase.createIndependentVehicle(request, getUserId(auth), extractToken(auth));
     }
@@ -76,26 +85,43 @@ public class VehicleController {
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @GetMapping("/vehicles")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Lister mes véhicules", description = "Récupère les véhicules gérés par le manager connecté. Acteur: Manager.")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Lister les véhicules", description = "Manager : ses véhicules. Admin : tout le parc.")
     public Flux<Vehicle> getVehicles(
             @RequestParam(required = false) UUID fleetId,
             Authentication auth) {
-        return vehicleUseCase.getVehicles(getUserId(auth), false, extractToken(auth), fleetId);
+        boolean isAdmin = AuthPrincipal.isFleetAdmin(auth);
+        return vehicleUseCase.getVehicles(getUserId(auth), isAdmin, extractToken(auth), fleetId);
     }
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @GetMapping("/vehicles/{vehicleId}")
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
-    @Operation(summary = "Détails complets d'un véhicule", description = "Agrégation Identité + Finance + Maintenance + Opérationnel. Acteur: Manager/Admin.")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN', 'FLEET_DRIVER')")
+    @Operation(summary = "Détails complets d'un véhicule", description = "Manager/Admin : tout véhicule. Chauffeur : uniquement le sien.")
     public Mono<Vehicle> getVehicle(@PathVariable UUID vehicleId, Authentication auth) {
-        return vehicleUseCase.getVehicleDetails(vehicleId, extractToken(auth));
+        UUID callerId = getUserId(auth);
+        boolean privileged = AuthPrincipal.isFleetAdmin(auth) || AuthPrincipal.isFleetManager(auth);
+        return vehicleUseCase.getVehicleDetails(vehicleId, extractToken(auth))
+                .flatMap(vehicle -> {
+                    if (privileged) {
+                        return accessScope.assertVehicleFleetAccess(callerId, vehicle.fleetId())
+                                .thenReturn(vehicle);
+                    }
+                    if (callerId.equals(vehicle.currentDriverId())) {
+                        return Mono.just(vehicle);
+                    }
+                    return driverPersistencePort.findById(callerId)
+                            .filter(d -> vehicleId.equals(d.assignedVehicleId()))
+                            .map(d -> vehicle)
+                            .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                    "Ce véhicule ne vous est pas assigné.")));
+                });
     }
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @PutMapping("/vehicles/{vehicleId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Mise à jour véhicule (Manager UI)", description = "Accepte le payload partiel ApiVehicle du front.")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Mise à jour véhicule", description = "Accepte le payload partiel ApiVehicle du front.")
     public Mono<Vehicle> update(
             @PathVariable UUID vehicleId,
             @RequestBody Map<String, Object> body,
@@ -111,29 +137,30 @@ public class VehicleController {
         updates.remove("financialParameters");
         updates.remove("maintenanceParameters");
         updates.remove("operationalParameters");
-        return vehicleUseCase.patchVehicleInfo(vehicleId, updates, extractToken(auth));
+        return requireVehicleAccess(vehicleId, auth)
+                .then(vehicleUseCase.patchVehicleInfo(vehicleId, updates, extractToken(auth)));
     }
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @PutMapping("/vehicles/{vehicleId}/gallery")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Mettre à jour photo + galerie (JSON URLs)")
     public Mono<Vehicle> updateGallery(
             @PathVariable UUID vehicleId,
             @RequestBody VehicleGalleryUpdateRequest request,
             Authentication auth) {
-        return vehicleUseCase.updateVehicleGallery(
+        return requireVehicleAccess(vehicleId, auth).then(vehicleUseCase.updateVehicleGallery(
                 vehicleId,
                 request.photoUrl(),
                 request.galleryUrls(),
                 extractToken(auth)
-        );
+        ));
     }
 
 @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @PatchMapping("/vehicles/{vehicleId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Mise à jour partielle (Admin/Correction)", description = "Permet de corriger une immatriculation ou un VIN.")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Mise à jour partielle", description = "Permet de corriger une immatriculation, marque, modèle, statut, etc.")
     public Mono<Vehicle> patch(
             @PathVariable UUID vehicleId, 
             @RequestBody VehiclePatchRequest request, // Utilisation du DTO documenté
@@ -147,20 +174,22 @@ public class VehicleController {
         // Nettoyage des nulls pour ne pas écraser des données existantes
         updates.values().removeIf(java.util.Objects::isNull);
 
-        return vehicleUseCase.patchVehicleInfo(vehicleId, updates, extractToken(auth));
+        return requireVehicleAccess(vehicleId, auth)
+                .then(vehicleUseCase.patchVehicleInfo(vehicleId, updates, extractToken(auth)));
     }
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @PutMapping("/vehicles/{vehicleId}/financial-parameters")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Paramètres Financiers", description = "Mise à jour Assurance, Coût/KM, Achat. Acteur: Manager.")
     public Mono<Vehicle> updateFinancial(@PathVariable UUID vehicleId, @RequestBody VehicleParameters.Financial params, Authentication auth) {
-        return vehicleUseCase.updateFinancialParameters(vehicleId, params, extractToken(auth));
+        return requireVehicleAccess(vehicleId, auth)
+                .then(vehicleUseCase.updateFinancialParameters(vehicleId, params, extractToken(auth)));
     }
 
 @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @PutMapping("/vehicles/{vehicleId}/maintenance-parameters")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Paramètres Maintenance", description = "Mise à jour des statuts techniques.")
     public Mono<Vehicle> updateMaintenance(
             @PathVariable UUID vehicleId, 
@@ -175,17 +204,19 @@ public class VehicleController {
             request.maintenanceStatus()
         );
 
-        return vehicleUseCase.updateMaintenanceParameters(vehicleId, params, extractToken(auth));
+        return requireVehicleAccess(vehicleId, auth)
+                .then(vehicleUseCase.updateMaintenanceParameters(vehicleId, params, extractToken(auth)));
     }
 
 
     @Tag(name = OpenApiConfig.TAG_VHC_PARC)
     @DeleteMapping("/vehicles/{vehicleId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Supprimer un véhicule", description = "Suppression physique distante et locale. Acteur: Manager.")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Supprimer un véhicule", description = "Suppression logique (deleted_at). Admin : toute l'organisation.")
     public Mono<Void> delete(@PathVariable UUID vehicleId, Authentication auth) {
-        return vehicleUseCase.removeVehicle(vehicleId, extractToken(auth));
+        return requireVehicleAccess(vehicleId, auth)
+                .then(vehicleUseCase.removeVehicle(vehicleId, extractToken(auth)));
     }
 
     // ========================================================================
@@ -194,10 +225,13 @@ public class VehicleController {
 
     @Tag(name = OpenApiConfig.TAG_VHC_OP)
     @GetMapping("/vehicles/{vehicleId}/operational")
-    @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Consulter la télémétrie", description = "Voir position, vitesse et niveau de fuel en temps réel. Acteur: Driver/Manager.")
-    public Mono<VehicleParameters.Operational> getOp(@PathVariable UUID vehicleId) {
-        return vehicleUseCase.getOperationalData(vehicleId);
+    public Mono<VehicleParameters.Operational> getOp(@PathVariable UUID vehicleId, Authentication auth) {
+        Mono<Void> gate = AuthPrincipal.isFleetDriver(auth)
+                ? Mono.empty()
+                : requireVehicleAccess(vehicleId, auth);
+        return gate.then(vehicleUseCase.getOperationalData(vehicleId));
     }
 
     @Tag(name = OpenApiConfig.TAG_VHC_OP)

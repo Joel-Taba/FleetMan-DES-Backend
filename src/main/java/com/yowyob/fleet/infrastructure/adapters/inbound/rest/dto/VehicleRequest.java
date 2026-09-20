@@ -10,8 +10,11 @@ import java.util.UUID;
  * - flux Manager front (fleetId + brand/model strings)
  */
 public record VehicleRequest(
-    @Schema(description = "Flotte cible (requis côté Manager UI)")
+    @Schema(description = "Flotte cible (optionnelle). Si fournie, le manager du véhicule est celui de la flotte.")
     UUID fleetId,
+
+    @Schema(description = "Gestionnaire propriétaire (admin : obligatoire si aucune flotte n'est choisie)")
+    UUID managerId,
 
     @Schema(description = "ID issu de /lookup/vehicle-types")
     UUID vehicleTypeId,

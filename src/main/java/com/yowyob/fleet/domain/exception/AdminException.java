@@ -32,4 +32,16 @@ public class AdminException extends DomainException {
                 "Impossible de supprimer ce gestionnaire : des flottes lui sont encore assignées. Désassignez-les d'abord.",
                 HttpStatus.CONFLICT, "ADMN_006");
     }
+
+    public static AdminException createdByMustBeAdmin() {
+        return new AdminException(
+                "Un gestionnaire doit être rattaché à un administrateur existant (organisation).",
+                HttpStatus.BAD_REQUEST, "ADMN_007");
+    }
+
+    public static AdminException organizationAccessDenied() {
+        return new AdminException(
+                "Accès refusé à cette organisation.",
+                HttpStatus.FORBIDDEN, "ADMN_008");
+    }
 }

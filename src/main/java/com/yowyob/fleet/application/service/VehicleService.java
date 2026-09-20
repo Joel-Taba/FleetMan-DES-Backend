@@ -58,6 +58,7 @@ public class VehicleService implements ManageVehicleUseCase {
     private final OperationalParameterR2dbcRepository operationalRepo;
     private final VehicleIllustrationImageR2dbcRepository galleryRepo;
     private final PlanLimitGuard planLimitGuard;
+    private final AccessScopeService accessScope;
 
     // ========================================================================
     // --- 09a. GESTION DU PARC (FLEET MANAGER) ---
@@ -69,7 +70,7 @@ public class VehicleService implements ManageVehicleUseCase {
         // 1. Vérification : La flotte existe et appartient au manager
         return fleetRepository.existsByIdAndManagerId(fleetId, managerId)
             .filter(exists -> exists)
-            .switchIfEmpty(Mono.error(new RuntimeException("Flotte introuvable ou accès refusé.")))
+            .switchIfEmpty(accessScope.assertFleetAccess(managerId, fleetId).thenReturn(true))
             
             // 2. Récupération et mise à jour du véhicule local
             .then(localPersistencePort.getLocalDataById(vehicleId))
@@ -127,12 +128,13 @@ public class VehicleService implements ManageVehicleUseCase {
     }
 
     public Flux<Vehicle> getVehicles(UUID requesterId, boolean isAdmin, String token, UUID fleetId) {
-        Flux<Vehicle> localStream = isAdmin ?
-                localPersistencePort.getAllVehicles() :
-                localPersistencePort.getVehiclesByManager(requesterId);
+        Flux<Vehicle> localStream = isAdmin
+                ? localPersistencePort.getVehiclesByOrganizationAdminId(requesterId)
+                : localPersistencePort.getVehiclesByManager(requesterId);
 
         if (fleetId != null) {
-            localStream = localStream.filter(v -> fleetId.equals(v.fleetId()));
+            localStream = accessScope.assertFleetAccess(requesterId, fleetId)
+                    .thenMany(localStream.filter(v -> fleetId.equals(v.fleetId())));
         }
 
         return localStream.flatMap(v -> getVehicleDetails(v.id(), token)
@@ -143,7 +145,13 @@ public class VehicleService implements ManageVehicleUseCase {
     @Transactional
     public Mono<Vehicle> createIndependentVehicle(VehicleRequest request, UUID managerId, String token) {
         UUID fleetId = request.fleetId();
-        return createVehicle(fleetId, request, managerId, token);
+        if (fleetId != null) {
+            return fleetRepository.findById(fleetId)
+                    .switchIfEmpty(Mono.error(new RuntimeException("Flotte introuvable.")))
+                    .flatMap(fleet -> createVehicle(fleetId, request, fleet.managerId(), token));
+        }
+        UUID owner = request.managerId() != null ? request.managerId() : managerId;
+        return createVehicle(null, request, owner, token);
     }
 
     @Override
@@ -154,10 +162,7 @@ public class VehicleService implements ManageVehicleUseCase {
                 && req.fuelTypeId() != null && req.transmissionTypeId() != null && req.colorId() != null;
 
         Mono<Void> ownership = resolvedFleetId != null
-                ? fleetRepository.existsByIdAndManagerId(resolvedFleetId, managerId)
-                        .filter(Boolean::booleanValue)
-                        .switchIfEmpty(Mono.error(new RuntimeException("Flotte introuvable ou accès refusé.")))
-                        .then()
+                ? accessScope.assertFleetAccess(managerId, resolvedFleetId)
                 : Mono.empty();
 
         return planLimitGuard.assertCanCreateVehicle(managerId)
@@ -178,7 +183,7 @@ public class VehicleService implements ManageVehicleUseCase {
                         req.licensePlate(), remote.vehicleSerialNumber(), labels.brand(), labels.model(),
                         req.manufacturingYear(), labels.trans(), labels.fuel(),
                         req.tankCapacity(), req.totalSeatNumber(), req.averageFuelConsumption(),
-                        labels.color(), "AVAILABLE", remote.photoUrl(),
+                        labels.color(), normalizeStatus(req.status()), remote.photoUrl(),
                         null, null, Collections.emptyList(), null, null, null, null,
                         kernelResourceId);
                     return localPersistencePort.saveLocalData(shell);
@@ -236,6 +241,19 @@ public class VehicleService implements ManageVehicleUseCase {
         return value.trim();
     }
 
+    private static String normalizeStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "AVAILABLE";
+        }
+        String value = status.trim().toUpperCase();
+        return switch (value) {
+            case "AVAILABLE", "ON_TRIP", "MAINTENANCE" -> value;
+            case "IN_SERVICE", "PARKED" -> "AVAILABLE";
+            case "UNDER_MAINTENANCE", "IN_MAINTENANCE" -> "MAINTENANCE";
+            default -> "AVAILABLE";
+        };
+    }
+
     @Override
     @Transactional
     public Mono<Vehicle> patchVehicleInfo(UUID id, Map<String, Object> updates, String token) {
@@ -245,7 +263,8 @@ public class VehicleService implements ManageVehicleUseCase {
                         .flatMap(remote -> syncLocalCache(remote, id))
                         .switchIfEmpty(Mono.defer(() -> {
                             Vehicle updated = new Vehicle(
-                                    local.id(), local.fleetId(), local.managerId(), local.currentDriverId(), local.vehicleTypeId(),
+                                    local.id(), local.fleetId(), local.managerId(), local.currentDriverId(),
+                                    updates.containsKey("vehicleTypeId") ? toUuid(updates.get("vehicleTypeId")) : local.vehicleTypeId(),
                                     updates.containsKey("licensePlate") ? String.valueOf(updates.get("licensePlate")) : local.licensePlate(),
                                     updates.containsKey("vehicleSerialNumber") ? String.valueOf(updates.get("vehicleSerialNumber")) : local.vehicleSerialNumber(),
                                     updates.containsKey("brand") ? String.valueOf(updates.get("brand")) : local.brand(),
@@ -255,7 +274,7 @@ public class VehicleService implements ManageVehicleUseCase {
                                     updates.containsKey("fuelType") ? String.valueOf(updates.get("fuelType")) : local.fuelType(),
                                     local.tankCapacity(), local.totalSeatNumber(), local.averageFuelConsumption(),
                                     updates.containsKey("color") ? String.valueOf(updates.get("color")) : local.color(),
-                                    updates.containsKey("status") ? String.valueOf(updates.get("status")) : local.status(),
+                                    updates.containsKey("status") ? normalizeStatus(String.valueOf(updates.get("status"))) : local.status(),
                                     updates.containsKey("photoUrl") ? (updates.get("photoUrl") == null ? null : String.valueOf(updates.get("photoUrl"))) : local.photoUrl(),
                                     local.serialNumberPhotoUrl(), local.registrationPhotoUrl(),
                                     local.illustrationImages(), local.financialParameters(),
@@ -351,8 +370,12 @@ public class VehicleService implements ManageVehicleUseCase {
 
     @Override
     public Mono<Void> removeVehicle(UUID id, String t) {
-        return externalVehiclePort.deleteRemoteVehicle(id, t)
-                .then(localPersistencePort.deleteLocalData(id));
+        Mono<Void> remote = externalVehiclePort.deleteRemoteVehicle(id, t)
+                .onErrorResume(e -> {
+                    log.warn("Suppression distante véhicule {} ignorée : {}", id, e.getMessage());
+                    return Mono.empty();
+                });
+        return remote.then(localPersistencePort.deleteLocalData(id));
     }
 
     // ========================================================================

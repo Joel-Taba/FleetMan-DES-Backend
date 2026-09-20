@@ -47,6 +47,9 @@ public class FleetEntity implements Persistable<UUID> {
     @Column("deleted_at")
     private Instant deletedAt;
 
+    @Column("created_by")
+    private UUID createdBy;
+
     // --- R2DBC Persistable Logic ---
 
     @Transient // Ce champ n'est pas mappé en base

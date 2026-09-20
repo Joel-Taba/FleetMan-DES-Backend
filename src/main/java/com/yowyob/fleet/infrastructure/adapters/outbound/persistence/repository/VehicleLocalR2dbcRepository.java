@@ -15,6 +15,19 @@ public interface VehicleLocalR2dbcRepository extends ReactiveCrudRepository<Vehi
 
     Flux<VehicleLocalEntity> findByFleetId(UUID fleetId);
     Flux<VehicleLocalEntity> findByManagerId(UUID managerId); // Nouveau
+
+    @Query("""
+            SELECT v.* FROM fleet.vehicles v
+            WHERE v.deleted_at IS NULL
+              AND (
+                v.manager_id = :managerId
+                OR v.fleet_id IN (
+                    SELECT f.id FROM fleet.fleets f
+                    WHERE f.manager_id = :managerId AND f.deleted_at IS NULL
+                )
+              )
+            """)
+    Flux<VehicleLocalEntity> findAllInAssignedFleets(UUID managerId);
     Flux<VehicleLocalEntity> findByStatus(String status);
 
     Flux<VehicleLocalEntity> findByCurrentDriverId(UUID currentDriverId);
@@ -34,4 +47,53 @@ public interface VehicleLocalR2dbcRepository extends ReactiveCrudRepository<Vehi
 
     @Query("SELECT * FROM fleet.vehicles WHERE manager_id = :managerId AND deleted_at IS NOT NULL AND deleted_at > :since")
     Flux<VehicleLocalEntity> findDeletedByManagerIdSince(UUID managerId, Instant since);
+
+    @Query("""
+            SELECT v.* FROM fleet.vehicles v
+            WHERE v.deleted_at IS NULL
+              AND (
+                v.manager_id IN (
+                    SELECT fm.user_id FROM fleet.fleet_managers fm WHERE fm.created_by_admin_id = :adminId
+                )
+                OR v.fleet_id IN (
+                    SELECT f.id FROM fleet.fleets f
+                    WHERE f.deleted_at IS NULL
+                      AND (
+                        f.created_by = :adminId
+                        OR f.manager_id IN (
+                            SELECT fm.user_id FROM fleet.fleet_managers fm WHERE fm.created_by_admin_id = :adminId
+                        )
+                      )
+                )
+              )
+            ORDER BY COALESCE(v.created_at, v.updated_at) DESC NULLS LAST
+            """)
+    Flux<VehicleLocalEntity> findAllByOrganizationAdminId(UUID adminId);
+
+    @Query("""
+            SELECT v.* FROM fleet.vehicles v
+            JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+              AND v.deleted_at IS NULL
+            ORDER BY COALESCE(v.updated_at, v.created_at) DESC NULLS LAST
+            LIMIT :limit
+            """)
+    Flux<VehicleLocalEntity> findRecentByOrganizationAdminId(UUID adminId, int limit);
+
+    @Query("""
+            SELECT COUNT(*) FROM fleet.vehicles v
+            JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+              AND v.deleted_at IS NULL
+            """)
+    Mono<Long> countByOrganizationAdminId(UUID adminId);
+
+    @Query("""
+            SELECT COUNT(*) FROM fleet.vehicles v
+            JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+              AND v.deleted_at IS NULL
+              AND v.status = :status
+            """)
+    Mono<Long> countByOrganizationAdminIdAndStatus(UUID adminId, String status);
 }

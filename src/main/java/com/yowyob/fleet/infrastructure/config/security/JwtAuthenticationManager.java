@@ -37,7 +37,8 @@ public class JwtAuthenticationManager implements ReactiveAuthenticationManager {
                 .map(userDetail -> {
                     List<SimpleGrantedAuthority> authorities = new ArrayList<>();
                     userDetail.roles().stream()
-                            .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                            .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
+                            .map(SimpleGrantedAuthority::new)
                             .forEach(authorities::add);
                     if (userDetail.permissions() != null) {
                         userDetail.permissions().stream()

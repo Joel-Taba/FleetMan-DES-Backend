@@ -81,7 +81,7 @@ public class AuthController {
     @Operation(summary = "Profil de l'utilisateur connecté")
     public Mono<AuthPort.UserDetail> me(
             @RequestHeader("Authorization") String token) {
-        return authPort.getUserProfile(token);
+        return authUseCase.me(token);
     }
 
     @PostMapping("/discover-contexts")

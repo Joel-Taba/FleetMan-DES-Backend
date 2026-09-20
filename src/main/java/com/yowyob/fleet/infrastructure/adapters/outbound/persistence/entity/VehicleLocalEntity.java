@@ -59,6 +59,9 @@ public class VehicleLocalEntity implements Persistable<UUID> {
     @Column("kernel_resource_id")
     private UUID kernelResourceId;
 
+    @Column("created_at")
+    private Instant createdAt;
+
     @Column("updated_at")
     private Instant updatedAt;
 

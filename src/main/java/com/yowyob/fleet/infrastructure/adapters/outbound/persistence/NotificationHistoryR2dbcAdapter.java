@@ -51,6 +51,25 @@ public class NotificationHistoryR2dbcAdapter implements NotificationHistoryRepos
             });
     }
 
+    @Override
+    public Mono<Notification> markAsRead(UUID notificationId, UUID userId) {
+        return repository.findByIdAndUserId(notificationId, userId)
+            .switchIfEmpty(Mono.error(new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.NOT_FOUND,
+                    "Notification introuvable")))
+            .flatMap(entity -> {
+                entity.setRead(true);
+                entity.setNewEntity(false);
+                return repository.save(entity);
+            })
+            .map(this::toDomain);
+    }
+
+    @Override
+    public Mono<Long> markAllAsRead(UUID userId) {
+        return repository.markAllAsReadByUserId(userId).defaultIfEmpty(0L);
+    }
+
     private Notification toDomain(NotificationEntity entity) {
         return new Notification(
             entity.getId(),

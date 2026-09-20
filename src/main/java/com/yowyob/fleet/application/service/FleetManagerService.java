@@ -71,8 +71,7 @@ public class FleetManagerService implements ManageFleetManagerUseCase {
         // rattrapage pour les comptes de démo provisionnés hors flux applicatif).
         return Mono.zip(
             managerRepository.findById(remoteUser.id())
-                .switchIfEmpty(managerPersistencePort.createProfile(remoteUser.id(), "Société de " + remoteUser.lastName())
-                    .then(managerRepository.findById(remoteUser.id()))),
+                .switchIfEmpty(Mono.error(ManagerException.profileNotFound())),
             fleetRepository.countByManagerId(remoteUser.id()),
             userRepository.findById(remoteUser.id())
                 .switchIfEmpty(userRepository.findByKernelId(remoteUser.id()))

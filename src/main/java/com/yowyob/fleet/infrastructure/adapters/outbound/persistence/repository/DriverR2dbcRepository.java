@@ -37,8 +37,16 @@ public interface DriverR2dbcRepository extends ReactiveCrudRepository<DriverEnti
     // --- CORRECTIF TÂCHE 7.2 : Compter les chauffeurs par Manager ---
     @Query("SELECT COUNT(d.*) FROM fleet.drivers d " +
            "JOIN fleet.fleets f ON d.fleet_id = f.id " +
-           "WHERE f.manager_id = :managerId")
+           "WHERE f.manager_id = :managerId AND d.deleted_at IS NULL")
     Mono<Long> countByManagerId(UUID managerId);
+
+    @Query("""
+            SELECT d.* FROM fleet.drivers d
+            JOIN fleet.fleets f ON d.fleet_id = f.id
+            WHERE f.manager_id = :managerId
+              AND d.deleted_at IS NULL
+            """)
+    Flux<DriverEntity> findAllByManagerId(UUID managerId);
 
     @Query("""
             SELECT d.* FROM fleet.drivers d
@@ -57,4 +65,22 @@ public interface DriverR2dbcRepository extends ReactiveCrudRepository<DriverEnti
               AND d.deleted_at > :since
             """)
     Flux<DriverEntity> findDeletedByManagerIdSince(UUID managerId, Instant since);
+
+    @Query("""
+            SELECT d.* FROM fleet.drivers d
+            JOIN fleet.fleets f ON d.fleet_id = f.id
+            JOIN fleet.fleet_managers fm ON f.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+              AND d.deleted_at IS NULL
+            """)
+    Flux<DriverEntity> findAllByOrganizationAdminId(UUID adminId);
+
+    @Query("""
+            SELECT COUNT(*) FROM fleet.drivers d
+            JOIN fleet.fleets f ON d.fleet_id = f.id
+            JOIN fleet.fleet_managers fm ON f.manager_id = fm.user_id
+            WHERE fm.created_by_admin_id = :adminId
+              AND d.deleted_at IS NULL
+            """)
+    Mono<Long> countByOrganizationAdminId(UUID adminId);
 }

@@ -26,11 +26,17 @@ public interface VehiclePersistencePort {
     /**
      * Retrieves all vehicles associated with a manager ID.
      */
+    /**
+     * Véhicules des flottes affectées au manager (et ceux encore tagués manager_id).
+     */
     Flux<Vehicle> getVehiclesByManager(UUID managerId);
 
     /**
-     * Retrieves ALL vehicles in the system (For Admin).
+     * Véhicules de l'organisation (admin).
      */
+    Flux<Vehicle> getVehiclesByOrganizationAdminId(UUID adminId);
+
+    /** Usage interne (jobs / sync), pas d'API métier. */
     Flux<Vehicle> getAllVehicles();
 
     /**

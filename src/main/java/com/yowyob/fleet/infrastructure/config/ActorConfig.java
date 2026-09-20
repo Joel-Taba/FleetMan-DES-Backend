@@ -1,5 +1,6 @@
 package com.yowyob.fleet.infrastructure.config;
 
+import com.yowyob.fleet.domain.model.FleetRole;
 import com.yowyob.fleet.domain.ports.out.ExternalActorPort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.KernelActorAdapter;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.NoOpActorAdapter;
@@ -27,10 +28,10 @@ public class ActorConfig {
             @Value("${application.kernel.roles.fleet-admin-id:}") String fleetAdminRoleId,
             @Value("${application.kernel.roles.fleet-super-admin-id:}") String fleetSuperAdminRoleId) {
         Map<String, String> overrides = new HashMap<>();
-        overrides.put("FLEET_DRIVER", fleetDriverRoleId);
-        overrides.put("FLEET_MANAGER", fleetManagerRoleId);
-        overrides.put("FLEET_ADMIN", fleetAdminRoleId);
-        overrides.put("FLEET_SUPER_ADMIN", fleetSuperAdminRoleId);
+        overrides.put(FleetRole.FLEET_DRIVER.name(), fleetDriverRoleId);
+        overrides.put(FleetRole.FLEET_MANAGER.name(), fleetManagerRoleId);
+        overrides.put(FleetRole.FLEET_ADMIN.name(), fleetAdminRoleId);
+        overrides.put(FleetRole.FLEET_SUPER_ADMIN.name(), fleetSuperAdminRoleId);
         return new KernelRoleRegistry(adminClient, tokenHolder, tenantId, organizationId, overrides);
     }
 

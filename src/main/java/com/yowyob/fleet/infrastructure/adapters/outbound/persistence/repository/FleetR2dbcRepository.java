@@ -13,6 +13,7 @@ public interface FleetR2dbcRepository extends ReactiveCrudRepository<FleetEntity
     
     Flux<FleetEntity> findAllByManagerId(UUID managerId);
     Mono<Boolean> existsByIdAndManagerId(UUID id, UUID managerId);
+    @Query("SELECT COUNT(*) FROM fleet.fleets WHERE manager_id = :managerId AND deleted_at IS NULL")
     Mono<Long> countByManagerId(UUID managerId);
 
     @Query("SELECT COUNT(*) FROM fleet.fleets WHERE manager_id = :managerId AND deleted_at IS NULL")

@@ -1,5 +1,7 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
+import com.yowyob.fleet.application.service.AccessScopeService;
+import com.yowyob.fleet.application.service.ResourceAccessService;
 import com.yowyob.fleet.domain.ports.in.ManageAssignmentUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.AssignmentRequest;
@@ -32,6 +34,8 @@ import java.util.UUID;
 public class AssignmentController {
 
     private final ManageAssignmentUseCase assignmentUseCase;
+    private final AccessScopeService accessScope;
+    private final ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -46,7 +50,8 @@ public class AssignmentController {
                description = "Affecte un conducteur à un véhicule sur une plage horaire. "
                        + "Vérifie automatiquement les conflits avant création.")
     public Mono<AssignmentResponse> create(
-            @Valid @RequestBody AssignmentRequest request) {
+            @Valid @RequestBody AssignmentRequest request,
+            Authentication auth) {
 
         ManageAssignmentUseCase.CreateAssignmentCommand cmd =
                 new ManageAssignmentUseCase.CreateAssignmentCommand(
@@ -62,7 +67,16 @@ public class AssignmentController {
                         request.estimatedKm(),
                         request.notes()
                 );
-        return assignmentUseCase.createAssignment(cmd).map(AssignmentResponse::from);
+        UUID actor = getUserId(auth);
+        Mono<Void> scope = (request.fleetId() != null
+                ? accessScope.assertFleetAccess(actor, request.fleetId())
+                : Mono.<Void>empty())
+                .then(resourceAccess.assertVehicleAccess(actor, request.vehicleId()))
+                .then(resourceAccess.assertDriverAccess(actor, request.driverId()))
+                .then(request.scheduleId() != null
+                        ? resourceAccess.assertScheduleAccess(actor, request.scheduleId())
+                        : Mono.<Void>empty());
+        return scope.then(assignmentUseCase.createAssignment(cmd)).map(AssignmentResponse::from);
     }
 
     // ── LECTURE ───────────────────────────────────────────────────────────────
@@ -86,8 +100,9 @@ public class AssignmentController {
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('FLEET_MANAGER','FLEET_DRIVER')")
     @Operation(summary = "Détail d'une affectation")
-    public Mono<AssignmentResponse> getById(@PathVariable UUID id) {
-        return assignmentUseCase.getById(id).map(AssignmentResponse::from);
+    public Mono<AssignmentResponse> getById(@PathVariable UUID id, Authentication auth) {
+        return resourceAccess.assertAssignmentAccess(getUserId(auth), id)
+                .then(assignmentUseCase.getById(id)).map(AssignmentResponse::from);
     }
 
     @GetMapping("/schedule/{scheduleId}")
@@ -95,11 +110,13 @@ public class AssignmentController {
     @Operation(summary = "Affectations d'un planning")
     public Mono<PageResponse<AssignmentResponse>> getBySchedule(
             @PathVariable UUID scheduleId,
+            Authentication auth,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
 
         return PageResponse.of(
-                assignmentUseCase.getAllBySchedule(scheduleId)
+                resourceAccess.assertScheduleAccess(getUserId(auth), scheduleId)
+                        .thenMany(assignmentUseCase.getAllBySchedule(scheduleId))
                         .map(AssignmentResponse::from),
                 page, size
         );
@@ -110,11 +127,13 @@ public class AssignmentController {
     @Operation(summary = "Affectations d'un véhicule")
     public Mono<PageResponse<AssignmentResponse>> getByVehicle(
             @PathVariable UUID vehicleId,
+            Authentication auth,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
         return PageResponse.of(
-                assignmentUseCase.getByVehicle(vehicleId).map(AssignmentResponse::from),
+                resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                        .thenMany(assignmentUseCase.getByVehicle(vehicleId)).map(AssignmentResponse::from),
                 page, size
         );
     }
@@ -124,11 +143,13 @@ public class AssignmentController {
     @Operation(summary = "Affectations d'un conducteur")
     public Mono<PageResponse<AssignmentResponse>> getByDriver(
             @PathVariable UUID driverId,
+            Authentication auth,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
         return PageResponse.of(
-                assignmentUseCase.getByDriver(driverId).map(AssignmentResponse::from),
+                resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                        .thenMany(assignmentUseCase.getByDriver(driverId)).map(AssignmentResponse::from),
                 page, size
         );
     }
@@ -140,11 +161,13 @@ public class AssignmentController {
                        + "Utilisé par l'application mobile du conducteur.")
     public Mono<PageResponse<AssignmentResponse>> getByDriverToday(
             @PathVariable UUID driverId,
+            Authentication auth,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
 
         return PageResponse.of(
-                assignmentUseCase.getByDriverToday(driverId).map(AssignmentResponse::from),
+                resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                        .thenMany(assignmentUseCase.getByDriverToday(driverId)).map(AssignmentResponse::from),
                 page, size
         );
     }
@@ -195,9 +218,11 @@ public class AssignmentController {
             @Parameter(example = "2026-06-02T08:00:00")
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
             @Parameter(example = "2026-06-02T18:00:00")
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end,
+            Authentication auth) {
 
-        return assignmentUseCase.checkVehicleAvailability(vehicleId, start, end, null);
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                .then(assignmentUseCase.checkVehicleAvailability(vehicleId, start, end, null));
     }
 
     @GetMapping("/driver/{driverId}/availability")
@@ -206,9 +231,11 @@ public class AssignmentController {
     public Mono<Boolean> checkDriverAvailability(
             @PathVariable UUID driverId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end,
+            Authentication auth) {
 
-        return assignmentUseCase.checkDriverAvailability(driverId, start, end, null);
+        return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                .then(assignmentUseCase.checkDriverAvailability(driverId, start, end, null));
     }
 
     // ── CHANGEMENT DE STATUT ──────────────────────────────────────────────────
@@ -221,9 +248,12 @@ public class AssignmentController {
                        + "Le kilométrage réel est requis pour COMPLETED.")
     public Mono<AssignmentResponse> updateStatus(
             @PathVariable UUID id,
-            @Valid @RequestBody AssignmentStatusRequest request) {
+            @Valid @RequestBody AssignmentStatusRequest request,
+            Authentication auth) {
 
-        return assignmentUseCase.updateStatus(id, request.status(), request.actualKm())
+        // Le chauffeur ne fait avancer que SES affectations ; le gestionnaire, celles de sa flotte.
+        return resourceAccess.assertAssignmentAccess(getUserId(auth), id)
+                .then(assignmentUseCase.updateStatus(id, request.status(), request.actualKm()))
                 .map(AssignmentResponse::from);
     }
 
@@ -232,8 +262,13 @@ public class AssignmentController {
     @Operation(summary = "Réassigner véhicule/conducteur (Manager UI)")
     public Mono<AssignmentResponse> updateResources(
             @PathVariable UUID id,
-            @RequestBody AssignmentResourceUpdateRequest request) {
-        return assignmentUseCase.updateResources(id, request.vehicleId(), request.driverId())
+            @RequestBody AssignmentResourceUpdateRequest request,
+            Authentication auth) {
+        UUID actor = getUserId(auth);
+        return resourceAccess.assertAssignmentManagement(actor, id)
+                .then(resourceAccess.assertVehicleAccess(actor, request.vehicleId()))
+                .then(resourceAccess.assertDriverAccess(actor, request.driverId()))
+                .then(assignmentUseCase.updateResources(id, request.vehicleId(), request.driverId()))
                 .map(AssignmentResponse::from);
     }
 
@@ -243,7 +278,8 @@ public class AssignmentController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Supprimer une affectation")
-    public Mono<Void> delete(@PathVariable UUID id) {
-        return assignmentUseCase.delete(id);
+    public Mono<Void> delete(@PathVariable UUID id, Authentication auth) {
+        return resourceAccess.assertAssignmentManagement(getUserId(auth), id)
+                .then(assignmentUseCase.delete(id));
     }
 }

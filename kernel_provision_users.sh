@@ -12,7 +12,7 @@ if [ -z "${OWNER_TOKEN:-}" ] || [ -z "${KERNEL:-}" ]; then
   source "$SCRIPT_DIR/kernel_token.sh" >/dev/null
 fi
 
-: "${OWNER_TOKEN:?Échec obtention OWNER_TOKEN — vérifiez joeltaba4@gmail.com / FleetMan2026!}"
+: "${OWNER_TOKEN:?Échec obtention OWNER_TOKEN — vérifiez KERNEL_OWNER_PRINCIPAL / KERNEL_OWNER_PASSWORD dans .env}"
 : "${KERNEL:?}"
 : "${CID:?}"
 : "${KEY:?}"

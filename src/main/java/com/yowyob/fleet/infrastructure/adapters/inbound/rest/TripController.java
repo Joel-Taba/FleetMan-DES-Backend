@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -57,7 +58,7 @@ public class TripController {
         BigDecimal departureLat,
         BigDecimal departureLng,
         BigDecimal departureKmIndex,
-        BigDecimal departureFuelIndex,
+        @PositiveOrZero(message = "L'index carburant (L) ne peut pas être négatif.") BigDecimal departureFuelIndex,
         String missionObject,
         BigDecimal missionCost,
         String missionCostCurrency,
@@ -76,7 +77,7 @@ public class TripController {
         BigDecimal returnLat,
         BigDecimal returnLng,
         BigDecimal returnKmIndex,
-        BigDecimal returnFuelIndex,
+        @PositiveOrZero(message = "L'index carburant (L) ne peut pas être négatif.") BigDecimal returnFuelIndex,
         List<ReturnDetailInputDto> detailUpdates
     ) {}
 
@@ -93,7 +94,7 @@ public class TripController {
         BigDecimal departureLat,
         BigDecimal departureLng,
         BigDecimal departureKmIndex,
-        BigDecimal departureFuelIndex,
+        @PositiveOrZero(message = "L'index carburant (L) ne peut pas être négatif.") BigDecimal departureFuelIndex,
         String missionObject,
         BigDecimal missionCost,
         String missionCostCurrency
@@ -173,7 +174,8 @@ public class TripController {
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Enregistrer le retour d'un trajet par son code")
     public Mono<Trip> registerReturn(
-        @Valid @RequestBody RegisterReturnRequest req
+        @Valid @RequestBody RegisterReturnRequest req,
+        Authentication auth
     ) {
         List<ManageTripUseCase.ReturnDetailInput> detailUpdates =
             req.detailUpdates() != null
@@ -200,7 +202,8 @@ public class TripController {
                 req.returnKmIndex(),
                 req.returnFuelIndex(),
                 detailUpdates
-            )
+            ),
+            getUserId(auth)
         );
     }
 
@@ -208,8 +211,8 @@ public class TripController {
     @GetMapping("/code/{code}")
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Retrouver un trajet par son code (TRJ-2026-XXXX)")
-    public Mono<Trip> getByCode(@PathVariable String code) {
-        return tripUseCase.getTripByCode(code);
+    public Mono<Trip> getByCode(@PathVariable String code, Authentication auth) {
+        return tripUseCase.getTripByCode(code, getUserId(auth));
     }
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
@@ -226,7 +229,7 @@ public class TripController {
     @Operation(summary = "Modifier un trajet non clôturé")
     public Mono<Trip> updateTrip(
         @PathVariable UUID id,
-        @RequestBody UpdateTripRequest req,
+        @Valid @RequestBody UpdateTripRequest req,
         Authentication auth
     ) {
         return tripUseCase.updateTrip(
@@ -385,9 +388,10 @@ public class TripController {
     @Operation(summary = "Envoyer un point de télémétrie GPS")
     public Mono<Void> telemetry(
         @PathVariable UUID id,
-        @RequestBody TelemetryRequest r
+        @RequestBody TelemetryRequest r,
+        Authentication auth
     ) {
-        return tripUseCase.sendTelemetry(id, r.lat(), r.lng(), r.speed());
+        return tripUseCase.sendTelemetry(id, getUserId(auth), r.lat(), r.lng(), r.speed());
     }
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)

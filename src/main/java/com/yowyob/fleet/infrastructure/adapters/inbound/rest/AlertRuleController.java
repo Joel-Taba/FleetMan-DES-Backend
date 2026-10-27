@@ -28,6 +28,7 @@ import java.util.UUID;
 public class AlertRuleController {
 
     private final ManageAlertRuleUseCase useCase;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -64,8 +65,11 @@ public class AlertRuleController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Détail d'une règle")
     public Mono<AlertRuleResponse> getById(
-            @Parameter(description = "ID de la règle") @PathVariable UUID id) {
-        return useCase.getRuleById(id).map(AlertRuleResponse::from);
+            @Parameter(description = "ID de la règle") @PathVariable UUID id,
+            Authentication auth) {
+        return useCase.getRuleById(id)
+                .flatMap(r -> resourceAccess.assertOwner(getUserId(auth), r.getManagerId()))
+                .then(useCase.getRuleById(id).map(AlertRuleResponse::from));
     }
 
     @PutMapping("/{id}")
@@ -74,7 +78,8 @@ public class AlertRuleController {
                description = "Met à jour le nom, la description, la valeur de condition ou le canal d'une règle. Applicable aux règles système et personnalisées.")
     public Mono<AlertRuleResponse> update(
             @Parameter(description = "ID de la règle") @PathVariable UUID id,
-            @RequestBody AlertRuleRequest request) {
+            @RequestBody AlertRuleRequest request,
+            Authentication auth) {
 
         ManageAlertRuleUseCase.UpdateRuleCommand cmd =
                 new ManageAlertRuleUseCase.UpdateRuleCommand(
@@ -82,7 +87,9 @@ public class AlertRuleController {
                         request.actionType(), request.targetRole(),
                         request.conditionValue(), null
                 );
-        return useCase.updateRule(cmd).map(AlertRuleResponse::from);
+        return useCase.getRuleById(id)
+                .flatMap(r -> resourceAccess.assertOwner(getUserId(auth), r.getManagerId()))
+                .then(useCase.updateRule(cmd).map(AlertRuleResponse::from));
     }
 
     @PatchMapping("/{id}/toggle")
@@ -92,8 +99,11 @@ public class AlertRuleController {
     public Mono<AlertRuleResponse> toggle(
             @Parameter(description = "ID de la règle") @PathVariable UUID id,
             @Parameter(description = "true = activer, false = désactiver")
-            @RequestParam boolean active) {
-        return useCase.toggleRule(id, active).map(AlertRuleResponse::from);
+            @RequestParam boolean active,
+            Authentication auth) {
+        return useCase.getRuleById(id)
+                .flatMap(r -> resourceAccess.assertOwner(getUserId(auth), r.getManagerId()))
+                .then(useCase.toggleRule(id, active).map(AlertRuleResponse::from));
     }
 
     @DeleteMapping("/{id}")
@@ -102,8 +112,11 @@ public class AlertRuleController {
     @Operation(summary = "Supprimer une règle personnalisée",
                description = "Supprime une règle personnalisée. Les règles système (systemTemplate = true) ne peuvent pas être supprimées.")
     public Mono<Void> delete(
-            @Parameter(description = "ID de la règle") @PathVariable UUID id) {
-        return useCase.deleteRule(id);
+            @Parameter(description = "ID de la règle") @PathVariable UUID id,
+            Authentication auth) {
+        return useCase.getRuleById(id)
+                .flatMap(r -> resourceAccess.assertOwner(getUserId(auth), r.getManagerId()))
+                .then(useCase.deleteRule(id));
     }
 
     @PostMapping("/provision-defaults")

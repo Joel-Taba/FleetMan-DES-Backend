@@ -36,7 +36,7 @@ public class FileStorageController {
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Uploader un fichier (PDF ou image)",
-            description = "Public pour category=subscription|document (signup). Sinon rôles staff requis.")
+            description = "Public pour category=subscription (signup). Sinon rôles staff requis.")
     public Mono<UploadResponse> upload(
             @RequestPart("file") FilePart file,
             @RequestParam(defaultValue = "document") String category,

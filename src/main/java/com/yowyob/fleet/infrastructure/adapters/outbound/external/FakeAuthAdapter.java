@@ -86,7 +86,14 @@ public class FakeAuthAdapter implements AuthPort {
 
     @Override
     public Mono<AuthResponse> selectContext(String selectionToken, String contextId, UUID organizationId) {
-        return login("manager@fleetman.cm", DemoTestAccounts.DEMO_PASSWORD);
+        // Sélection de contexte simulée : session du gestionnaire démo, sans mot de passe.
+        return Mono.defer(() -> {
+            Account acc = resolveAccount("manager@fleetman.cm");
+            if (acc == null) {
+                return Mono.error(AuthException.invalidCredentials());
+            }
+            return Mono.just(new AuthResponse(tokenFor(acc), "fake-refresh-token", toUserDetail(acc)));
+        });
     }
 
     @Override

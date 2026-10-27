@@ -42,6 +42,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 })
                 .then(runKernelOrgPatch())
                 .then(runKernelFleetExtPatch())
+                .then(runDriverLicensesPatch())
                 .doOnSuccess(v -> log.info("✅ [DEMO] Données de test chargées."))
                 .doOnError(e -> log.error("❌ [DEMO] Échec du seed : {}", e.getMessage(), e))
                 .onErrorResume(e -> Mono.empty())
@@ -55,6 +56,12 @@ public class DevDemoDataSeeder implements CommandLineRunner {
 
     private Mono<Void> runKernelFleetExtPatch() {
         var patch = new ResourceDatabasePopulator(new ClassPathResource("db/demo-seed-kernel-fleet-ext.sql"));
+        return Mono.from(patch.populate(connectionFactory));
+    }
+
+    /** Permis valides pour les chauffeurs de démo (contrôle du permis à l'engagement). */
+    private Mono<Void> runDriverLicensesPatch() {
+        var patch = new ResourceDatabasePopulator(new ClassPathResource("db/demo-driver-licenses-patch.sql"));
         return Mono.from(patch.populate(connectionFactory));
     }
 }

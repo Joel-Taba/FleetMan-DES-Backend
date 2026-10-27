@@ -1,6 +1,7 @@
 package com.yowyob.fleet.application.service;
 
 import com.yowyob.fleet.domain.exception.FleetException;
+import com.yowyob.fleet.domain.exception.VehicleException;
 import com.yowyob.fleet.domain.model.Driver;
 import com.yowyob.fleet.domain.model.Fleet;
 import com.yowyob.fleet.domain.model.Vehicle;
@@ -54,6 +55,8 @@ public class FleetService implements ManageFleetUseCase {
     private final KernelTokenHolder kernelTokenHolder;
     private final ExpensePersistencePort expensePersistence;
     private final AccessScopeService accessScope;
+    private final ResourceAvailabilityService availability;
+    private final ResourceAccessService resourceAccess;
 
     @Value("${application.kernel.organization-sync:true}")
     private boolean organizationSync;
@@ -250,6 +253,14 @@ public class FleetService implements ManageFleetUseCase {
                 .filter(f -> f.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(FleetException.notFound(id)))
                 .flatMap(fleet -> accessScope.assertFleetAccess(requesterId, id).thenReturn(fleet))
+                // Suppression seulement si la flotte est vide (tâche 10.2, doc « uniquement si
+                // elle est vide de ressources ») : FleetException.cannotDeleteNotEmpty existait
+                // mais n'était plus appelée, laissant véhicules et chauffeurs orphelins.
+                .flatMap(fleet -> Mono.zip(vehicleRepo.countByFleetId(id), driverRepo.countByFleetId(id))
+                        .flatMap(counts -> counts.getT1() > 0 || counts.getT2() > 0
+                                ? Mono.<com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.FleetEntity>error(
+                                        FleetException.cannotDeleteNotEmpty())
+                                : Mono.just(fleet)))
                 .flatMap(fleet -> {
                     fleet.setDeletedAt(java.time.Instant.now());
                     fleet.setNew(false);
@@ -296,9 +307,21 @@ public class FleetService implements ManageFleetUseCase {
             .filter(exists -> exists).switchIfEmpty(Mono.error(FleetException.accessDenied()))
             .then(vehiclePersistence.getLocalDataById(vehicleId))
             .switchIfEmpty(Mono.error(FleetException.invalidResourceStatus("Véhicule introuvable")))
-            .flatMap(vehicle -> {
-                // Mise à jour de l'assignation
-                Vehicle updated = new Vehicle(vehicle.id(), fleetId, vehicle.managerId(), vehicle.currentDriverId(),
+            // Le véhicule doit déjà être dans le périmètre (sinon n'importe quel véhicule
+            // était « aspiré » par son id) et ne pas changer de flotte avec des trajets ou
+            // affectations non terminés rattachés à l'ancienne.
+            .flatMap(vehicle -> fleetId.equals(vehicle.fleetId())
+                    ? Mono.just(vehicle)
+                    : resourceAccess.assertVehicleAccess(requesterId, vehicleId)
+                        .then(assertVehicleHasNoOpenCommitments(vehicleId))
+                        .thenReturn(vehicle))
+            .zipWith(repository.findById(fleetId))
+            .flatMap(tuple -> {
+                Vehicle vehicle = tuple.getT1();
+                // Le gestionnaire du véhicule suit celui de sa nouvelle flotte.
+                UUID managerId = tuple.getT2().getManagerId() != null
+                        ? tuple.getT2().getManagerId() : vehicle.managerId();
+                Vehicle updated = new Vehicle(vehicle.id(), fleetId, managerId, vehicle.currentDriverId(),
                         vehicle.vehicleTypeId(), vehicle.licensePlate(), vehicle.vehicleSerialNumber(),
                         vehicle.brand(), vehicle.model(), vehicle.manufacturingYear(), vehicle.transmissionType(),
                         vehicle.fuelType(), vehicle.tankCapacity(), vehicle.totalSeatNumber(), vehicle.averageFuelConsumption(),
@@ -319,6 +342,13 @@ public class FleetService implements ManageFleetUseCase {
         return repository.existsByIdAndManagerId(fleetId, requesterId)
                 .filter(exists -> exists).switchIfEmpty(Mono.error(FleetException.accessDenied()))
                 .then(vehiclePersistence.getLocalDataById(vehicleId))
+                .switchIfEmpty(Mono.error(FleetException.invalidResourceStatus("Véhicule introuvable")))
+                // Seul un véhicule de CETTE flotte peut en être détaché, et pas avec des
+                // trajets ou affectations non terminés rattachés à la flotte.
+                .flatMap(vehicle -> fleetId.equals(vehicle.fleetId())
+                        ? assertVehicleHasNoOpenCommitments(vehicleId).thenReturn(vehicle)
+                        : Mono.error(FleetException.invalidResourceStatus(
+                                "Ce véhicule n'appartient pas à cette flotte.")))
                 .flatMap(vehicle -> {
                     // On retire le fleetId (devient indépendant)
                     Vehicle updated = new Vehicle(vehicle.id(), null, vehicle.managerId(), vehicle.currentDriverId(),
@@ -351,7 +381,8 @@ public class FleetService implements ManageFleetUseCase {
                 .filter(exists -> exists).switchIfEmpty(Mono.error(FleetException.accessDenied()))
                 .then(driverUseCase.searchDriver(identifier))
                 .switchIfEmpty(Mono.error(FleetException.recruitmentFailed("Chauffeur introuvable ou non enregistré")))
-                .flatMap(driver -> driverPersistence.updateFleetAssignment(driver.userId(), fleetId));
+                // Limite du plan, chauffeur libre ou déjà dans le périmètre (voir DriverService).
+                .flatMap(driver -> driverUseCase.attachDriverToFleet(driver.userId(), fleetId, managerId));
     }
 
     @Override
@@ -364,9 +395,19 @@ public class FleetService implements ManageFleetUseCase {
     @Override
     @Transactional
     public Mono<Void> detachDriver(UUID fleetId, UUID driverId, UUID requesterId) {
+        // Même règle que DriverService.removeDriverFromFleet (membre de CETTE flotte, sans
+        // trajet/affectation non terminé, véhicule désaffecté proprement) : l'ancienne
+        // version vidait seulement fleet_id et laissait le véhicule pointer sur le chauffeur.
         return repository.existsByIdAndManagerId(fleetId, requesterId)
                 .filter(exists -> exists).switchIfEmpty(Mono.error(FleetException.accessDenied()))
-                .then(driverPersistence.updateFleetAssignment(driverId, null));
+                .then(driverUseCase.removeDriverFromFleet(fleetId, driverId, requesterId));
+    }
+
+    private Mono<Void> assertVehicleHasNoOpenCommitments(UUID vehicleId) {
+        return availability.vehicleHasOpenCommitments(vehicleId)
+                .flatMap(open -> Boolean.TRUE.equals(open)
+                        ? Mono.<Void>error(VehicleException.openCommitments())
+                        : Mono.<Void>empty());
     }
 
     // ========================================================================

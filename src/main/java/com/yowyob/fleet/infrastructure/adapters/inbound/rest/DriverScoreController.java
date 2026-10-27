@@ -27,6 +27,7 @@ import java.util.UUID;
 public class DriverScoreController {
 
     private final ComputeDriverScoreUseCase scoringUseCase;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -41,16 +42,23 @@ public class DriverScoreController {
     public Mono<DriverScoreResponse> getLatestScore(
             @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId,
             @Parameter(description = "Période (WEEKLY ou MONTHLY)", example = "MONTHLY")
-            @RequestParam(defaultValue = "MONTHLY") DriverScore.PeriodType periodType) {
-        return scoringUseCase.getLatestScore(driverId, periodType).map(DriverScoreResponse::from);
+            @RequestParam(defaultValue = "MONTHLY") DriverScore.PeriodType periodType,
+            Authentication auth) {
+        return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                .then(scoringUseCase.getLatestScore(driverId, periodType).map(DriverScoreResponse::from));
     }
 
     @GetMapping("/scores/{id}")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Détail d'un score par ID")
     public Mono<DriverScoreResponse> getById(
-            @Parameter(description = "ID du score") @PathVariable UUID id) {
-        return scoringUseCase.getScoreById(id).map(DriverScoreResponse::from);
+            @Parameter(description = "ID du score") @PathVariable UUID id,
+            Authentication auth) {
+        // Le score n'est lisible que si son chauffeur est dans le périmètre de l'appelant.
+        return scoringUseCase.getScoreById(id)
+                .flatMap(score -> resourceAccess.assertDriverAccess(getUserId(auth), score.getDriverId())
+                        .thenReturn(score))
+                .map(DriverScoreResponse::from);
     }
 
     @GetMapping("/drivers/{driverId}/history")
@@ -64,9 +72,11 @@ public class DriverScoreController {
             @Parameter(description = "Date de début", example = "2026-01-01")
             @RequestParam LocalDate from,
             @Parameter(description = "Date de fin", example = "2026-06-30")
-            @RequestParam LocalDate to) {
-        return scoringUseCase.getScoreHistory(driverId, periodType, from, to)
-                .map(DriverScoreResponse::from);
+            @RequestParam LocalDate to,
+            Authentication auth) {
+        return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                .thenMany(scoringUseCase.getScoreHistory(driverId, periodType, from, to)
+                .map(DriverScoreResponse::from));
     }
 
     // ── Lecture par flotte ────────────────────────────────────────────────────
@@ -78,8 +88,10 @@ public class DriverScoreController {
     public Flux<DriverScoreResponse> getFleetScores(
             @Parameter(description = "ID de la flotte") @PathVariable UUID fleetId,
             @Parameter(description = "Période (WEEKLY ou MONTHLY)", example = "MONTHLY")
-            @RequestParam(defaultValue = "MONTHLY") DriverScore.PeriodType periodType) {
-        return scoringUseCase.getFleetScores(fleetId, periodType).map(DriverScoreResponse::from);
+            @RequestParam(defaultValue = "MONTHLY") DriverScore.PeriodType periodType,
+            Authentication auth) {
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .thenMany(scoringUseCase.getFleetScores(fleetId, periodType).map(DriverScoreResponse::from));
     }
 
     @GetMapping("/fleets/{fleetId}/top")
@@ -91,8 +103,10 @@ public class DriverScoreController {
             @Parameter(description = "Période", example = "MONTHLY")
             @RequestParam(defaultValue = "MONTHLY") DriverScore.PeriodType periodType,
             @Parameter(description = "Nombre de chauffeurs à retourner (1-100)", example = "5")
-            @RequestParam(defaultValue = "5") int limit) {
-        return scoringUseCase.getTopDrivers(fleetId, periodType, limit).map(DriverScoreResponse::from);
+            @RequestParam(defaultValue = "5") int limit,
+            Authentication auth) {
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .thenMany(scoringUseCase.getTopDrivers(fleetId, periodType, limit).map(DriverScoreResponse::from));
     }
 
     @GetMapping("/fleets/{fleetId}/bottom")
@@ -104,8 +118,10 @@ public class DriverScoreController {
             @Parameter(description = "Période", example = "MONTHLY")
             @RequestParam(defaultValue = "MONTHLY") DriverScore.PeriodType periodType,
             @Parameter(description = "Nombre de chauffeurs à retourner (1-100)", example = "5")
-            @RequestParam(defaultValue = "5") int limit) {
-        return scoringUseCase.getBottomDrivers(fleetId, periodType, limit).map(DriverScoreResponse::from);
+            @RequestParam(defaultValue = "5") int limit,
+            Authentication auth) {
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .thenMany(scoringUseCase.getBottomDrivers(fleetId, periodType, limit).map(DriverScoreResponse::from));
     }
 
     @GetMapping("/fleets/{fleetId}/summary")
@@ -115,8 +131,10 @@ public class DriverScoreController {
     public Mono<ComputeDriverScoreUseCase.FleetScoreSummaryDto> getFleetSummary(
             @Parameter(description = "ID de la flotte") @PathVariable UUID fleetId,
             @Parameter(description = "Période", example = "MONTHLY")
-            @RequestParam(defaultValue = "MONTHLY") DriverScore.PeriodType periodType) {
-        return scoringUseCase.getFleetScoreSummary(fleetId, periodType);
+            @RequestParam(defaultValue = "MONTHLY") DriverScore.PeriodType periodType,
+            Authentication auth) {
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .then(scoringUseCase.getFleetScoreSummary(fleetId, periodType));
     }
 
     // ── Calcul à la demande ───────────────────────────────────────────────────
@@ -131,15 +149,17 @@ public class DriverScoreController {
             @Parameter(description = "Période", example = "MONTHLY")
             @RequestParam(defaultValue = "MONTHLY") DriverScore.PeriodType periodType,
             @Parameter(description = "Début de la période (YYYY-MM-DD, défaut : début du mois courant)")
-            @RequestParam(required = false) LocalDate periodStart) {
+            @RequestParam(required = false) LocalDate periodStart,
+            Authentication auth) {
 
         LocalDate start = periodStart != null ? periodStart
                 : (periodType == DriverScore.PeriodType.MONTHLY
                         ? LocalDate.now().withDayOfMonth(1)
                         : LocalDate.now().with(java.time.DayOfWeek.MONDAY));
 
-        return scoringUseCase.calculateScore(driverId, periodType, start)
-                .map(DriverScoreResponse::from);
+        return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                .then(scoringUseCase.calculateScore(driverId, periodType, start)
+                .map(DriverScoreResponse::from));
     }
 
     @PostMapping("/fleets/{fleetId}/calculate")
@@ -151,14 +171,16 @@ public class DriverScoreController {
             @Parameter(description = "Période", example = "MONTHLY")
             @RequestParam(defaultValue = "MONTHLY") DriverScore.PeriodType periodType,
             @Parameter(description = "Début de la période (YYYY-MM-DD)")
-            @RequestParam(required = false) LocalDate periodStart) {
+            @RequestParam(required = false) LocalDate periodStart,
+            Authentication auth) {
 
         LocalDate start = periodStart != null ? periodStart
                 : (periodType == DriverScore.PeriodType.MONTHLY
                         ? LocalDate.now().withDayOfMonth(1)
                         : LocalDate.now().with(java.time.DayOfWeek.MONDAY));
 
-        return scoringUseCase.calculateFleetScores(fleetId, periodType, start)
-                .map(DriverScoreResponse::from);
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .thenMany(scoringUseCase.calculateFleetScores(fleetId, periodType, start)
+                .map(DriverScoreResponse::from));
     }
 }

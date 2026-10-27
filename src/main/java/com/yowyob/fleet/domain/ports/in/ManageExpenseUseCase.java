@@ -56,6 +56,16 @@ public interface ManageExpenseUseCase {
      * Utilisé en interne après la création d'une Maintenance, FuelRecharge ou Incident.
      * La dépense est directement en statut APPROVED.
      */
+    /**
+     * Crée, met à jour ou supprime la dépense auto-générée d'une opération pour qu'elle
+     * reflète son coût (aucune dépense si le coût est nul ou absent).
+     */
+    Mono<Void> syncAutoExpense(Expense.ExpenseType type, UUID sourceId, BigDecimal amount,
+                               String description, UUID vehicleId, UUID driverId);
+
+    /** Supprime la dépense auto-générée d'une opération supprimée. */
+    Mono<Void> deleteAutoExpenses(UUID sourceId);
+
     Mono<Expense> createAutoExpense(Expense.ExpenseType type,
                                     BigDecimal amount,
                                     String description,

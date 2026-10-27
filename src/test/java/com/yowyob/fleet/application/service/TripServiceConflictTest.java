@@ -8,6 +8,7 @@ import com.yowyob.fleet.domain.ports.out.DriverPersistencePort;
 import com.yowyob.fleet.domain.ports.out.ExternalGeofencePort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.RedisTelemetryAdapter;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.VehicleLocalEntity;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FuelRechargeR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.OperationalParameterR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripDetailR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripMissionSubmissionR2dbcRepository;
@@ -18,20 +19,27 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.http.HttpStatus;
 import org.springframework.r2dbc.core.DatabaseClient;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class TripServiceConflictTest {
 
     @Mock TripR2dbcRepository tripRepository;
@@ -45,48 +53,28 @@ class TripServiceConflictTest {
     @Mock ExternalGeofencePort geofenceApi;
     @Mock DatabaseClient db;
     @Mock AccessScopeService accessScope;
+    @Mock ResourceAvailabilityService availability;
+    @Mock FuelRechargeR2dbcRepository fuelRechargeRepository;
 
     private TripService tripService;
     private UUID vehicleId;
     private UUID driverId;
-    private CreateTripCommand command;
+    private UUID fleetId;
 
     @BeforeEach
     void setUp() {
         tripService = new TripService(
-                tripRepository,
-                detailRepository,
-                submissionRepository,
-                vehicleRepository,
-                driverPersistence,
-                operationalRepo,
-                redisTelemetry,
-                distanceCalculator,
-                geofenceApi,
-                db,
-                accessScope
+                tripRepository, detailRepository, submissionRepository, vehicleRepository,
+                driverPersistence, operationalRepo, redisTelemetry, distanceCalculator,
+                geofenceApi, db, accessScope, availability, fuelRechargeRepository
         );
         vehicleId = UUID.randomUUID();
         driverId = UUID.randomUUID();
-        command = new CreateTripCommand(
-                vehicleId,
-                driverId,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                LocalDate.now(),
-                LocalTime.of(8, 0),
-                "Yaoundé",
-                null,
-                null,
-                null,
-                null,
-                "Livraison",
-                null,
-                "XAF",
-                null,
-                null,
-                List.of()
-        );
+        fleetId = UUID.randomUUID();
+        when(accessScope.assertTripFleetAccess(any(), any())).thenReturn(Mono.empty());
+        when(availability.assertDriverEngageable(any(), any(), any())).thenReturn(Mono.empty());
+        when(availability.assertDriverLicensed(any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(driverPersistence.findById(driverId)).thenReturn(Mono.just(sampleDriver()));
     }
 
     @Test
@@ -94,32 +82,79 @@ class TripServiceConflictTest {
         assertEquals("TRP_002", TripException.driverOccupied().getBusinessCode());
         assertEquals(HttpStatus.CONFLICT, TripException.driverOccupied().getStatus());
         assertEquals("TRP_003", TripException.vehicleOccupied().getBusinessCode());
-        assertEquals(HttpStatus.CONFLICT, TripException.vehicleOccupied().getStatus());
+        assertEquals("TRP_013", TripException.vehicleSlotConflict().getBusinessCode());
+        assertEquals(HttpStatus.CONFLICT, TripException.vehicleSlotConflict().getStatus());
     }
 
     @Test
-    void createTrip_rejectsUnavailableVehicle() {
-        var vehicle = availableVehicle(vehicleId);
-        vehicle.setStatus("MAINTENANCE");
+    void createTrip_rejectsVehicleInMaintenance() {
+        var vehicle = vehicle("MAINTENANCE");
         when(vehicleRepository.findById(vehicleId)).thenReturn(Mono.just(vehicle));
-        when(driverPersistence.findById(driverId)).thenReturn(Mono.just(sampleDriver()));
 
-        StepVerifier.create(tripService.createTrip(command))
-                .expectErrorSatisfies(err -> {
-                    assert err instanceof TripException;
-                    assert "TRP_003".equals(((TripException) err).getBusinessCode());
-                })
+        StepVerifier.create(tripService.createTrip(command(fleetId, LocalDateTime.now().plusDays(1).withHour(18))))
+                .expectErrorSatisfies(err -> assertEquals("TRP_004", ((TripException) err).getBusinessCode()))
                 .verify();
     }
 
-    private static VehicleLocalEntity availableVehicle(UUID id) {
+    @Test
+    void createTrip_rejectsReturnBeforeDeparture() {
+        StepVerifier.create(tripService.createTrip(command(fleetId, LocalDateTime.now().minusDays(1))))
+                .expectErrorSatisfies(err -> assertEquals("TRP_015", ((TripException) err).getBusinessCode()))
+                .verify();
+        verifyNoInteractions(vehicleRepository);
+    }
+
+    @Test
+    void createTrip_rejectsVehicleOfAnotherFleet() {
+        when(vehicleRepository.findById(vehicleId)).thenReturn(Mono.just(vehicle("AVAILABLE")));
+
+        StepVerifier.create(tripService.createTrip(command(UUID.randomUUID(), LocalDateTime.now().plusDays(1).withHour(18))))
+                .expectErrorSatisfies(err -> assertEquals("TRP_019", ((TripException) err).getBusinessCode()))
+                .verify();
+    }
+
+    @Test
+    void createTrip_rejectsOverlappingSlot_evenIfVehicleCurrentlyAvailable() {
+        when(vehicleRepository.findById(vehicleId)).thenReturn(Mono.just(vehicle("AVAILABLE")));
+        when(availability.assertTripSlotFree(any(), any(), any(), any(), any()))
+                .thenReturn(Mono.error(TripException.vehicleSlotConflict()));
+
+        StepVerifier.create(tripService.createTrip(command(fleetId, LocalDateTime.now().plusDays(1).withHour(18))))
+                .expectErrorSatisfies(err -> assertEquals("TRP_013", ((TripException) err).getBusinessCode()))
+                .verify();
+    }
+
+    @Test
+    void createTrip_checksSlotForVehicleCurrentlyOnTrip_insteadOfRefusingIt() {
+        // Véhicule en trajet aujourd'hui : il reste planifiable demain si le créneau est libre.
+        when(vehicleRepository.findById(vehicleId)).thenReturn(Mono.just(vehicle("ON_TRIP")));
+        when(availability.assertTripSlotFree(any(), any(), any(), any(), any()))
+                .thenReturn(Mono.error(TripException.driverSlotConflict()));
+
+        StepVerifier.create(tripService.createTrip(command(fleetId, LocalDateTime.now().plusDays(1).withHour(18))))
+                .expectErrorSatisfies(err -> assertEquals("TRP_014", ((TripException) err).getBusinessCode()))
+                .verify();
+        verify(availability).assertTripSlotFree(any(), any(), any(), any(), any());
+    }
+
+    private CreateTripCommand command(UUID tripFleetId, LocalDateTime scheduledReturn) {
+        return new CreateTripCommand(
+                vehicleId, driverId, tripFleetId, UUID.randomUUID(),
+                LocalDate.now().plusDays(1), LocalTime.of(8, 0),
+                "Yaoundé", null, null, null, null,
+                "Livraison", null, "XAF", null,
+                scheduledReturn, List.of());
+    }
+
+    private VehicleLocalEntity vehicle(String status) {
         var vehicle = new VehicleLocalEntity();
-        vehicle.setId(id);
-        vehicle.setStatus("AVAILABLE");
+        vehicle.setId(vehicleId);
+        vehicle.setFleetId(fleetId);
+        vehicle.setStatus(status);
         return vehicle;
     }
 
     private Driver sampleDriver() {
-        return new Driver(driverId, UUID.randomUUID(), "B1234567CM", "ACTIVE", null, null, null);
+        return new Driver(driverId, fleetId, "B1234567CM", "ACTIVE", null, null, null);
     }
 }

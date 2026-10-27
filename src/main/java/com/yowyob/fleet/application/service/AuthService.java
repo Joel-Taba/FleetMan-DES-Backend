@@ -49,7 +49,10 @@ public class AuthService implements AuthUseCase {
             .onErrorResume(e -> {
                 if (
                     e instanceof AuthException ae &&
-                    ae.getStatus() == HttpStatus.UNAUTHORIZED
+                    ae.getStatus() == HttpStatus.UNAUTHORIZED &&
+                    // AUTH_008 : le message du Kernel (identifiant Yowyob envoyé
+                    // par email) doit parvenir tel quel à l'utilisateur.
+                    !"AUTH_008".equals(ae.getBusinessCode())
                 ) {
                     return Mono.error(AuthException.invalidCredentials());
                 }
@@ -457,7 +460,8 @@ public class AuthService implements AuthUseCase {
         if (nonBlank(remote.username(), null) != null && !looksLikeUuid(remote.username())) {
             local.setUsername(remote.username());
         }
-        if (nonBlank(remote.email(), null) != null) {
+        if (nonBlank(remote.email(), null) != null
+                && !(isYowyobIdentityEmail(remote.email()) && nonBlank(local.getEmail(), null) != null)) {
             local.setEmail(remote.email());
         }
         if (nonBlank(remote.firstName(), null) != null) {
@@ -472,6 +476,23 @@ public class AuthService implements AuthUseCase {
         if (nonBlank(remote.photoUrl(), null) != null) {
             local.setPhotoUrl(remote.photoUrl());
         }
+    }
+
+    /**
+     * Adresse d'identité générée par le Kernel ({@code <identifiant>@yowyob.com}) :
+     * c'est un identifiant de connexion, pas l'adresse de contact de l'utilisateur.
+     * On ne l'utilise donc pas pour écraser l'email local (notifications, emails
+     * transactionnels) quand celui-ci est déjà renseigné.
+     */
+    private static boolean isYowyobIdentityEmail(String email) {
+        return email != null && email.trim().toLowerCase().endsWith("@yowyob.com");
+    }
+
+    private static String contactEmail(String remoteEmail, String localEmail) {
+        if (isYowyobIdentityEmail(remoteEmail) && nonBlank(localEmail, null) != null) {
+            return localEmail;
+        }
+        return nonBlank(remoteEmail, localEmail);
     }
 
     private static boolean looksLikeUuid(String value) {
@@ -498,7 +519,7 @@ public class AuthService implements AuthUseCase {
         return new AuthPort.UserDetail(
             local.getId(),
             nonBlank(remoteUsername, local.getUsername()),
-            nonBlank(remote.email(), local.getEmail()),
+            contactEmail(remote.email(), local.getEmail()),
             nonBlank(remote.phone(), local.getPhone()),
             nonBlank(remote.firstName(), local.getFirstName()),
             nonBlank(remote.lastName(), local.getLastName()),

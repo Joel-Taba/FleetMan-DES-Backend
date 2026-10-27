@@ -27,10 +27,12 @@ public class KernelTokenHolder {
     private final KernelAuthApiClient kernelClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${application.bootstrap.admin.email:joeltaba4@gmail.com}")
+    // Identifiant de connexion Kernel (identité Yowyob) ; l'email personnel n'est
+    // plus accepté au login. Repli sur l'email pour les configurations anciennes.
+    @Value("${application.bootstrap.admin.principal:${application.bootstrap.admin.email:joeltaba4@gmail.com}}")
     private String username;
 
-    @Value("${application.bootstrap.admin.password:FleetMan2026!}")
+    @Value("${application.bootstrap.admin.password:}")
     private String password;
 
     @Value("${application.kernel.organization-id:}")
@@ -120,7 +122,7 @@ public class KernelTokenHolder {
         if (selectedContext == null) {
             selectedContext = contexts.stream()
                     .filter(c -> c.organizations() != null && c.organizations().stream()
-                            .anyMatch(o -> serviceName.equalsIgnoreCase(o.service())))
+                            .anyMatch(o -> o.providesService(serviceName)))
                     .findFirst()
                     .orElse(contexts.get(0));
         }
@@ -132,7 +134,7 @@ public class KernelTokenHolder {
                 selectedOrgId = configuredOrgId;
             } else {
                 selectedOrgId = selectedContext.organizations().stream()
-                        .filter(o -> serviceName.equalsIgnoreCase(o.service()))
+                        .filter(o -> o.providesService(serviceName))
                         .map(KernelAuthApiClient.OrganizationRef::organizationId)
                         .findFirst()
                         .orElse(selectedContext.organizations().get(0).organizationId());

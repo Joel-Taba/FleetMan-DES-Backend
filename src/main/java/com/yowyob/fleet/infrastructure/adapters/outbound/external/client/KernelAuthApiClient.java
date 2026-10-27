@@ -129,11 +129,29 @@ public interface KernelAuthApiClient {
             List<OrganizationRef> organizations
     ) {}
 
+    /**
+     * Le Kernel renvoie désormais la liste {@code services} ; {@code service}
+     * (ancien format, valeur unique) est conservé pour rester compatible.
+     */
     record OrganizationRef(
             UUID organizationId,
             String shortName,
-            String service
-    ) {}
+            String service,
+            List<String> services
+    ) {
+        public boolean providesService(String serviceName) {
+            if (serviceName == null) return false;
+            if (serviceName.equalsIgnoreCase(service)) return true;
+            return services != null && services.stream().anyMatch(serviceName::equalsIgnoreCase);
+        }
+
+        /** Service à exposer : celui demandé s'il est fourni, sinon le premier disponible. */
+        public String effectiveService(String preferred) {
+            if (providesService(preferred)) return preferred;
+            if (service != null) return service;
+            return services == null || services.isEmpty() ? null : services.get(0);
+        }
+    }
 
     record SelectContextRequest2(
             String selectionToken,

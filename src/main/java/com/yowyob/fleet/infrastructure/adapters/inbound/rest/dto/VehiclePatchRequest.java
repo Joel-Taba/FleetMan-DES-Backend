@@ -26,7 +26,7 @@ public record VehiclePatchRequest(
     @Schema(
         description = "Changement de statut opérationnel", 
         example = "MAINTENANCE",
-        allowableValues = {"AVAILABLE", "ON_TRIP", "MAINTENANCE", "SOLD"}
+        allowableValues = {"AVAILABLE", "MAINTENANCE"}
     )
     String status
 ) {}

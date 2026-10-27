@@ -91,11 +91,11 @@ public interface ManageTripUseCase {
     /** Lance effectivement un trajet planifié (SCHEDULED → DEPARTED). */
     Mono<Trip> startTrip(UUID tripId, UUID managerId);
 
-    /** Enregistre le retour d'un trajet à partir de son code. */
-    Mono<Trip> registerReturn(RegisterReturnCommand command);
+    /** Enregistre le retour d'un trajet à partir de son code (trajet dans le périmètre de l'acteur). */
+    Mono<Trip> registerReturn(RegisterReturnCommand command, UUID actorId);
 
-    /** Retrouve un trajet par son code (ex: TRJ-2026-0001). */
-    Mono<Trip> getTripByCode(String tripCode);
+    /** Retrouve un trajet par son code (ex: TRJ-2026-0001), dans le périmètre de l'acteur. */
+    Mono<Trip> getTripByCode(String tripCode, UUID actorId);
 
     /** Change le conducteur d'un trajet non clôturé. */
     Mono<Trip> updateTripDriver(UUID tripId, UUID newDriverId, UUID managerId);
@@ -152,8 +152,8 @@ public interface ManageTripUseCase {
 
     // ── Télémétrie (conservée pour usage futur app mobile chauffeur) ─────────
 
-    /** Enregistre un point GPS et vérifie les zones de géofencing. */
-    Mono<Void> sendTelemetry(UUID tripId, Double lat, Double lng, Double speed);
+    /** Enregistre un point GPS (trajet du chauffeur appelant) et vérifie les zones de géofencing. */
+    Mono<Void> sendTelemetry(UUID tripId, UUID driverId, Double lat, Double lng, Double speed);
 
     /** Récupère le trajet actif du chauffeur (lecture seule). */
     Mono<Trip> getMyActiveTrip(UUID driverId);

@@ -9,16 +9,24 @@ app:
 spring:
   application:
     name: fleet-management
+
+  # Secrets (clé API Kernel, mots de passe, jetons) : jamais dans le dépôt.
+  # Ils sont lus depuis les variables d'environnement ou, en local, depuis le fichier
+  # .env (ignoré par git) — copier .env.example en .env et le compléter.
+  config:
+    import: optional:file:.env[.properties]
   
+  # Le front rejette les tokens fake-auth (« fake-token-… ») : profil kernel par défaut.
+  # Auth simulée sans Kernel : SPRING_PROFILES_ACTIVE=local,demo,fake-auth
   profiles:
-    active: local,demo,fake-auth
+    active: local,demo
 
   # R2DBC (Application Runtime)
 
   r2dbc:
     url: r2dbc:postgresql://localhost:5433/fleetmanBD
     username: fleet_admin
-    password: fleet_password
+    password: ${DB_PASSWORD}
     pool:
       enabled: true
       initial-size: 2
@@ -30,14 +38,14 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5433/fleetmanBD
     username: fleet_admin
-    password: fleet_password
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   # LIQUIBASE
   liquibase:
     url: jdbc:postgresql://localhost:5433/fleetmanBD
     user: fleet_admin
-    password: fleet_password
+    password: ${DB_PASSWORD}
     change-log: classpath:db/changelog/db.changelog-master.yaml
     default-schema: public
     liquibase-schema: public
@@ -48,7 +56,7 @@ spring:
     redis:
       host: localhost
       port: 6380
-      password: ""
+      password: ${REDIS_PASSWORD:}
 
   # KAFKA
   kafka:
@@ -90,7 +98,7 @@ application:
   kernel:
     url: ${KERNEL_URL:https://kernel-core.yowyob.com/kernel-api}
     client-id: ${KERNEL_CLIENT_ID:fleet-management-backend}
-    api-key: ${KERNEL_API_KEY:K5mWlNhc6zH2-JcaZJWSs1sLxUzjS902u4MxEnJar5g}
+    api-key: ${KERNEL_API_KEY:}
     tenant-id: ${KERNEL_TENANT_ID:f5b814d9-766e-4c87-91ec-d6c8e32cb56c}
     organization-id: ${KERNEL_ORG_ID:5e69f5c5-1f03-41cb-a4a3-d59188f73323}
     business-actor-id: ${KERNEL_BUSINESS_ACTOR_ID:54fb5d86-345e-4522-a247-5cbc1de510fc}
@@ -124,7 +132,7 @@ application:
   notification:
     mode: http
     url: https://traefikdev.yowyob.com/notification
-    service-token: "a77599d3-8de7-4d52-b9d0-2202b2e13a9e" # Token récupéré après enregistrement du service
+    service-token: ${NOTIFICATION_SERVICE_TOKEN:} # Jeton obtenu à l'enregistrement du service
     templates:
       new-offer: 1        # ID template: Nouvelle offre pour les chauffeurs
       driver-applied: 2   # ID template: Un chauffeur a postulé (pour le client)
@@ -140,14 +148,24 @@ application:
     enabled: false
   geofence-system-user:
     username: "system@fleetman.cm"
-    password: "SystemFleetMan2026!" 
+    password: ${GEOFENCE_SYSTEM_PASSWORD:}
     organization-id: "5e69f5c5-1f03-41cb-a4a3-d59188f73323"
  
+  # Mot de passe démo commun du profil fake-auth et mot de passe initial d'un chauffeur
+  # créé sans mot de passe : fournis par le fichier .env, jamais écrits ici.
+  demo:
+    password: ${DEMO_PASSWORD:}
+  driver:
+    default-password: ${DRIVER_DEFAULT_PASSWORD:}
+
   bootstrap:
     admin:
       username: "joeltaba4"
       email: "joeltaba4@gmail.com"
-      password: "FleetMan2026!" 
+      # Identifiant de connexion Kernel : le Kernel n'accepte plus l'email personnel
+      # au login, seulement l'identité Yowyob du compte.
+      principal: ${KERNEL_OWNER_PRINCIPAL:pending-84064860b33bf7ba989885ba}
+      password: ${KERNEL_OWNER_PASSWORD:}
       phone: "+237600000000"
       firstname: "Joel"
       lastname: "Taba"

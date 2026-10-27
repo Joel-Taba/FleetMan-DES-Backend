@@ -115,6 +115,54 @@ public class ExpenseService implements ManageExpenseUseCase {
                 });
     }
 
+    /**
+     * Les dépenses FUEL / MAINTENANCE / INCIDENT sont générées depuis leur opération
+     * (conception du module Dépenses). createAutoExpense existait mais n'était jamais
+     * appelée : budgets et page Dépenses ignoraient le carburant, les maintenances et
+     * les incidents. La dépense suit désormais le coût de son opération.
+     */
+    @Override
+    public Mono<Void> syncAutoExpense(Expense.ExpenseType type, UUID sourceId, BigDecimal amount,
+                                      String description, UUID vehicleId, UUID driverId) {
+        boolean positive = amount != null && amount.compareTo(BigDecimal.ZERO) > 0;
+        return expensePersistence.findBySourceId(sourceId)
+                .filter(e -> e.getSourceType() == Expense.SourceType.AUTO)
+                .next()
+                .flatMap(existing -> {
+                    if (!positive) {
+                        return expensePersistence.deleteById(existing.getId())
+                                .doOnSuccess(v -> triggerBudgetUpdate(existing.getFleetId(),
+                                        existing.getVehicleId(), existing.getExpenseDate()))
+                                .thenReturn(true);
+                    }
+                    if (existing.getAmount().compareTo(amount) == 0) {
+                        return Mono.just(true);
+                    }
+                    existing.syncWithSource(amount);
+                    return expensePersistence.save(existing)
+                            .doOnSuccess(saved -> triggerBudgetUpdate(saved.getFleetId(),
+                                    saved.getVehicleId(), saved.getExpenseDate()))
+                            .thenReturn(true);
+                })
+                .switchIfEmpty(Mono.defer(() -> !positive
+                        ? Mono.just(false)
+                        : vehiclePersistence.getLocalDataById(vehicleId)
+                                .flatMap(v -> createAutoExpense(type, amount, description, sourceId,
+                                        vehicleId, v.licensePlate(), v.fleetId(), v.managerId(),
+                                        driverId, null))
+                                .thenReturn(true)))
+                .then();
+    }
+
+    @Override
+    public Mono<Void> deleteAutoExpenses(UUID sourceId) {
+        return expensePersistence.findBySourceId(sourceId)
+                .filter(e -> e.getSourceType() == Expense.SourceType.AUTO)
+                .flatMap(e -> expensePersistence.deleteById(e.getId())
+                        .doOnSuccess(v -> triggerBudgetUpdate(e.getFleetId(), e.getVehicleId(), e.getExpenseDate())))
+                .then();
+    }
+
     // ── 3. LECTURE ───────────────────────────────────────────────────────────
 
     @Override
@@ -271,7 +319,16 @@ public class ExpenseService implements ManageExpenseUseCase {
                     if (expense.getSourceType() == Expense.SourceType.AUTO) {
                         return Mono.error(BudgetException.expenseDeleteForbidden(id));
                     }
-                    return expensePersistence.deleteById(id);
+                    // Une dépense approuvée compte dans le budget du mois : il doit être
+                    // recalculé après sa suppression (il restait gonflé jusqu'ici).
+                    boolean wasApproved = expense.getStatus() == Expense.ExpenseStatus.APPROVED;
+                    return expensePersistence.deleteById(id)
+                            .doOnSuccess(v -> {
+                                if (wasApproved) {
+                                    triggerBudgetUpdate(expense.getFleetId(), expense.getVehicleId(),
+                                            expense.getExpenseDate());
+                                }
+                            });
                 });
     }
 

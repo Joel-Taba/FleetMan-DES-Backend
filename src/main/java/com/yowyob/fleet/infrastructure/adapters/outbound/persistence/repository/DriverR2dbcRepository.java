@@ -32,6 +32,7 @@ public interface DriverR2dbcRepository extends ReactiveCrudRepository<DriverEnti
 
     Mono<DriverEntity> findByKernelActorId(UUID kernelActorId);
     // --- AJOUT TÂCHE 6.2 ---
+    @Query("SELECT COUNT(*) FROM fleet.drivers WHERE fleet_id = :fleetId AND deleted_at IS NULL")
     Mono<Long> countByFleetId(UUID fleetId);
 
     // --- CORRECTIF TÂCHE 7.2 : Compter les chauffeurs par Manager ---

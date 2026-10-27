@@ -1,5 +1,5 @@
 # Profil « local » — développement local sans Kafka ni Redis.
-# Démarrage : SPRING_PROFILES_ACTIVE=local,demo,fake-auth
+# Démarrage : SPRING_PROFILES_ACTIVE=local,demo   (auth simulée : local,demo,fake-auth)
 # ─────────────────────────────────────────────────────────────────────────────
 
 spring:
@@ -12,7 +12,7 @@ spring:
   r2dbc:
     url: r2dbc:postgresql://localhost:5433/fleetmanBD
     username: fleet_admin
-    password: fleet_password
+    password: ${DB_PASSWORD}
     pool:
       enabled: true
       initial-size: 2
@@ -23,14 +23,14 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5433/fleetmanBD
     username: fleet_admin
-    password: fleet_password
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   # Liquibase — migrations au démarrage
   liquibase:
     url: jdbc:postgresql://localhost:5433/fleetmanBD
     user: fleet_admin
-    password: fleet_password
+    password: ${DB_PASSWORD}
     enabled: true
 
   # Redis Docker (port hôte 6380)

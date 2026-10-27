@@ -8,6 +8,7 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.AuthApi
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelAdminApiClient;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelAuthApiClient;
 import com.yowyob.fleet.infrastructure.config.KernelTokenHolder;
+import com.yowyob.fleet.infrastructure.config.security.KernelJwtVerifier;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -33,7 +34,8 @@ public class AuthConfig {
             KernelTokenHolder kernelTokenHolder,
             @Qualifier("kernelWebClient") WebClient kernelWebClient) {
         return new KernelAuthAdapter(
-                kernelAuthApiClient, kernelAdminApiClient, kernelTokenHolder, kernelWebClient);
+                kernelAuthApiClient, kernelAdminApiClient, kernelTokenHolder, kernelWebClient,
+                KernelJwtVerifier.fromKernel(kernelWebClient));
     }
 
     /** Mode remote : ancien service d'authentification Pynfi/TraMaSys */

@@ -39,6 +39,7 @@ public class InitialDataLoader implements CommandLineRunner {
     private final VehicleColorR2dbcRepository colorRepo;
 
     @Value("${application.bootstrap.admin.email}") private String adminEmail;
+    @Value("${application.bootstrap.admin.principal:${application.bootstrap.admin.email}}") private String adminPrincipal;
     @Value("${application.bootstrap.admin.password}") private String adminPassword;
     @Value("${application.bootstrap.admin.username}") private String adminUsername;
     @Value("${application.bootstrap.admin.phone}") private String adminPhone;
@@ -213,7 +214,7 @@ public class InitialDataLoader implements CommandLineRunner {
             log.info("ℹ️ [SEEDER] Profil demo actif — bootstrap super-admin distant ignoré.");
             return Mono.empty();
         }
-        return authPort.login(adminEmail, adminPassword)
+        return authPort.login(adminPrincipal, adminPassword)
             .doOnSuccess(resp -> log.info("ℹ️ Super Admin déjà présent."))
             .onErrorResume(e -> {
                 log.info("⚠️ Création du Super Admin...");

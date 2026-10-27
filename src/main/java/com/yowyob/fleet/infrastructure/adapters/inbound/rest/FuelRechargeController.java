@@ -31,6 +31,7 @@ import java.util.UUID;
 public class FuelRechargeController {
 
     private final ManageFuelRechargeUseCase fuelRechargeUseCase;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -44,7 +45,8 @@ public class FuelRechargeController {
     @Operation(summary = "Enregistrer une recharge de carburant",
                description = "Enregistre un plein de carburant et met à jour automatiquement le niveau de carburant du véhicule.")
     public Mono<FuelRechargeResponse> create(
-            @Valid @RequestBody FuelRechargeRequest request) {
+            @Valid @RequestBody FuelRechargeRequest request,
+            Authentication auth) {
 
         ManageFuelRechargeUseCase.CreateFuelRechargeCommand cmd =
                 new ManageFuelRechargeUseCase.CreateFuelRechargeCommand(
@@ -56,7 +58,13 @@ public class FuelRechargeController {
                         request.vehicleId(),
                         request.driverId()
                 );
-        return fuelRechargeUseCase.createFuelRecharge(cmd).map(FuelRechargeResponse::from);
+        UUID actor = getUserId(auth);
+        // Un chauffeur ne déclare que pour le véhicule qu'il conduit ; un gestionnaire,
+        // pour un véhicule de son périmètre.
+        Mono<Void> scope = com.yowyob.fleet.infrastructure.config.security.AuthPrincipal.isFleetDriver(auth)
+                ? resourceAccess.assertDriverOperatesVehicle(actor, request.vehicleId())
+                : resourceAccess.assertVehicleAccess(actor, request.vehicleId());
+        return scope.then(fuelRechargeUseCase.createFuelRecharge(cmd)).map(FuelRechargeResponse::from);
     }
 
     // ── LECTURE ───────────────────────────────────────────────────────────────
@@ -73,8 +81,10 @@ public class FuelRechargeController {
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
     @Operation(summary = "Détail d'une recharge")
     public Mono<FuelRechargeResponse> getById(
-            @Parameter(description = "ID de la recharge") @PathVariable UUID id) {
-        return fuelRechargeUseCase.getById(id).map(FuelRechargeResponse::from);
+            @Parameter(description = "ID de la recharge") @PathVariable UUID id,
+            Authentication auth) {
+        return resourceAccess.assertFuelRechargeAccess(getUserId(auth), id)
+                .then(fuelRechargeUseCase.getById(id)).map(FuelRechargeResponse::from);
     }
 
     @GetMapping("/vehicle/{vehicleId}")
@@ -82,16 +92,20 @@ public class FuelRechargeController {
     @Operation(summary = "Recharges d'un véhicule",
                description = "Retourne l'historique complet des recharges pour un véhicule donné.")
     public Flux<FuelRechargeResponse> getByVehicle(
-            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
-        return fuelRechargeUseCase.getByVehicleId(vehicleId).map(FuelRechargeResponse::from);
+            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
+            Authentication auth) {
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                .thenMany(fuelRechargeUseCase.getByVehicleId(vehicleId)).map(FuelRechargeResponse::from);
     }
 
     @GetMapping("/driver/{driverId}")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Recharges d'un chauffeur")
     public Flux<FuelRechargeResponse> getByDriver(
-            @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId) {
-        return fuelRechargeUseCase.getByDriverId(driverId).map(FuelRechargeResponse::from);
+            @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId,
+            Authentication auth) {
+        return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                .thenMany(fuelRechargeUseCase.getByDriverId(driverId)).map(FuelRechargeResponse::from);
     }
 
     @GetMapping("/range")
@@ -113,12 +127,13 @@ public class FuelRechargeController {
     @Operation(summary = "Statistiques carburant d'un véhicule",
                description = "Retourne la consommation totale (litres) et le coût total des recharges pour un véhicule.")
     public Mono<FuelStatsResponse> getVehicleFuelStats(
-            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
+            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
+            Authentication auth) {
 
-        return Mono.zip(
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId).then(Mono.zip(
                 fuelRechargeUseCase.getTotalQuantityByVehicleId(vehicleId),
                 fuelRechargeUseCase.getTotalCostByVehicleId(vehicleId)
-        ).map(tuple -> new FuelStatsResponse(vehicleId, tuple.getT1(), tuple.getT2()));
+        )).map(tuple -> new FuelStatsResponse(vehicleId, tuple.getT1(), tuple.getT2()));
     }
 
     // ── MISE À JOUR ───────────────────────────────────────────────────────────
@@ -128,7 +143,8 @@ public class FuelRechargeController {
     @Operation(summary = "Mettre à jour une recharge")
     public Mono<FuelRechargeResponse> update(
             @Parameter(description = "ID de la recharge") @PathVariable UUID id,
-            @Valid @RequestBody FuelRechargeRequest request) {
+            @Valid @RequestBody FuelRechargeRequest request,
+            Authentication auth) {
 
         ManageFuelRechargeUseCase.UpdateFuelRechargeCommand cmd =
                 new ManageFuelRechargeUseCase.UpdateFuelRechargeCommand(
@@ -140,7 +156,8 @@ public class FuelRechargeController {
                         normalizeStationName(request.stationName()),
                         request.driverId()
                 );
-        return fuelRechargeUseCase.update(cmd).map(FuelRechargeResponse::from);
+        return resourceAccess.assertFuelRechargeAccess(getUserId(auth), id)
+                .then(fuelRechargeUseCase.update(cmd)).map(FuelRechargeResponse::from);
     }
 
     // ── SUPPRESSION ───────────────────────────────────────────────────────────
@@ -150,8 +167,10 @@ public class FuelRechargeController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Supprimer une recharge")
     public Mono<Void> delete(
-            @Parameter(description = "ID de la recharge") @PathVariable UUID id) {
-        return fuelRechargeUseCase.delete(id);
+            @Parameter(description = "ID de la recharge") @PathVariable UUID id,
+            Authentication auth) {
+        return resourceAccess.assertFuelRechargeAccess(getUserId(auth), id)
+                .then(fuelRechargeUseCase.delete(id));
     }
 
     // ── DTO interne ───────────────────────────────────────────────────────────

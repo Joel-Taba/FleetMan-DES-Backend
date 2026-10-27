@@ -103,4 +103,79 @@ public class TripException extends DomainException {
             "TRP_011"
         );
     }
+
+    public static TripException invalidReturnKmIndex() {
+        return new TripException(
+            "L'index kilométrique de retour doit être supérieur ou égal au départ.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_012"
+        );
+    }
+
+    public static TripException vehicleSlotConflict() {
+        return new TripException(
+            "Ce véhicule est déjà engagé (trajet ou affectation à un autre conducteur) sur ce créneau horaire.",
+            HttpStatus.CONFLICT,
+            "TRP_013"
+        );
+    }
+
+    public static TripException driverSlotConflict() {
+        return new TripException(
+            "Ce conducteur est déjà engagé (trajet ou affectation sur un autre véhicule) sur ce créneau horaire.",
+            HttpStatus.CONFLICT,
+            "TRP_014"
+        );
+    }
+
+    public static TripException invalidSchedule() {
+        return new TripException(
+            "Le retour prévu doit être postérieur au départ prévu.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_015"
+        );
+    }
+
+    public static TripException returnBeforeDeparture() {
+        return new TripException(
+            "La date et l'heure de retour ne peuvent pas précéder le départ.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_016"
+        );
+    }
+
+    public static TripException notDeparted() {
+        return new TripException(
+            "Le départ de ce trajet n'a pas été enregistré : lancez-le avant d'enregistrer son retour.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_017"
+        );
+    }
+
+    public static TripException vehicleNotInFleet() {
+        return new TripException(
+            "Ce véhicule n'appartient pas à la flotte du trajet.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_019"
+        );
+    }
+
+    public static TripException driverInactive() {
+        return new TripException(
+            "Ce conducteur est inactif ou n'est rattaché à aucune flotte : il ne peut pas être engagé sur un trajet.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_018"
+        );
+    }
+
+    public static TripException returnFuelExceedsAvailable(java.math.BigDecimal available) {
+        return new TripException(
+            "L'index carburant de retour dépasse le carburant disponible ("
+                + available.stripTrailingZeros().toPlainString()
+                + " L : départ + pleins enregistrés pendant le trajet). "
+                + "Enregistrez le plein manquant ou corrigez l'index.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_020"
+        );
+    }
 }

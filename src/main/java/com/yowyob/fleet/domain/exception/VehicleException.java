@@ -42,4 +42,28 @@ public class VehicleException extends DomainException {
     public static VehicleException syncFailed(String details) {
         return new VehicleException("Échec de la synchronisation : " + details, HttpStatus.BAD_GATEWAY, "VHC_008");
     }
+
+    public static VehicleException openCommitments() {
+        return new VehicleException(
+                "Ce véhicule a des trajets ou des affectations non terminés : terminez-les, annulez-les ou réaffectez-les d'abord.",
+                HttpStatus.CONFLICT, "VHC_009");
+    }
+
+    public static VehicleException statusManagedByTrips() {
+        return new VehicleException(
+                "Le statut « en trajet » est géré par les trajets : il ne peut pas être modifié à la main pendant un trajet en cours.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "VHC_010");
+    }
+
+    public static VehicleException invalidStatus(String value) {
+        return new VehicleException(
+                "Statut de véhicule invalide : " + value + " (valeurs admises : AVAILABLE, MAINTENANCE).",
+                HttpStatus.BAD_REQUEST, "VHC_011");
+    }
+
+    public static VehicleException heldByIncident() {
+        return new VehicleException(
+                "Ce véhicule est immobilisé par un incident grave non résolu : résolvez l'incident pour le rendre disponible.",
+                HttpStatus.CONFLICT, "VHC_012");
+    }
 }

@@ -25,6 +25,7 @@ import java.util.UUID;
 public class MaintenanceAlertController {
 
     private final ManageMaintenancePlanUseCase useCase;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -50,8 +51,10 @@ public class MaintenanceAlertController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Détail d'une alerte")
     public Mono<MaintenanceAlertResponse> getById(
-            @Parameter(description = "ID de l'alerte") @PathVariable UUID id) {
-        return useCase.getAlertById(id).map(MaintenanceAlertResponse::from);
+            @Parameter(description = "ID de l'alerte") @PathVariable UUID id,
+            Authentication auth) {
+        return resourceAccess.assertMaintenanceAlertAccess(getUserId(auth), id)
+                .then(useCase.getAlertById(id).map(MaintenanceAlertResponse::from));
     }
 
     @GetMapping("/vehicle/{vehicleId}")
@@ -59,16 +62,20 @@ public class MaintenanceAlertController {
     @Operation(summary = "Alertes d'un véhicule",
                description = "Historique complet des alertes (actives et résolues) pour un véhicule.")
     public Flux<MaintenanceAlertResponse> getByVehicle(
-            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
-        return useCase.getAlertsByVehicle(vehicleId).map(MaintenanceAlertResponse::from);
+            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
+            Authentication auth) {
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                .thenMany(useCase.getAlertsByVehicle(vehicleId).map(MaintenanceAlertResponse::from));
     }
 
     @GetMapping("/fleet/{fleetId}")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Alertes actives d'une flotte")
     public Flux<MaintenanceAlertResponse> getByFleet(
-            @Parameter(description = "ID de la flotte") @PathVariable UUID fleetId) {
-        return useCase.getAlertsByFleet(fleetId).map(MaintenanceAlertResponse::from);
+            @Parameter(description = "ID de la flotte") @PathVariable UUID fleetId,
+            Authentication auth) {
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .thenMany(useCase.getAlertsByFleet(fleetId).map(MaintenanceAlertResponse::from));
     }
 
     @PatchMapping("/{id}/resolve")
@@ -78,8 +85,10 @@ public class MaintenanceAlertController {
     public Mono<MaintenanceAlertResponse> resolve(
             @Parameter(description = "ID de l'alerte") @PathVariable UUID id,
             @Parameter(description = "ID de la Maintenance effectuée")
-            @RequestParam UUID maintenanceId) {
-        return useCase.resolveAlert(id, maintenanceId).map(MaintenanceAlertResponse::from);
+            @RequestParam UUID maintenanceId,
+            Authentication auth) {
+        return resourceAccess.assertMaintenanceAlertAccess(getUserId(auth), id)
+                .then(useCase.resolveAlert(id, maintenanceId).map(MaintenanceAlertResponse::from));
     }
 
     @PostMapping("/evaluate/vehicle/{vehicleId}")
@@ -87,8 +96,10 @@ public class MaintenanceAlertController {
     @Operation(summary = "Évaluer les plans d'un véhicule",
                description = "Force l'évaluation de tous les plans actifs pour un véhicule. Crée ou met à jour les alertes correspondantes.")
     public Flux<MaintenanceAlertResponse> evaluateVehicle(
-            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
-        return useCase.evaluatePlansForVehicle(vehicleId).map(MaintenanceAlertResponse::from);
+            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
+            Authentication auth) {
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                .thenMany(useCase.evaluatePlansForVehicle(vehicleId).map(MaintenanceAlertResponse::from));
     }
 
     @PostMapping("/evaluate/all")

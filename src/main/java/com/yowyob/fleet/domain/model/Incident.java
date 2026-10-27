@@ -64,6 +64,7 @@ public class Incident {
 
     /** Statut courant dans le cycle de vie */
     private Status status;
+    private boolean vehicleImmobilized;
 
     /** Rapport de résolution */
     private String report;
@@ -119,6 +120,7 @@ public class Incident {
         if (vehicleId == null) {
             throw new IllegalArgumentException("Le véhicule est obligatoire pour un incident.");
         }
+        requireNonNegativeCost(cost);
 
         this.id = id;
         this.type = type;
@@ -176,8 +178,18 @@ public class Incident {
     public void updateStatus(Status newStatus) {
         if (newStatus == Status.RESOLVED || newStatus == Status.CLOSED) {
             this.resolvedAt = LocalDateTime.now();
+        } else {
+            // Réouverture (REPORTED / UNDER_INVESTIGATION) : l'incident n'est plus résolu,
+            // sa date de résolution ne doit plus fausser les délais de traitement.
+            this.resolvedAt = null;
         }
         this.status = newStatus;
+    }
+
+    private static void requireNonNegativeCost(BigDecimal cost) {
+        if (cost != null && cost.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Le coût d'un incident ne peut pas être négatif.");
+        }
     }
 
     /**
@@ -193,6 +205,18 @@ public class Incident {
     public boolean isOpen() {
         return this.status == Status.REPORTED || this.status == Status.UNDER_INVESTIGATION;
     }
+
+    /**
+     * Un incident grave (HIGH/CRITICAL) encore ouvert rend le véhicule indisponible
+     * jusqu'à sa résolution ; un incident LOW/MEDIUM est seulement enregistré.
+     */
+    public boolean immobilizesVehicle() {
+        return isCritical() && isOpen();
+    }
+
+    /** true si c'est (aussi) cet incident qui maintient le véhicule immobilisé. */
+    public boolean isVehicleImmobilized()    { return vehicleImmobilized; }
+    public void setVehicleImmobilized(boolean vehicleImmobilized) { this.vehicleImmobilized = vehicleImmobilized; }
 
     // ── Getters ───────────────────────────────────────────────────────────────
 
@@ -222,7 +246,7 @@ public class Incident {
     public void setId(UUID id)                              { this.id = id; }
     public void setSeverity(Severity severity)              { this.severity = severity; }
     public void setDescription(String description)          { this.description = description; }
-    public void setCost(BigDecimal cost)                    { this.cost = cost; }
+    public void setCost(BigDecimal cost)                    { requireNonNegativeCost(cost); this.cost = cost; }
     public void setPoliceReportNumber(String number)        { this.policeReportNumber = number; }
     public void setInsuranceClaimNumber(String number)      { this.insuranceClaimNumber = number; }
     public void setLocation(Coordinates location)           { this.location = location; }

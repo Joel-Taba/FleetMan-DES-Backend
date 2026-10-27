@@ -189,3 +189,15 @@ databaseChangeLog:
   # 49. created_by_admin_id NOT NULL + FK vers platform_admins.
   - include:
       file: db/changelog/changes/049-manager-admin-id-not-null.sql
+
+  # 50. Disponibilité par créneau horaire (trajets) + km de dernière maintenance.
+  - include:
+      file: db/changelog/changes/050-trip-time-slots.sql
+
+  # 51. Consommation carburant des trajets : prise en compte des pleins faits en route.
+  - include:
+      file: db/changelog/changes/051-trip-fuel-consumed-with-refuels.sql
+
+  # 52. Incidents (immobilisation, interruption de trajet) et catégories de permis.
+  - include:
+      file: db/changelog/changes/052-incidents-and-licenses.sql

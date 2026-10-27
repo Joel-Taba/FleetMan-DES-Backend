@@ -34,6 +34,7 @@ import java.util.UUID;
 public class ExpenseController {
 
     private final ManageExpenseUseCase expenseUseCase;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -47,7 +48,8 @@ public class ExpenseController {
     @Operation(summary = "Créer une dépense manuelle",
                description = "Enregistre une dépense manuelle (amende, péage, autre). La dépense démarre en statut PENDING et nécessite validation du Manager. Les dépenses FUEL, MAINTENANCE, INCIDENT sont générées automatiquement par le système.")
     public Mono<ExpenseResponse> create(
-            @Valid @RequestBody ExpenseRequest request) {
+            @Valid @RequestBody ExpenseRequest request,
+            Authentication auth) {
 
         ManageExpenseUseCase.CreateManualExpenseCommand cmd =
                 new ManageExpenseUseCase.CreateManualExpenseCommand(
@@ -58,7 +60,8 @@ public class ExpenseController {
                         request.vehicleId(),
                         request.driverId()
                 );
-        return expenseUseCase.createManualExpense(cmd).map(ExpenseResponse::from);
+        return resourceAccess.assertVehicleAccess(getUserId(auth), request.vehicleId())
+                .then(expenseUseCase.createManualExpense(cmd)).map(ExpenseResponse::from);
     }
 
     // ── LECTURE ───────────────────────────────────────────────────────────────
@@ -75,8 +78,10 @@ public class ExpenseController {
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
     @Operation(summary = "Détail d'une dépense")
     public Mono<ExpenseResponse> getById(
-            @Parameter(description = "ID de la dépense") @PathVariable UUID id) {
-        return expenseUseCase.getById(id).map(ExpenseResponse::from);
+            @Parameter(description = "ID de la dépense") @PathVariable UUID id,
+            Authentication auth) {
+        return resourceAccess.assertExpenseAccess(getUserId(auth), id)
+                .then(expenseUseCase.getById(id).map(ExpenseResponse::from));
     }
 
     @GetMapping("/fleet/{fleetId}")
@@ -84,8 +89,10 @@ public class ExpenseController {
     @Operation(summary = "Dépenses d'une flotte",
                description = "Retourne toutes les dépenses d'une flotte spécifique.")
     public Flux<ExpenseResponse> getByFleet(
-            @Parameter(description = "ID de la flotte") @PathVariable UUID fleetId) {
-        return expenseUseCase.getByFleet(fleetId).map(ExpenseResponse::from);
+            @Parameter(description = "ID de la flotte") @PathVariable UUID fleetId,
+            Authentication auth) {
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .thenMany(expenseUseCase.getByFleet(fleetId).map(ExpenseResponse::from));
     }
 
     @GetMapping("/vehicle/{vehicleId}")
@@ -93,16 +100,20 @@ public class ExpenseController {
     @Operation(summary = "Dépenses d'un véhicule",
                description = "Retourne l'historique complet des dépenses pour un véhicule donné.")
     public Flux<ExpenseResponse> getByVehicle(
-            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
-        return expenseUseCase.getByVehicle(vehicleId).map(ExpenseResponse::from);
+            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
+            Authentication auth) {
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                .thenMany(expenseUseCase.getByVehicle(vehicleId).map(ExpenseResponse::from));
     }
 
     @GetMapping("/driver/{driverId}")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Dépenses d'un chauffeur")
     public Flux<ExpenseResponse> getByDriver(
-            @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId) {
-        return expenseUseCase.getByDriver(driverId).map(ExpenseResponse::from);
+            @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId,
+            Authentication auth) {
+        return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                .thenMany(expenseUseCase.getByDriver(driverId).map(ExpenseResponse::from));
     }
 
     @GetMapping("/pending")
@@ -156,18 +167,22 @@ public class ExpenseController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Coût total approuvé d'un véhicule")
     public Mono<TotalDto> getTotalByVehicle(
-            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
-        return expenseUseCase.getTotalApprovedByVehicle(vehicleId)
-                .map(total -> new TotalDto(vehicleId, total));
+            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
+            Authentication auth) {
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                .then(expenseUseCase.getTotalApprovedByVehicle(vehicleId)
+                .map(total -> new TotalDto(vehicleId, total)));
     }
 
     @GetMapping("/fleet/{fleetId}/total")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Coût total approuvé d'une flotte")
     public Mono<TotalDto> getTotalByFleet(
-            @Parameter(description = "ID de la flotte") @PathVariable UUID fleetId) {
-        return expenseUseCase.getTotalApprovedByFleet(fleetId)
-                .map(total -> new TotalDto(fleetId, total));
+            @Parameter(description = "ID de la flotte") @PathVariable UUID fleetId,
+            Authentication auth) {
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .then(expenseUseCase.getTotalApprovedByFleet(fleetId)
+                .map(total -> new TotalDto(fleetId, total)));
     }
 
     // ── VALIDATION ────────────────────────────────────────────────────────────
@@ -179,7 +194,8 @@ public class ExpenseController {
     public Mono<ExpenseResponse> approve(
             @Parameter(description = "ID de la dépense") @PathVariable UUID id,
             Authentication auth) {
-        return expenseUseCase.approve(id, getUserId(auth)).map(ExpenseResponse::from);
+        return resourceAccess.assertExpenseAccess(getUserId(auth), id)
+                .then(expenseUseCase.approve(id, getUserId(auth))).map(ExpenseResponse::from);
     }
 
     @PatchMapping("/{id}/reject")
@@ -197,7 +213,8 @@ public class ExpenseController {
                         getUserId(auth),
                         request.rejectionReason()
                 );
-        return expenseUseCase.reject(cmd).map(ExpenseResponse::from);
+        return resourceAccess.assertExpenseAccess(getUserId(auth), id)
+                .then(expenseUseCase.reject(cmd)).map(ExpenseResponse::from);
     }
 
     // ── MISE À JOUR ───────────────────────────────────────────────────────────
@@ -208,7 +225,8 @@ public class ExpenseController {
                description = "Met à jour le montant ou la description d'une dépense manuelle encore en attente (PENDING). Interdit sur les dépenses auto-générées ou déjà validées.")
     public Mono<ExpenseResponse> update(
             @Parameter(description = "ID de la dépense") @PathVariable UUID id,
-            @Valid @RequestBody ExpenseUpdateRequest request) {
+            @Valid @RequestBody ExpenseUpdateRequest request,
+            Authentication auth) {
 
         ManageExpenseUseCase.UpdateExpenseCommand cmd =
                 new ManageExpenseUseCase.UpdateExpenseCommand(
@@ -216,7 +234,8 @@ public class ExpenseController {
                         request.amount(),
                         request.description()
                 );
-        return expenseUseCase.update(cmd).map(ExpenseResponse::from);
+        return resourceAccess.assertExpenseAccess(getUserId(auth), id)
+                .then(expenseUseCase.update(cmd)).map(ExpenseResponse::from);
     }
 
     // ── EXPORT CSV ────────────────────────────────────────────────────────────
@@ -260,8 +279,10 @@ public class ExpenseController {
     @Operation(summary = "Supprimer une dépense manuelle",
                description = "Supprime une dépense manuelle. Interdit sur les dépenses auto-générées (FUEL, MAINTENANCE, INCIDENT).")
     public Mono<Void> delete(
-            @Parameter(description = "ID de la dépense") @PathVariable UUID id) {
-        return expenseUseCase.delete(id);
+            @Parameter(description = "ID de la dépense") @PathVariable UUID id,
+            Authentication auth) {
+        return resourceAccess.assertExpenseAccess(getUserId(auth), id)
+                .then(expenseUseCase.delete(id));
     }
 
     // ── DTOs internes ─────────────────────────────────────────────────────────

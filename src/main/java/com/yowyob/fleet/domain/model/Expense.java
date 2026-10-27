@@ -202,6 +202,21 @@ public class Expense {
     /**
      * Indique si cette dépense est une dépense manuelle modifiable.
      */
+    /**
+     * Aligne le montant d'une dépense auto-générée sur le coût de son opération source
+     * (plein, maintenance, incident). Une saisie manuelle reste interdite (updateAmount) :
+     * seule la modification de l'opération source fait évoluer la dépense.
+     */
+    public void syncWithSource(BigDecimal sourceAmount) {
+        if (this.sourceType != SourceType.AUTO) {
+            throw new IllegalStateException("Seule une dépense auto-générée suit son opération source.");
+        }
+        if (sourceAmount == null || sourceAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Le montant doit être strictement positif.");
+        }
+        this.amount = sourceAmount;
+    }
+
     public boolean isManualAndPending() {
         return this.sourceType == SourceType.MANUAL && this.status == ExpenseStatus.PENDING;
     }

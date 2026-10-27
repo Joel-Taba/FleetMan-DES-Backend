@@ -1,5 +1,7 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
+import com.yowyob.fleet.application.service.AccessScopeService;
+import com.yowyob.fleet.application.service.ResourceAccessService;
 import com.yowyob.fleet.domain.ports.in.ManageScheduleUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.PageResponse;
@@ -29,6 +31,8 @@ import java.util.UUID;
 public class ScheduleController {
 
     private final ManageScheduleUseCase scheduleUseCase;
+    private final AccessScopeService accessScope;
+    private final ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -55,7 +59,8 @@ public class ScheduleController {
                         request.endDate(),
                         request.notes()
                 );
-        return scheduleUseCase.createSchedule(cmd).map(ScheduleResponse::from);
+        return accessScope.assertFleetAccess(getUserId(auth), request.fleetId())
+                .then(scheduleUseCase.createSchedule(cmd)).map(ScheduleResponse::from);
     }
 
     // ── LECTURE ───────────────────────────────────────────────────────────────
@@ -80,8 +85,10 @@ public class ScheduleController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Détail d'un planning")
     public Mono<ScheduleResponse> getById(
-            @Parameter(description = "ID du planning") @PathVariable UUID id) {
-        return scheduleUseCase.getById(id).map(ScheduleResponse::from);
+            @Parameter(description = "ID du planning") @PathVariable UUID id,
+            Authentication auth) {
+        return resourceAccess.assertScheduleAccess(getUserId(auth), id)
+                .then(scheduleUseCase.getById(id)).map(ScheduleResponse::from);
     }
 
     @GetMapping("/fleet/{fleetId}")
@@ -89,11 +96,13 @@ public class ScheduleController {
     @Operation(summary = "Plannings d'une flotte")
     public Mono<PageResponse<ScheduleResponse>> getByFleet(
             @PathVariable UUID fleetId,
+            Authentication auth,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
         return PageResponse.of(
-                scheduleUseCase.getAllByFleet(fleetId).map(ScheduleResponse::from),
+                accessScope.assertFleetAccess(getUserId(auth), fleetId)
+                        .thenMany(scheduleUseCase.getAllByFleet(fleetId)).map(ScheduleResponse::from),
                 page, size
         );
     }
@@ -124,30 +133,32 @@ public class ScheduleController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Publier un planning",
                description = "Passe le planning de DRAFT à PUBLISHED. Le rend visible aux conducteurs.")
-    public Mono<ScheduleResponse> publish(@PathVariable UUID id) {
-        return scheduleUseCase.publish(id).map(ScheduleResponse::from);
+    public Mono<ScheduleResponse> publish(@PathVariable UUID id, Authentication auth) {
+        return resourceAccess.assertScheduleAccess(getUserId(auth), id)
+                .then(scheduleUseCase.publish(id)).map(ScheduleResponse::from);
     }
 
     @PatchMapping("/{id}/publish")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Publier un planning (alias PATCH Manager UI)")
-    public Mono<ScheduleResponse> publishPatch(@PathVariable UUID id) {
-        return publish(id);
+    public Mono<ScheduleResponse> publishPatch(@PathVariable UUID id, Authentication auth) {
+        return publish(id, auth);
     }
 
     @PutMapping("/{id}/archive")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Archiver un planning",
                description = "Archive le planning. Action irréversible.")
-    public Mono<ScheduleResponse> archive(@PathVariable UUID id) {
-        return scheduleUseCase.archive(id).map(ScheduleResponse::from);
+    public Mono<ScheduleResponse> archive(@PathVariable UUID id, Authentication auth) {
+        return resourceAccess.assertScheduleAccess(getUserId(auth), id)
+                .then(scheduleUseCase.archive(id)).map(ScheduleResponse::from);
     }
 
     @PatchMapping("/{id}/archive")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Archiver un planning (alias PATCH Manager UI)")
-    public Mono<ScheduleResponse> archivePatch(@PathVariable UUID id) {
-        return archive(id);
+    public Mono<ScheduleResponse> archivePatch(@PathVariable UUID id, Authentication auth) {
+        return archive(id, auth);
     }
 
     // ── MISE À JOUR ───────────────────────────────────────────────────────────
@@ -158,13 +169,15 @@ public class ScheduleController {
                description = "Met à jour le titre et les notes. Interdit sur un planning archivé.")
     public Mono<ScheduleResponse> update(
             @PathVariable UUID id,
-            @RequestBody ScheduleRequest request) {
+            @RequestBody ScheduleRequest request,
+            Authentication auth) {
 
         ManageScheduleUseCase.UpdateScheduleCommand cmd =
                 new ManageScheduleUseCase.UpdateScheduleCommand(
                         id, request.title(), request.notes()
                 );
-        return scheduleUseCase.update(cmd).map(ScheduleResponse::from);
+        return resourceAccess.assertScheduleAccess(getUserId(auth), id)
+                .then(scheduleUseCase.update(cmd)).map(ScheduleResponse::from);
     }
 
     // ── SUPPRESSION ───────────────────────────────────────────────────────────
@@ -173,7 +186,8 @@ public class ScheduleController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Supprimer un planning")
-    public Mono<Void> delete(@PathVariable UUID id) {
-        return scheduleUseCase.delete(id);
+    public Mono<Void> delete(@PathVariable UUID id, Authentication auth) {
+        return resourceAccess.assertScheduleAccess(getUserId(auth), id)
+                .then(scheduleUseCase.delete(id));
     }
 }

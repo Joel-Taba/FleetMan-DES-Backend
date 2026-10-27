@@ -2,10 +2,15 @@ package com.yowyob.fleet.application.service;
 
 import com.yowyob.fleet.domain.exception.PlanningException;
 import com.yowyob.fleet.domain.model.Assignment;
+import com.yowyob.fleet.domain.model.Driver;
+import com.yowyob.fleet.domain.model.Schedule;
 import com.yowyob.fleet.domain.ports.in.ManageAssignmentUseCase;
 import com.yowyob.fleet.domain.ports.out.AssignmentPersistencePort;
 import com.yowyob.fleet.domain.ports.out.DriverPersistencePort;
-import com.yowyob.fleet.domain.ports.out.VehiclePersistencePort;
+import com.yowyob.fleet.domain.ports.out.SchedulePersistencePort;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.VehicleLocalEntity;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -16,6 +21,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -23,58 +29,42 @@ import java.util.UUID;
 public class AssignmentService implements ManageAssignmentUseCase {
 
     private final AssignmentPersistencePort assignmentPersistencePort;
-    private final VehiclePersistencePort vehiclePersistencePort;
+    private final VehicleLocalR2dbcRepository vehicleRepository;
     private final DriverPersistencePort driverPersistencePort;
+    private final SchedulePersistencePort schedulePersistencePort;
+    private final TripR2dbcRepository tripRepository;
+    private final ResourceAvailabilityService availability;
 
     @Override
+    @Transactional
     public Mono<Assignment> createAssignment(CreateAssignmentCommand cmd) {
-        // 1. Vérifier l'existence du véhicule
-        return vehiclePersistencePort.getLocalDataById(cmd.vehicleId())
-                .switchIfEmpty(Mono.error(PlanningException.vehicleNotFound(cmd.vehicleId())))
+        if (cmd.startDatetime() == null || cmd.endDatetime() == null
+                || !cmd.endDatetime().isAfter(cmd.startDatetime())) {
+            return Mono.error(PlanningException.invalidDates());
+        }
+        // 1. Véhicule existant, non supprimé, disponible (pas en maintenance)
+        return requireUsableVehicle(cmd.vehicleId())
                 .flatMap(vehicle -> {
-                    // 2. Vérifier que le véhicule est disponible (pas en maintenance)
-                    if ("MAINTENANCE".equals(vehicle.status())) {
-                        return Mono.error(PlanningException.vehicleNotAvailable(cmd.vehicleId()));
+                    // 2. L'affectation appartient à la flotte de son véhicule
+                    UUID fleetId = cmd.fleetId() != null ? cmd.fleetId() : vehicle.getFleetId();
+                    if (vehicle.getFleetId() == null || !vehicle.getFleetId().equals(fleetId)) {
+                        return Mono.<Assignment>error(PlanningException.vehicleNotInFleet(cmd.vehicleId()));
                     }
-                    // 3. Vérifier l'existence du conducteur
-                    return driverPersistencePort.findById(cmd.driverId())
-                            .switchIfEmpty(Mono.error(PlanningException.driverNotFound(cmd.driverId())));
-                })
-                .flatMap(driver -> {
-                    // 4. Vérifier que le conducteur est actif
-                    if ("INACTIVE".equals(driver.status())) {
-                        return Mono.error(PlanningException.driverInactive(cmd.driverId()));
-                    }
-                    // 5. Détecter les conflits véhicule
-                    return assignmentPersistencePort
-                            .findConflictingByVehicle(cmd.vehicleId(),
-                                    cmd.startDatetime(), cmd.endDatetime(), null)
-                            .hasElements()
-                            .flatMap(hasVehicleConflict -> {
-                                if (hasVehicleConflict) {
-                                    return Mono.error(PlanningException.vehicleConflict(
-                                            cmd.vehicleId(),
-                                            cmd.startDatetime().toString(),
-                                            cmd.endDatetime().toString()));
-                                }
-                                // 6. Détecter les conflits conducteur
-                                return assignmentPersistencePort
-                                        .findConflictingByDriver(cmd.driverId(),
-                                                cmd.startDatetime(), cmd.endDatetime(), null)
-                                        .hasElements();
-                            })
-                            .flatMap(hasDriverConflict -> {
-                                if (hasDriverConflict) {
-                                    return Mono.error(PlanningException.driverConflict(
-                                            cmd.driverId(),
-                                            cmd.startDatetime().toString(),
-                                            cmd.endDatetime().toString()));
-                                }
-                                // 7. Créer l'affectation
+                    // 3. Conducteur existant et actif — 4. planning compatible —
+                    // 5. créneau libre (affectations ET trajets)
+                    return requireActiveDriver(cmd.driverId())
+                            .then(checkSchedule(cmd.scheduleId(), fleetId, cmd.startDatetime(), cmd.endDatetime()))
+                            .then(availability.assertDriverLicensed(
+                                    cmd.driverId(), cmd.vehicleId(), cmd.startDatetime(), cmd.endDatetime()))
+                            .then(availability.assertAssignmentSlotFree(
+                                    cmd.vehicleId(), cmd.driverId(),
+                                    cmd.startDatetime(), cmd.endDatetime(), null))
+                            .then(Mono.defer(() -> {
+                                // 6. Créer l'affectation
                                 Assignment assignment = new Assignment(
                                         null,
                                         cmd.scheduleId(),
-                                        cmd.fleetId(),
+                                        fleetId,
                                         cmd.vehicleId(),
                                         cmd.driverId(),
                                         cmd.missionId(),
@@ -89,7 +79,7 @@ public class AssignmentService implements ManageAssignmentUseCase {
                                         null
                                 );
                                 return assignmentPersistencePort.save(assignment);
-                            });
+                            }));
                 })
                 .doOnSuccess(a -> log.info("Affectation créée : véhicule={}, conducteur={}, début={}",
                         a.getVehicleId(), a.getDriverId(), a.getStartDatetime()));
@@ -133,14 +123,20 @@ public class AssignmentService implements ManageAssignmentUseCase {
 
     @Override
     public Flux<Assignment> getConflicts(UUID managerId) {
-        // Retourne les affectations actives qui se chevauchent pour le même véhicule ou conducteur
+        // Affectations actives qui se chevauchent pour le même véhicule OU le même
+        // conducteur (doc §6.5) — seuls les conflits véhicule étaient remontés.
         return assignmentPersistencePort.findAllByManagerId(managerId)
                 .filter(Assignment::isActive)
                 .filterWhen(a -> assignmentPersistencePort
                         .findConflictingByVehicle(a.getVehicleId(),
                                 a.getStartDatetime(), a.getEndDatetime(), a.getId())
                         .hasElements()
-                        .map(hasConflict -> hasConflict)
+                        .flatMap(vehicleConflict -> Boolean.TRUE.equals(vehicleConflict)
+                                ? Mono.just(true)
+                                : assignmentPersistencePort
+                                        .findConflictingByDriver(a.getDriverId(),
+                                                a.getStartDatetime(), a.getEndDatetime(), a.getId())
+                                        .hasElements())
                 );
     }
 
@@ -149,10 +145,15 @@ public class AssignmentService implements ManageAssignmentUseCase {
                                                    LocalDateTime start,
                                                    LocalDateTime end,
                                                    UUID excludeAssignmentId) {
+        // Disponible = aucune affectation NI aucun trajet non terminé sur le créneau.
         return assignmentPersistencePort
                 .findConflictingByVehicle(vehicleId, start, end, excludeAssignmentId)
                 .hasElements()
-                .map(hasConflict -> !hasConflict); // true = disponible
+                .flatMap(conflict -> Boolean.TRUE.equals(conflict)
+                        ? Mono.just(true)
+                        : tripRepository.existsOverlappingTripForVehicle(
+                                vehicleId, start, end, LocalDateTime.now(), null))
+                .map(conflict -> !conflict); // true = disponible
     }
 
     @Override
@@ -163,7 +164,11 @@ public class AssignmentService implements ManageAssignmentUseCase {
         return assignmentPersistencePort
                 .findConflictingByDriver(driverId, start, end, excludeAssignmentId)
                 .hasElements()
-                .map(hasConflict -> !hasConflict); // true = disponible
+                .flatMap(conflict -> Boolean.TRUE.equals(conflict)
+                        ? Mono.just(true)
+                        : tripRepository.existsOverlappingTripForDriver(
+                                driverId, start, end, LocalDateTime.now(), null))
+                .map(conflict -> !conflict); // true = disponible
     }
 
     @Override
@@ -184,6 +189,7 @@ public class AssignmentService implements ManageAssignmentUseCase {
     }
 
     @Override
+    @Transactional
     public Mono<Assignment> updateResources(UUID id, UUID vehicleId, UUID driverId) {
         return assignmentPersistencePort.findById(id)
                 .switchIfEmpty(Mono.error(PlanningException.assignmentNotFound(id)))
@@ -194,71 +200,96 @@ public class AssignmentService implements ManageAssignmentUseCase {
                     }
                     UUID nextVehicle = vehicleId != null ? vehicleId : existing.getVehicleId();
                     UUID nextDriver = driverId != null ? driverId : existing.getDriverId();
-                    return vehiclePersistencePort.getLocalDataById(nextVehicle)
-                            .switchIfEmpty(Mono.error(PlanningException.vehicleNotFound(nextVehicle)))
+                    return requireUsableVehicle(nextVehicle)
                             .flatMap(v -> {
-                                if ("MAINTENANCE".equals(v.status())) {
-                                    return Mono.error(PlanningException.vehicleNotAvailable(nextVehicle));
+                                if (!existing.getFleetId().equals(v.getFleetId())) {
+                                    return Mono.<Void>error(PlanningException.vehicleNotInFleet(nextVehicle));
                                 }
-                                return driverPersistencePort.findById(nextDriver)
-                                        .switchIfEmpty(Mono.error(PlanningException.driverNotFound(nextDriver)));
+                                return requireActiveDriver(nextDriver);
                             })
-                            .flatMap(driver -> {
-                                if ("INACTIVE".equals(driver.status())) {
-                                    return Mono.error(PlanningException.driverInactive(nextDriver));
-                                }
-                                return assignmentPersistencePort
-                                        .findConflictingByVehicle(nextVehicle,
-                                                existing.getStartDatetime(), existing.getEndDatetime(), id)
-                                        .hasElements()
-                                        .flatMap(hasVehicleConflict -> {
-                                            if (hasVehicleConflict) {
-                                                return Mono.error(PlanningException.vehicleConflict(
-                                                        nextVehicle,
-                                                        existing.getStartDatetime().toString(),
-                                                        existing.getEndDatetime().toString()));
-                                            }
-                                            return assignmentPersistencePort
-                                                    .findConflictingByDriver(nextDriver,
-                                                            existing.getStartDatetime(), existing.getEndDatetime(), id)
-                                                    .hasElements();
-                                        })
-                                        .flatMap(hasDriverConflict -> {
-                                            if (hasDriverConflict) {
-                                                return Mono.error(PlanningException.driverConflict(
-                                                        nextDriver,
-                                                        existing.getStartDatetime().toString(),
-                                                        existing.getEndDatetime().toString()));
-                                            }
-                                            Assignment updated = new Assignment(
-                                                    existing.getId(),
-                                                    existing.getScheduleId(),
-                                                    existing.getFleetId(),
-                                                    nextVehicle,
-                                                    nextDriver,
-                                                    existing.getMissionId(),
-                                                    existing.getStartDatetime(),
-                                                    existing.getEndDatetime(),
-                                                    existing.getStatus(),
-                                                    existing.getStartLocation(),
-                                                    existing.getEndLocation(),
-                                                    existing.getEstimatedKm(),
-                                                    existing.getActualKm(),
-                                                    existing.getNotes(),
-                                                    existing.getCreatedAt()
-                                            );
-                                            return assignmentPersistencePort.save(updated);
-                                        });
-                            });
+                            .then(availability.assertDriverLicensed(
+                                    nextDriver, nextVehicle, existing.getStartDatetime(), existing.getEndDatetime()))
+                            .then(availability.assertAssignmentSlotFree(
+                                    nextVehicle, nextDriver,
+                                    existing.getStartDatetime(), existing.getEndDatetime(), id))
+                            .then(Mono.defer(() -> {
+                                Assignment updated = new Assignment(
+                                        existing.getId(),
+                                        existing.getScheduleId(),
+                                        existing.getFleetId(),
+                                        nextVehicle,
+                                        nextDriver,
+                                        existing.getMissionId(),
+                                        existing.getStartDatetime(),
+                                        existing.getEndDatetime(),
+                                        existing.getStatus(),
+                                        existing.getStartLocation(),
+                                        existing.getEndLocation(),
+                                        existing.getEstimatedKm(),
+                                        existing.getActualKm(),
+                                        existing.getNotes(),
+                                        existing.getCreatedAt()
+                                );
+                                return assignmentPersistencePort.save(updated);
+                            }));
                 });
     }
 
     @Override
     public Mono<Void> delete(UUID id) {
-        return assignmentPersistencePort.existsById(id)
-                .flatMap(exists -> {
-                    if (!exists) return Mono.error(PlanningException.assignmentNotFound(id));
+        return assignmentPersistencePort.findById(id)
+                .switchIfEmpty(Mono.error(PlanningException.assignmentNotFound(id)))
+                .flatMap(a -> {
+                    // Une affectation commencée ou terminée fait partie de l'historique
+                    // (kilométrage réel, suivi) : on l'annule, on ne la supprime pas.
+                    if (a.getStatus() == Assignment.Status.IN_PROGRESS
+                            || a.getStatus() == Assignment.Status.COMPLETED) {
+                        return Mono.error(PlanningException.assignmentNotDeletable(id));
+                    }
                     return assignmentPersistencePort.deleteById(id);
+                });
+    }
+
+    // ── Règles communes création / réaffectation ─────────────────────────────
+
+    private Mono<VehicleLocalEntity> requireUsableVehicle(UUID vehicleId) {
+        return vehicleRepository.findById(vehicleId)
+                .filter(v -> v.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(PlanningException.vehicleNotFound(vehicleId)))
+                .flatMap(v -> "MAINTENANCE".equals(v.getStatus())
+                        ? Mono.<VehicleLocalEntity>error(PlanningException.vehicleNotAvailable(vehicleId))
+                        : Mono.just(v));
+    }
+
+    /** Conducteur actif (un conducteur supprimé est INACTIVE) et rattaché à une flotte. */
+    private Mono<Void> requireActiveDriver(UUID driverId) {
+        return driverPersistencePort.findById(driverId)
+                .switchIfEmpty(Mono.error(PlanningException.driverNotFound(driverId)))
+                .flatMap((Driver driver) -> !"ACTIVE".equals(driver.status()) || driver.fleetId() == null
+                        ? Mono.<Void>error(PlanningException.driverInactive(driverId))
+                        : Mono.<Void>empty());
+    }
+
+    /**
+     * Une affectation rattachée à un planning doit appartenir à sa flotte, se situer dans
+     * sa période, et le planning ne doit pas être archivé (« données figées »).
+     */
+    private Mono<Void> checkSchedule(UUID scheduleId, UUID fleetId,
+                                     LocalDateTime start, LocalDateTime end) {
+        if (scheduleId == null) return Mono.empty();
+        return schedulePersistencePort.findById(scheduleId)
+                .switchIfEmpty(Mono.error(PlanningException.scheduleNotFound(scheduleId)))
+                .flatMap(schedule -> {
+                    if (schedule.getStatus() == Schedule.Status.ARCHIVED) {
+                        return Mono.<Void>error(PlanningException.scheduleArchived(scheduleId));
+                    }
+                    LocalDateTime periodStart = schedule.getStartDate().atStartOfDay();
+                    LocalDateTime periodEnd = schedule.getEndDate().plusDays(1).atStartOfDay();
+                    if (!fleetId.equals(schedule.getFleetId())
+                            || start.isBefore(periodStart) || end.isAfter(periodEnd)) {
+                        return Mono.<Void>error(PlanningException.scheduleMismatch());
+                    }
+                    return Mono.<Void>empty();
                 });
     }
 }

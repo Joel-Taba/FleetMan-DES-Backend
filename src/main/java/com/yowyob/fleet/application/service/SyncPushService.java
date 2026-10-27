@@ -56,6 +56,20 @@ public class SyncPushService {
             MutationItem item,
             String authorizationHeader
     ) {
+        String invalidReason = validateTarget(item);
+        if (invalidReason != null) {
+            log.warn("⛔ [SYNC] Mutation {} refusée : {} {} — {}",
+                    item.clientMutationId(), item.method(), item.path(), invalidReason);
+            return Mono.just(new MutationResult(
+                    item.clientMutationId(),
+                    "ERROR",
+                    400,
+                    null,
+                    null,
+                    "INVALID_MUTATION_TARGET",
+                    invalidReason
+            ));
+        }
         return idempotencyService.find(item.clientMutationId(), userId)
                 .flatMap(existing -> {
                     if (!idempotencyService.samePayload(existing, item.body())) {
@@ -176,6 +190,37 @@ public class SyncPushService {
                 errorCode.isBlank() ? null : errorCode,
                 errorMessage
         ));
+    }
+
+    private static final java.util.Set<String> ALLOWED_METHODS = java.util.Set.of("POST", "PUT", "PATCH", "DELETE");
+
+    /**
+     * Le chemin vient du client et est rejoué par le serveur avec le token de
+     * l'utilisateur : il doit rester une route relative de cette API. Sinon une
+     * URL absolue (« http://hôte-interne/… ») ferait appeler n'importe quelle
+     * cible par le backend (SSRF) en lui transmettant le token.
+     *
+     * @return la raison du refus, ou {@code null} si la cible est acceptable
+     */
+    private static String validateTarget(MutationItem item) {
+        if (item.clientMutationId() == null) {
+            return "clientMutationId manquant";
+        }
+        if (item.method() == null || !ALLOWED_METHODS.contains(item.method().toUpperCase())) {
+            return "Méthode non autorisée : " + item.method();
+        }
+        String path = item.path();
+        if (path == null || !path.startsWith("/api/v1/")) {
+            return "Chemin hors de l'API /api/v1/";
+        }
+        if (path.startsWith("/api/v1/sync/")) {
+            return "Les routes de synchronisation ne peuvent pas être rejouées";
+        }
+        if (path.contains("://") || path.contains("..") || path.contains("\\")
+                || path.chars().anyMatch(c -> c <= ' ' || c == 0x7F)) {
+            return "Chemin invalide";
+        }
+        return null;
     }
 
     private boolean requiresBody(HttpMethod method) {

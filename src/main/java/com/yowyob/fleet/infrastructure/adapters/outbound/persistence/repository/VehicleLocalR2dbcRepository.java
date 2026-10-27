@@ -31,13 +31,17 @@ public interface VehicleLocalR2dbcRepository extends ReactiveCrudRepository<Vehi
     Flux<VehicleLocalEntity> findByStatus(String status);
 
     Flux<VehicleLocalEntity> findByCurrentDriverId(UUID currentDriverId);
-    @Query("SELECT COUNT(*) FROM fleet.vehicles WHERE fleet_id = :fleetId AND status = :status")
+    // Les véhicules supprimés (deleted_at) ne comptent ni dans les statistiques ni dans
+    // le quota du plan : sans ce filtre, supprimer un véhicule ne libérait aucune place.
+    @Query("SELECT COUNT(*) FROM fleet.vehicles WHERE fleet_id = :fleetId AND status = :status AND deleted_at IS NULL")
     Mono<Long> countByFleetIdAndStatus(UUID fleetId, String status);
+    @Query("SELECT COUNT(*) FROM fleet.vehicles WHERE fleet_id = :fleetId AND deleted_at IS NULL")
     Mono<Long> countByFleetId(UUID fleetId);
+    @Query("SELECT COUNT(*) FROM fleet.vehicles WHERE manager_id = :managerId AND deleted_at IS NULL")
     Mono<Long> countByManagerId(UUID managerId);
     // --- AJOUT POUR LES KPIS ---
     // Compte les véhicules d'un manager ayant un statut spécifique (ex: 'ON_TRIP')
-    @Query("SELECT COUNT(*) FROM fleet.vehicles WHERE manager_id = :managerId AND status = :status")
+    @Query("SELECT COUNT(*) FROM fleet.vehicles WHERE manager_id = :managerId AND status = :status AND deleted_at IS NULL")
     Mono<Long> countByManagerIdAndStatus(UUID managerId, String status);
 
     Mono<VehicleLocalEntity> findByKernelResourceId(UUID kernelResourceId);

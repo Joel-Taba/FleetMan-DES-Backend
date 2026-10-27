@@ -13,8 +13,12 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- 2. Manager + flottes
-INSERT INTO fleet.fleet_managers (user_id, company_name)
-VALUES ('e4da1dfe-c7cd-43a7-b633-231d2cf7d3fb', 'Transport Express CM')
+-- created_by_admin_id obligatoire (migration 049) : admin principal, comme le rattrapage de la 048.
+INSERT INTO fleet.fleet_managers (user_id, company_name, created_by_admin_id)
+VALUES ('e4da1dfe-c7cd-43a7-b633-231d2cf7d3fb', 'Transport Express CM',
+        (SELECT pa.user_id FROM fleet.platform_admins pa
+         JOIN fleet.users u ON u.id = pa.user_id
+         WHERE u.email = 'admin@fleetman.cm' LIMIT 1))
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO fleet.fleets (id, manager_id, name, phone_number, kernel_organization_id)

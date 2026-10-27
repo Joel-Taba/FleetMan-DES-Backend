@@ -16,6 +16,9 @@ public interface ExpenseR2dbcRepository extends ReactiveCrudRepository<ExpenseEn
 
     Flux<ExpenseEntity> findByVehicleId(UUID vehicleId);
 
+    /** Dépense(s) générée(s) depuis une opération (plein, maintenance, incident). */
+    Flux<ExpenseEntity> findBySourceId(UUID sourceId);
+
     Flux<ExpenseEntity> findByDriverId(UUID driverId);
 
     Flux<ExpenseEntity> findByFleetId(UUID fleetId);

@@ -38,7 +38,7 @@ public class VehicleDocument {
     private String docNumber;
     private String issuer;
     private LocalDate issueDate;
-    private final LocalDate expiryDate;
+    private LocalDate expiryDate;
     private String fileUrl;
     private String fileOriginalName;
     private String fileMimeType;
@@ -108,6 +108,33 @@ public class VehicleDocument {
     public void refreshStatus() {
         if (this.status != Status.PENDING_RENEWAL) {
             this.status = computeStatus(this.expiryDate);
+        }
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /** La délivrance ne peut pas être postérieure à l'expiration. */
+    public static void requireConsistentDates(LocalDate issueDate, LocalDate expiryDate) {
+        if (issueDate != null && expiryDate != null && issueDate.isAfter(expiryDate)) {
+            throw new IllegalArgumentException("La date de délivrance doit précéder la date d'expiration.");
+        }
+    }
+
+    /**
+     * Met à jour l'identification et la validité du document (ex. renouvellement). Une
+     * nouvelle date d'expiration recalcule le statut, y compris « en renouvellement ».
+     * Ces champs, envoyés par le formulaire de modification, étaient ignorés : un document
+     * renouvelé restait « expiré ».
+     */
+    public void updateDetails(String docNumber, String issuer, LocalDate issueDate, LocalDate expiryDate) {
+        LocalDate nextIssue = issueDate != null ? issueDate : this.issueDate;
+        LocalDate nextExpiry = expiryDate != null ? expiryDate : this.expiryDate;
+        requireConsistentDates(nextIssue, nextExpiry);
+        if (docNumber != null) this.docNumber = docNumber;
+        if (issuer != null) this.issuer = issuer;
+        this.issueDate = nextIssue;
+        if (expiryDate != null && !expiryDate.equals(this.expiryDate)) {
+            this.expiryDate = expiryDate;
+            this.status = computeStatus(expiryDate);
         }
         this.updatedAt = LocalDateTime.now();
     }

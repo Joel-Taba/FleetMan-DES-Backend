@@ -30,6 +30,7 @@ import java.util.UUID;
 public class KpiController {
 
     private final KpiUseCase kpiUseCase;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -45,10 +46,12 @@ public class KpiController {
     public Mono<KpiSnapshot> getFleetKpi(
             @PathVariable UUID fleetId,
             @Parameter(description = "Granularité")
-            @RequestParam(defaultValue = "MONTHLY") String period) {
+            @RequestParam(defaultValue = "MONTHLY") String period,
+            Authentication auth) {
 
-        return kpiUseCase.getLatestFleetKpi(fleetId,
-                KpiSnapshot.PeriodType.valueOf(period.toUpperCase()));
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .then(kpiUseCase.getLatestFleetKpi(fleetId,
+                KpiSnapshot.PeriodType.valueOf(period.toUpperCase())));
     }
 
     @GetMapping("/fleet/{fleetId}/history")
@@ -61,11 +64,13 @@ public class KpiController {
             @Parameter(example = "2026-01-01")
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @Parameter(example = "2026-06-30")
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            Authentication auth) {
 
-        return kpiUseCase.getFleetKpiHistory(fleetId,
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .then(kpiUseCase.getFleetKpiHistory(fleetId,
                 KpiSnapshot.PeriodType.valueOf(period.toUpperCase()), from, to)
-                .collectList();
+                .collectList());
     }
 
     @GetMapping("/fleet/{fleetId}/compare")
@@ -79,11 +84,13 @@ public class KpiController {
             @Parameter(description = "Début période 1", example = "2026-04-01")
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period1Start,
             @Parameter(description = "Début période 2", example = "2026-05-01")
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period2Start) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period2Start,
+            Authentication auth) {
 
-        return kpiUseCase.compareFleetKpi(fleetId,
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .then(kpiUseCase.compareFleetKpi(fleetId,
                 KpiSnapshot.PeriodType.valueOf(period.toUpperCase()),
-                period1Start, period2Start);
+                period1Start, period2Start));
     }
 
     @GetMapping("/fleet/{fleetId}/top-vehicles")
@@ -94,11 +101,13 @@ public class KpiController {
             @PathVariable UUID fleetId,
             @RequestParam(defaultValue = "MONTHLY") String period,
             @Parameter(description = "Nombre de résultats", example = "5")
-            @RequestParam(defaultValue = "5") int limit) {
+            @RequestParam(defaultValue = "5") int limit,
+            Authentication auth) {
 
-        return kpiUseCase.getTopVehiclesByKm(fleetId,
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .then(kpiUseCase.getTopVehiclesByKm(fleetId,
                 KpiSnapshot.PeriodType.valueOf(period.toUpperCase()), limit)
-                .collectList();
+                .collectList());
     }
 
     @GetMapping("/fleet/{fleetId}/top-drivers")
@@ -108,11 +117,13 @@ public class KpiController {
     public Mono<List<KpiSnapshot>> getTopDrivers(
             @PathVariable UUID fleetId,
             @RequestParam(defaultValue = "MONTHLY") String period,
-            @RequestParam(defaultValue = "5") int limit) {
+            @RequestParam(defaultValue = "5") int limit,
+            Authentication auth) {
 
-        return kpiUseCase.getTopDriversByScore(fleetId,
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .then(kpiUseCase.getTopDriversByScore(fleetId,
                 KpiSnapshot.PeriodType.valueOf(period.toUpperCase()), limit)
-                .collectList();
+                .collectList());
     }
 
     // ── KPIs Véhicule / Conducteur ────────────────────────────────────────────
@@ -122,10 +133,12 @@ public class KpiController {
     @Operation(summary = "KPIs d'un véhicule")
     public Mono<KpiSnapshot> getVehicleKpi(
             @PathVariable UUID vehicleId,
-            @RequestParam(defaultValue = "MONTHLY") String period) {
+            @RequestParam(defaultValue = "MONTHLY") String period,
+            Authentication auth) {
 
-        return kpiUseCase.getLatestVehicleKpi(vehicleId,
-                KpiSnapshot.PeriodType.valueOf(period.toUpperCase()));
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                .then(kpiUseCase.getLatestVehicleKpi(vehicleId,
+                KpiSnapshot.PeriodType.valueOf(period.toUpperCase())));
     }
 
     @GetMapping("/vehicle/{vehicleId}/history")
@@ -135,11 +148,13 @@ public class KpiController {
             @PathVariable UUID vehicleId,
             @RequestParam(defaultValue = "MONTHLY") String period,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            Authentication auth) {
 
-        return kpiUseCase.getVehicleKpiHistory(vehicleId,
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                .then(kpiUseCase.getVehicleKpiHistory(vehicleId,
                 KpiSnapshot.PeriodType.valueOf(period.toUpperCase()), from, to)
-                .collectList();
+                .collectList());
     }
 
     @GetMapping("/driver/{driverId}")
@@ -147,10 +162,12 @@ public class KpiController {
     @Operation(summary = "KPIs d'un conducteur")
     public Mono<KpiSnapshot> getDriverKpi(
             @PathVariable UUID driverId,
-            @RequestParam(defaultValue = "MONTHLY") String period) {
+            @RequestParam(defaultValue = "MONTHLY") String period,
+            Authentication auth) {
 
-        return kpiUseCase.getLatestDriverKpi(driverId,
-                KpiSnapshot.PeriodType.valueOf(period.toUpperCase()));
+        return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                .then(kpiUseCase.getLatestDriverKpi(driverId,
+                KpiSnapshot.PeriodType.valueOf(period.toUpperCase())));
     }
 
     // ── Export CSV ────────────────────────────────────────────────────────────
@@ -164,9 +181,11 @@ public class KpiController {
             @PathVariable UUID fleetId,
             @RequestParam(defaultValue = "MONTHLY") String period,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            Authentication auth) {
 
-        return CsvExportUtil.export(
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .then(CsvExportUtil.export(
                 kpiUseCase.getFleetKpiHistory(fleetId,
                         KpiSnapshot.PeriodType.valueOf(period.toUpperCase()), from, to),
                 List.of("Période", "Début", "Fin", "Km totaux", "Trajets",
@@ -194,7 +213,7 @@ public class KpiController {
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"kpis-" + fleetId + "-" + period + ".csv\"")
                 .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
-                .body(csv));
+                .body(csv)));
     }
 
     @GetMapping(value = "/vehicle/{vehicleId}/export", produces = "text/csv")
@@ -204,9 +223,11 @@ public class KpiController {
             @PathVariable UUID vehicleId,
             @RequestParam(defaultValue = "MONTHLY") String period,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            Authentication auth) {
 
-        return CsvExportUtil.export(
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                .then(CsvExportUtil.export(
                 kpiUseCase.getVehicleKpiHistory(vehicleId,
                         KpiSnapshot.PeriodType.valueOf(period.toUpperCase()), from, to),
                 List.of("Période", "Début", "Fin", "Km totaux", "Trajets",
@@ -231,7 +252,7 @@ public class KpiController {
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"kpis-vehicle-" + vehicleId + "-" + period + ".csv\"")
                 .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
-                .body(csv));
+                .body(csv)));
     }
 
     // ── Recalcul admin ────────────────────────────────────────────────────────
@@ -245,9 +266,11 @@ public class KpiController {
             @PathVariable UUID fleetId,
             @RequestParam(defaultValue = "MONTHLY") String period,
             @Parameter(example = "2026-05-01")
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart,
+            Authentication auth) {
 
-        return kpiUseCase.recalculateFleetKpi(fleetId,
-                KpiSnapshot.PeriodType.valueOf(period.toUpperCase()), periodStart);
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .then(kpiUseCase.recalculateFleetKpi(fleetId,
+                KpiSnapshot.PeriodType.valueOf(period.toUpperCase()), periodStart));
     }
 }

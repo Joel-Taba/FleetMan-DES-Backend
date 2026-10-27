@@ -9,6 +9,7 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.RedisTeleme
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.TripDetailEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.TripEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.TripMissionSubmissionEntity;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FuelRechargeR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.OperationalParameterR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripDetailR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripMissionSubmissionR2dbcRepository;
@@ -49,28 +50,49 @@ public class TripService implements ManageTripUseCase {
     private final ExternalGeofencePort geofenceApi;
     private final DatabaseClient db;
     private final AccessScopeService accessScope;
+    private final ResourceAvailabilityService availability;
+    private final FuelRechargeR2dbcRepository fuelRechargeRepository;
 
     // ── Création d'un trajet (Manager) ────────────────────────────────────────
 
     @Override
     @Transactional
     public Mono<Trip> createTrip(CreateTripCommand cmd) {
+        LocalDateTime slotStart = ResourceAvailabilityService.slotStart(cmd.startDate(), cmd.startTime());
+        LocalDateTime slotEnd = ResourceAvailabilityService.slotEnd(cmd.scheduledReturnDatetime());
+        if (!slotEnd.isAfter(slotStart)) {
+            return Mono.error(TripException.invalidSchedule());
+        }
         return Mono.zip(
             vehicleRepository
                 .findById(cmd.vehicleId())
+                .filter(v -> v.getDeletedAt() == null)
                 .switchIfEmpty(
                     Mono.error(TripException.notFound(cmd.vehicleId()))
                 ),
+            // Sans ce switchIfEmpty, un conducteur inexistant vidait le zip :
+            // la requête répondait 201 sans corps et sans rien créer.
             driverPersistence.findById(cmd.driverId())
+                .switchIfEmpty(
+                    Mono.error(TripException.notFound(cmd.driverId()))
+                )
         ).flatMap(tuple -> {
             var vehicle = tuple.getT1();
-            if (!"AVAILABLE".equals(vehicle.getStatus())) {
-                return Mono.error(TripException.vehicleOccupied());
+            var driver = tuple.getT2();
+            // Disponibilité par créneau : un véhicule actuellement en trajet peut être
+            // planifié sur un créneau ultérieur ; seul un véhicule en maintenance est exclu.
+            if ("MAINTENANCE".equals(vehicle.getStatus())) {
+                return Mono.error(TripException.vehicleUnavailable(vehicle.getStatus()));
             }
 
-            UUID fleetId = cmd.fleetId() != null ? cmd.fleetId() : vehicle.getFleetId();
+            UUID fleetId = vehicle.getFleetId();
             if (fleetId == null) {
                 return Mono.error(new IllegalArgumentException("fleetId introuvable pour ce véhicule"));
+            }
+            // Le trajet appartient à la flotte de son véhicule : une flotte différente
+            // permettait d'utiliser le véhicule d'une autre flotte (voire d'un autre gestionnaire).
+            if (cmd.fleetId() != null && !cmd.fleetId().equals(fleetId)) {
+                return Mono.error(TripException.vehicleNotInFleet());
             }
             CreateTripCommand resolvedCmd = new CreateTripCommand(
                     cmd.vehicleId(),
@@ -92,21 +114,15 @@ public class TripService implements ManageTripUseCase {
                     cmd.details()
             );
 
+            // Le véhicule n'est plus réservé (ON_TRIP) dès la planification : l'exclusivité
+            // est garantie par créneau horaire (trajets ET affectations), ce qui permet de
+            // planifier plusieurs trajets successifs pour le même véhicule. Il passe ON_TRIP
+            // au départ réel (startTrip).
             return accessScope.assertTripFleetAccess(cmd.managerId(), fleetId)
-                .then(assertNoActiveTripForDriver(cmd.driverId(), null))
-                .then(assertNoActiveTripForVehicle(cmd.vehicleId(), null))
-                // Le véhicule est réservé dès la planification (statut SCHEDULED), pas
-                // seulement au départ effectif : sinon il reste affichable comme
-                // "disponible" alors qu'un trajet lui est déjà promis (cancelTrip()
-                // suppose d'ailleurs déjà ce comportement pour libérer le véhicule
-                // d'un trajet SCHEDULED annulé — cette réservation à la création
-                // complète ce qui n'était qu'à moitié implémenté).
-                .then(Mono.defer(() -> {
-                    vehicle.setStatus("ON_TRIP");
-                    vehicle.setNew(false);
-                    return vehicleRepository.save(vehicle);
-                }))
-                .then(saveNewTrip(resolvedCmd));
+                .then(availability.assertDriverEngageable(cmd.managerId(), driver, TripException::driverInactive))
+                .then(availability.assertDriverLicensed(cmd.driverId(), cmd.vehicleId(), slotStart, slotEnd))
+                .then(availability.assertTripSlotFree(cmd.vehicleId(), cmd.driverId(), slotStart, slotEnd, null))
+                .then(Mono.defer(() -> saveNewTrip(resolvedCmd)));
         });
     }
 
@@ -155,36 +171,58 @@ public class TripService implements ManageTripUseCase {
                     return Mono.error(TripException.invalidStartState());
                 }
 
+                LocalDateTime now = LocalDateTime.now().withNano(0);
+                LocalDateTime plannedEnd = ResourceAvailabilityService.slotEnd(trip.getScheduledReturnDatetime());
+                // Créneau réel à partir du départ effectif : un départ anticipé peut
+                // empiéter sur un autre trajet ou une affectation planifiés entre-temps.
+                LocalDateTime actualEnd = plannedEnd.isAfter(now) ? plannedEnd : now.plusMinutes(1);
+
                 return vehicleRepository
                     .findById(trip.getVehicleId())
+                    .filter(v -> v.getDeletedAt() == null)
                     .switchIfEmpty(
                         Mono.error(TripException.notFound(trip.getVehicleId()))
                     )
                     .flatMap(vehicle -> {
-                        // Le véhicule est déjà réservé (ON_TRIP) pour CE trajet depuis sa
-                        // création (voir createTrip) : plus rien à vérifier ici, l'exclusivité
-                        // a déjà été garantie par assertNoActiveTripForVehicle à la création.
+                        if ("MAINTENANCE".equals(vehicle.getStatus())) {
+                            return Mono.error(TripException.vehicleUnavailable(vehicle.getStatus()));
+                        }
+                        return driverPersistence.findById(trip.getDriverId())
+                            .switchIfEmpty(Mono.error(TripException.notFound(trip.getDriverId())))
+                            .flatMap(driver -> availability.assertDriverEngageable(
+                                managerId, driver, TripException::driverInactive))
+                            // Le permis peut avoir expiré depuis la planification.
+                            .then(availability.assertDriverLicensed(
+                                trip.getDriverId(), trip.getVehicleId(), now, actualEnd))
+                            .then(tripRepository.existsInProgressTripForVehicle(trip.getVehicleId(), tripId))
+                            .flatMap(busy -> Boolean.TRUE.equals(busy)
+                                ? Mono.<Void>error(TripException.vehicleOccupied())
+                                : Mono.<Void>empty())
+                            .then(tripRepository.existsInProgressTripForDriver(trip.getDriverId(), tripId))
+                            .flatMap(busy -> Boolean.TRUE.equals(busy)
+                                ? Mono.<Void>error(TripException.driverOccupied())
+                                : Mono.<Void>empty())
+                            .then(availability.assertTripSlotFree(
+                                trip.getVehicleId(), trip.getDriverId(), now, actualEnd, tripId))
+                            .then(Mono.defer(() -> {
+                                trip.setStatus("DEPARTED");
+                                trip.setStartDate(now.toLocalDate());
+                                trip.setStartTime(now.toLocalTime());
+                                trip.setDepartureRegisteredAt(Instant.now());
+                                trip.setNew(false);
 
-                        LocalDateTime now = LocalDateTime.now();
-                        trip.setStatus("DEPARTED");
-                        trip.setStartDate(now.toLocalDate());
-                        trip.setStartTime(now.toLocalTime().withNano(0));
-                        trip.setDepartureRegisteredAt(Instant.now());
-                        trip.setNew(false);
+                                vehicle.setStatus("ON_TRIP");
+                                vehicle.setNew(false);
 
-                        vehicle.setStatus("ON_TRIP");
-                        vehicle.setNew(false);
-
-                        return vehicleRepository
-                            .save(vehicle)
-                            .then(
-                                linkDriverVehicleForTrip(
-                                    trip.getDriverId(),
-                                    trip.getVehicleId()
-                                )
-                            )
-                            .then(tripRepository.save(trip))
-                            .flatMap(saved -> loadTripWithDetails(saved.getId()));
+                                return vehicleRepository
+                                    .save(vehicle)
+                                    .then(linkDriverVehicleIfFree(trip.getDriverId(), trip.getVehicleId()))
+                                    .flatMap(linked -> {
+                                        trip.setDriverVehicleLinked(linked);
+                                        return tripRepository.save(trip);
+                                    })
+                                    .flatMap(saved -> loadTripWithDetails(saved.getId()));
+                            }));
                     });
             });
     }
@@ -193,12 +231,13 @@ public class TripService implements ManageTripUseCase {
 
     @Override
     @Transactional
-    public Mono<Trip> registerReturn(RegisterReturnCommand cmd) {
+    public Mono<Trip> registerReturn(RegisterReturnCommand cmd, UUID actorId) {
         return tripRepository
             .findByTripCode(cmd.tripCode())
             .switchIfEmpty(
                 Mono.error(TripException.notFoundByCode(cmd.tripCode()))
             )
+            .flatMap(trip -> accessScope.assertTripFleetAccess(actorId, trip.getFleetId()).thenReturn(trip))
             .flatMap(trip -> {
                 if (
                     "COMPLETED".equals(trip.getStatus()) ||
@@ -206,130 +245,174 @@ public class TripService implements ManageTripUseCase {
                 ) {
                     return Mono.error(TripException.actionOnCompletedTrip());
                 }
-
-                // Calculs automatiques
-                BigDecimal computedDistance = null;
+                // Cycle SCHEDULED → DEPARTED → (RETURNING) → COMPLETED : sans départ
+                // enregistré, ni l'heure de départ réelle ni le créneau ne sont connus.
+                if (!isInProgress(trip.getStatus())) {
+                    return Mono.error(TripException.notDeparted());
+                }
+                if (
+                    trip.getStartDate() != null &&
+                    LocalDateTime.of(cmd.returnDate(), cmd.returnTime()).isBefore(
+                        ResourceAvailabilityService.slotStart(trip.getStartDate(), trip.getStartTime()))
+                ) {
+                    return Mono.error(TripException.returnBeforeDeparture());
+                }
+                // Même règle que le formulaire de retour du front : sans elle, un
+                // replay offline ou un appel API direct ferait reculer l'odomètre.
                 if (
                     cmd.returnKmIndex() != null &&
-                    trip.getDepartureKmIndex() != null
+                    trip.getDepartureKmIndex() != null &&
+                    cmd.returnKmIndex().compareTo(trip.getDepartureKmIndex()) < 0
                 ) {
-                    computedDistance = cmd
-                        .returnKmIndex()
-                        .subtract(trip.getDepartureKmIndex());
+                    return Mono.error(TripException.invalidReturnKmIndex());
                 }
-                BigDecimal computedFuel = null;
-                if (
-                    trip.getDepartureFuelIndex() != null &&
-                    cmd.returnFuelIndex() != null
-                ) {
-                    computedFuel = trip
-                        .getDepartureFuelIndex()
-                        .subtract(cmd.returnFuelIndex());
-                }
-                Integer durationMinutes = null;
-                if (
-                    trip.getStartDate() != null && trip.getStartTime() != null
-                ) {
-                    LocalDateTime depart = LocalDateTime.of(
-                        trip.getStartDate(),
-                        trip.getStartTime()
-                    );
-                    LocalDateTime retour = LocalDateTime.of(
-                        cmd.returnDate(),
-                        cmd.returnTime()
-                    );
-                    durationMinutes =
-                        (int) java.time.temporal.ChronoUnit.MINUTES.between(
-                            depart,
-                            retour
+
+                return refueledDuringTrip(trip).flatMap(refueled -> {
+                    // Calculs automatiques
+                    BigDecimal computedDistance = null;
+                    if (
+                        cmd.returnKmIndex() != null &&
+                        trip.getDepartureKmIndex() != null
+                    ) {
+                        computedDistance = cmd
+                            .returnKmIndex()
+                            .subtract(trip.getDepartureKmIndex());
+                    }
+                    // Consommation = départ + pleins enregistrés pendant le trajet − retour
+                    // (départ − retour seul devenait négatif dès qu'un plein était fait en route).
+                    BigDecimal computedFuel;
+                    try {
+                        computedFuel = computeFuelConsumed(
+                            trip.getDepartureFuelIndex(), refueled, cmd.returnFuelIndex());
+                    } catch (TripException e) {
+                        return Mono.error(e);
+                    }
+                    Integer durationMinutes = null;
+                    if (
+                        trip.getStartDate() != null && trip.getStartTime() != null
+                    ) {
+                        LocalDateTime depart = LocalDateTime.of(
+                            trip.getStartDate(),
+                            trip.getStartTime()
                         );
-                }
+                        LocalDateTime retour = LocalDateTime.of(
+                            cmd.returnDate(),
+                            cmd.returnTime()
+                        );
+                        durationMinutes =
+                            (int) java.time.temporal.ChronoUnit.MINUTES.between(
+                                depart,
+                                retour
+                            );
+                    }
 
-                trip.setStatus("COMPLETED");
-                trip.setEndDate(cmd.returnDate());
-                trip.setEndTime(cmd.returnTime());
-                trip.setReturnLocation(cmd.returnLocation());
-                trip.setReturnLat(cmd.returnLat());
-                trip.setReturnLng(cmd.returnLng());
-                trip.setReturnKmIndex(cmd.returnKmIndex());
-                trip.setReturnFuelIndex(cmd.returnFuelIndex());
-                trip.setReturnRegisteredAt(Instant.now());
-                trip.setComputedDistanceKm(computedDistance);
-                trip.setComputedFuelConsumed(computedFuel);
-                trip.setDistanceKm(
-                    computedDistance != null
-                        ? computedDistance.doubleValue()
-                        : null
-                );
-                trip.setDurationMinutes(durationMinutes);
-                trip.setNew(false);
+                    trip.setStatus("COMPLETED");
+                    trip.setEndDate(cmd.returnDate());
+                    trip.setEndTime(cmd.returnTime());
+                    trip.setReturnLocation(cmd.returnLocation());
+                    trip.setReturnLat(cmd.returnLat());
+                    trip.setReturnLng(cmd.returnLng());
+                    trip.setReturnKmIndex(cmd.returnKmIndex());
+                    trip.setReturnFuelIndex(cmd.returnFuelIndex());
+                    trip.setReturnRegisteredAt(Instant.now());
+                    trip.setComputedDistanceKm(computedDistance);
+                    trip.setComputedFuelConsumed(computedFuel);
+                    trip.setDistanceKm(
+                        computedDistance != null
+                            ? computedDistance.doubleValue()
+                            : null
+                    );
+                    trip.setDurationMinutes(durationMinutes);
+                    trip.setNew(false);
 
-                // Libérer véhicule
-                Mono<Void> vehicleFree = vehicleRepository
-                    .findById(trip.getVehicleId())
-                    .flatMap(v -> {
-                        v.setStatus("AVAILABLE");
-                        v.setNew(false);
-                        return vehicleRepository.save(v);
-                    })
-                    .then();
+                    // Libérer véhicule
+                    Mono<Void> vehicleFree = releaseVehicle(trip.getVehicleId(), trip.getId());
 
-                // Mise à jour odomètre
-                final BigDecimal dist = computedDistance;
-                Mono<Void> odometer = (dist != null)
-                    ? operationalRepo
-                          .findByVehicleId(trip.getVehicleId())
-                          .flatMap(op -> {
-                              double cur =
-                                  op.getOdometerReading() != null
-                                      ? op.getOdometerReading().doubleValue()
-                                      : 0;
-                              op.setOdometerReading(
-                                  BigDecimal.valueOf(cur + dist.doubleValue())
-                              );
-                              op.setMileage(
-                                  BigDecimal.valueOf(cur + dist.doubleValue())
-                              );
-                              return operationalRepo.save(op);
-                          })
-                          .then()
-                    : Mono.empty();
+                    // Mise à jour odomètre : l'index km de retour EST le relevé du compteur
+                    // (doc §7.6 « vehicle.currentKm = returnKmIndex »). Y ajouter la distance
+                    // comptait deux fois les km déjà remontés (télémétrie, saisie chauffeur).
+                    final BigDecimal returnKm = cmd.returnKmIndex();
+                    Mono<Void> odometer = (returnKm != null)
+                        ? operationalRepo
+                              .findByVehicleId(trip.getVehicleId())
+                              .flatMap(op -> {
+                                  BigDecimal cur = op.getOdometerReading() != null
+                                      ? op.getOdometerReading()
+                                      : BigDecimal.ZERO;
+                                  BigDecimal next = returnKm.max(cur);
+                                  op.setOdometerReading(next);
+                                  op.setMileage(next);
+                                  return operationalRepo.save(op);
+                              })
+                              .then()
+                        : Mono.empty();
 
-                // Mise à jour quantités retour dans les détails
-                Mono<Void> detailsUpdate = (cmd.detailUpdates() != null &&
-                    !cmd.detailUpdates().isEmpty())
-                    ? Flux.fromIterable(cmd.detailUpdates())
-                          .flatMap(du ->
-                              detailRepository
-                                  .findById(du.detailId())
-                                  .flatMap(de -> {
-                                      de.setReturnQuantity(du.returnQuantity());
-                                      de.setNew(false);
-                                      return detailRepository.save(de);
-                                  })
-                          )
-                          .then()
-                    : Mono.empty();
+                    // Mise à jour quantités retour dans les détails (de CE trajet uniquement)
+                    Mono<Void> detailsUpdate = (cmd.detailUpdates() != null &&
+                        !cmd.detailUpdates().isEmpty())
+                        ? Flux.fromIterable(cmd.detailUpdates())
+                              .flatMap(du ->
+                                  detailRepository
+                                      .findById(du.detailId())
+                                      .filter(de -> trip.getId().equals(de.getTripId()))
+                                      .flatMap(de -> {
+                                          de.setReturnQuantity(du.returnQuantity());
+                                          de.setNew(false);
+                                          return detailRepository.save(de);
+                                      })
+                              )
+                              .then()
+                        : Mono.empty();
 
-                final TripEntity tripToSave = trip;
-                Mono<Void> unlinkPair = unlinkDriverVehicleForTrip(
-                    trip.getDriverId(),
-                    trip.getVehicleId()
-                );
-                return Mono.when(vehicleFree, odometer, detailsUpdate, unlinkPair)
-                    .then(tripRepository.save(tripToSave))
-                    .flatMap(saved -> loadTripWithDetails(saved.getId()));
+                    final TripEntity tripToSave = trip;
+                    Mono<Void> unlinkPair = trip.isDriverVehicleLinked()
+                        ? unlinkDriverVehicleForTrip(trip.getDriverId(), trip.getVehicleId())
+                        : Mono.empty();
+                    return Mono.when(vehicleFree, odometer, detailsUpdate, unlinkPair)
+                        .then(tripRepository.save(tripToSave))
+                        .flatMap(saved -> loadTripWithDetails(saved.getId()));
+                });
             });
+    }
+
+    /**
+     * Litres rechargés sur le véhicule depuis le départ réel du trajet jusqu'à maintenant :
+     * le véhicule est engagé sur ce trajet tant que son retour n'est pas enregistré, et une
+     * recharge est datée de sa saisie (qui peut suivre l'heure de retour déclarée).
+     */
+    private Mono<BigDecimal> refueledDuringTrip(TripEntity trip) {
+        if (trip.getStartDate() == null || trip.getDepartureFuelIndex() == null) {
+            return Mono.just(BigDecimal.ZERO);
+        }
+        LocalDateTime departure = ResourceAvailabilityService.slotStart(trip.getStartDate(), trip.getStartTime());
+        return fuelRechargeRepository
+            .sumQuantityByVehicleAndPeriod(trip.getVehicleId(), departure, LocalDateTime.now().plusSeconds(1))
+            .defaultIfEmpty(BigDecimal.ZERO);
+    }
+
+    /**
+     * Carburant consommé (L) = départ + rechargé pendant le trajet − retour ; null si un index
+     * manque. Un résultat négatif signifie qu'un plein n'a pas été enregistré (ou un index
+     * erroné) : le retour est refusé plutôt que d'enregistrer une consommation impossible.
+     */
+    static BigDecimal computeFuelConsumed(BigDecimal departure, BigDecimal refueled, BigDecimal ret) {
+        if (departure == null || ret == null) return null;
+        BigDecimal available = departure.add(refueled != null ? refueled : BigDecimal.ZERO);
+        if (ret.compareTo(available) > 0) {
+            throw TripException.returnFuelExceedsAvailable(available);
+        }
+        return available.subtract(ret);
     }
 
     // ── Recherche par code ────────────────────────────────────────────────────
 
     @Override
-    public Mono<Trip> getTripByCode(String tripCode) {
+    public Mono<Trip> getTripByCode(String tripCode, UUID actorId) {
         return tripRepository
             .findByTripCode(tripCode)
             .switchIfEmpty(Mono.error(TripException.notFoundByCode(tripCode)))
-            .flatMap(e -> loadTripWithDetails(e.getId()));
+            .flatMap(e -> accessScope.assertTripFleetAccess(actorId, e.getFleetId())
+                    .then(loadTripWithDetails(e.getId())));
     }
 
     // ── Changer de conducteur ─────────────────────────────────────────────────
@@ -349,25 +432,10 @@ public class TripService implements ManageTripUseCase {
                 if (!isModifiable(trip.getStatus())) {
                     return Mono.error(TripException.tripNotModifiable());
                 }
-                return assertNoActiveTripForDriver(newDriverId, tripId)
-                    .then(
-                        driverPersistence
-                            .findById(newDriverId)
-                            .switchIfEmpty(
-                                Mono.error(
-                                    TripException.notFound(newDriverId)
-                                )
-                            )
-                    )
-                    .flatMap(driver -> {
-                        trip.setDriverId(newDriverId);
-                        trip.setNew(false);
-                        return tripRepository
-                            .save(trip)
-                            .flatMap(saved ->
-                                loadTripWithDetails(saved.getId())
-                            );
-                    });
+                return changeResources(trip, managerId, trip.getVehicleId(), newDriverId,
+                        trip.getStartDate(), trip.getStartTime())
+                    .flatMap(tripRepository::save)
+                    .flatMap(saved -> loadTripWithDetails(saved.getId()));
             });
     }
 
@@ -388,30 +456,22 @@ public class TripService implements ManageTripUseCase {
                     return Mono.error(TripException.actionOnCompletedTrip());
                 }
 
-                boolean wasOnTrip =
-                    "DEPARTED".equals(trip.getStatus()) ||
-                    "SCHEDULED".equals(trip.getStatus());
+                // Seul un trajet parti (aller OU retour) mobilise physiquement le véhicule.
+                // RETURNING était oublié : le véhicule d'un trajet annulé au retour restait ON_TRIP.
+                boolean wasInProgress = isInProgress(trip.getStatus());
+                boolean wasLinked = trip.isDriverVehicleLinked();
                 trip.setStatus("CANCELLED");
                 trip.setCancelReason(reason);
                 trip.setCancelledAt(Instant.now());
+                trip.setDriverVehicleLinked(false);
                 trip.setNew(false);
 
-                Mono<Void> freeVehicle = wasOnTrip
-                    ? vehicleRepository
-                          .findById(trip.getVehicleId())
-                          .flatMap(v -> {
-                              v.setStatus("AVAILABLE");
-                              v.setNew(false);
-                              return vehicleRepository.save(v);
-                          })
-                          .then()
+                Mono<Void> freeVehicle = wasInProgress
+                    ? releaseVehicle(trip.getVehicleId(), trip.getId())
                     : Mono.empty();
 
-                Mono<Void> unlinkPair = wasOnTrip
-                    ? unlinkDriverVehicleForTrip(
-                          trip.getDriverId(),
-                          trip.getVehicleId()
-                      )
+                Mono<Void> unlinkPair = wasLinked
+                    ? unlinkDriverVehicleForTrip(trip.getDriverId(), trip.getVehicleId())
                     : Mono.empty();
 
                 return freeVehicle
@@ -472,9 +532,9 @@ public class TripService implements ManageTripUseCase {
     public Flux<Trip> getOpenTrips(UUID managerId) {
         return tripRepository
             .findAllByFleetManagerId(managerId)
-            .filter(t -> "SCHEDULED".equals(t.getStatus())
-                    || "DEPARTED".equals(t.getStatus())
-                    || "RETURNING".equals(t.getStatus()))
+            // « Départ enregistré, retour en attente » (contrat de /trips/open) : seuls ces
+            // trajets peuvent recevoir un retour ; la version hors ligne filtrait déjà ainsi.
+            .filter(t -> isInProgress(t.getStatus()))
             .flatMap(e -> loadTripWithDetails(e.getId()));
     }
 
@@ -493,39 +553,10 @@ public class TripService implements ManageTripUseCase {
                 if (!isModifiable(trip.getStatus())) {
                     return Mono.error(TripException.tripNotModifiable());
                 }
-                if (newVehicleId.equals(trip.getVehicleId())) {
-                    return loadTripWithDetails(tripId);
-                }
-                return assertNoActiveTripForVehicle(newVehicleId, tripId)
-                    .then(vehicleRepository.findById(newVehicleId))
-                    .switchIfEmpty(
-                        Mono.error(TripException.notFound(newVehicleId))
-                    )
-                    .flatMap(newVehicle -> {
-                        if (!"AVAILABLE".equals(newVehicle.getStatus())) {
-                            return Mono.error(TripException.vehicleOccupied());
-                        }
-                        UUID oldVehicleId = trip.getVehicleId();
-                        trip.setVehicleId(newVehicleId);
-                        trip.setNew(false);
-                        newVehicle.setStatus("ON_TRIP");
-                        newVehicle.setNew(false);
-                        return vehicleRepository
-                            .save(newVehicle)
-                            .then(
-                                vehicleRepository
-                                    .findById(oldVehicleId)
-                                    .flatMap(old -> {
-                                        old.setStatus("AVAILABLE");
-                                        old.setNew(false);
-                                        return vehicleRepository.save(old);
-                                    })
-                            )
-                            .then(tripRepository.save(trip))
-                            .flatMap(saved ->
-                                loadTripWithDetails(saved.getId())
-                            );
-                    });
+                return changeResources(trip, managerId, newVehicleId, trip.getDriverId(),
+                        trip.getStartDate(), trip.getStartTime())
+                    .flatMap(tripRepository::save)
+                    .flatMap(saved -> loadTripWithDetails(saved.getId()));
             });
     }
 
@@ -540,65 +571,146 @@ public class TripService implements ManageTripUseCase {
                 if (!isModifiable(trip.getStatus())) {
                     return Mono.error(TripException.tripNotModifiable());
                 }
-                Mono<Void> driverCheck = (cmd.driverId() != null &&
-                    !cmd.driverId().equals(trip.getDriverId()))
-                    ? assertNoActiveTripForDriver(cmd.driverId(), tripId)
-                    : Mono.empty();
-                Mono<Void> vehicleCheck = (cmd.vehicleId() != null &&
-                    !cmd.vehicleId().equals(trip.getVehicleId()))
-                    ? updateTripVehicle(tripId, cmd.vehicleId(), cmd.managerId())
-                          .then()
-                    : Mono.empty();
-
-                return driverCheck
-                    .then(vehicleCheck)
-                    .then(
-                        Mono.defer(() -> {
-                            if (
-                                cmd.driverId() != null &&
-                                !cmd.driverId().equals(trip.getDriverId())
-                            ) {
-                                trip.setDriverId(cmd.driverId());
-                            }
-                            if (cmd.startDate() != null) trip.setStartDate(
-                                cmd.startDate()
-                            );
-                            if (cmd.startTime() != null) trip.setStartTime(
-                                cmd.startTime()
-                            );
-                            if (cmd.departureLocation() != null) trip.setDepartureLocation(
-                                cmd.departureLocation()
-                            );
-                            if (cmd.departureLat() != null) trip.setDepartureLat(
-                                cmd.departureLat()
-                            );
-                            if (cmd.departureLng() != null) trip.setDepartureLng(
-                                cmd.departureLng()
-                            );
-                            if (cmd.departureKmIndex() != null) trip.setDepartureKmIndex(
-                                cmd.departureKmIndex()
-                            );
-                            if (cmd.departureFuelIndex() != null) trip.setDepartureFuelIndex(
-                                cmd.departureFuelIndex()
-                            );
-                            if (cmd.missionObject() != null) trip.setMissionObject(
-                                cmd.missionObject()
-                            );
-                            if (cmd.missionCost() != null) trip.setMissionCost(
-                                cmd.missionCost()
-                            );
-                            if (cmd.missionCostCurrency() != null) trip.setMissionCostCurrency(
-                                cmd.missionCostCurrency()
-                            );
-                            trip.setNew(false);
-                            return tripRepository
-                                .save(trip)
-                                .flatMap(saved ->
-                                    loadTripWithDetails(saved.getId())
-                                );
-                        })
-                    );
+                // Véhicule, chauffeur et horaire de départ sont validés ensemble (créneau)
+                // puis appliqués sur CETTE instance, enregistrée une seule fois. L'ancien code
+                // changeait le véhicule via updateTripVehicle puis réenregistrait une copie
+                // périmée du trajet, ce qui annulait le changement de véhicule.
+                return changeResources(
+                        trip,
+                        cmd.managerId(),
+                        cmd.vehicleId() != null ? cmd.vehicleId() : trip.getVehicleId(),
+                        cmd.driverId() != null ? cmd.driverId() : trip.getDriverId(),
+                        cmd.startDate() != null ? cmd.startDate() : trip.getStartDate(),
+                        cmd.startTime() != null ? cmd.startTime() : trip.getStartTime())
+                    .flatMap(updated -> {
+                        if (cmd.departureLocation() != null) updated.setDepartureLocation(
+                            cmd.departureLocation()
+                        );
+                        if (cmd.departureLat() != null) updated.setDepartureLat(
+                            cmd.departureLat()
+                        );
+                        if (cmd.departureLng() != null) updated.setDepartureLng(
+                            cmd.departureLng()
+                        );
+                        if (cmd.departureKmIndex() != null) updated.setDepartureKmIndex(
+                            cmd.departureKmIndex()
+                        );
+                        if (cmd.departureFuelIndex() != null) updated.setDepartureFuelIndex(
+                            cmd.departureFuelIndex()
+                        );
+                        if (cmd.missionObject() != null) updated.setMissionObject(
+                            cmd.missionObject()
+                        );
+                        if (cmd.missionCost() != null) updated.setMissionCost(
+                            cmd.missionCost()
+                        );
+                        if (cmd.missionCostCurrency() != null) updated.setMissionCostCurrency(
+                            cmd.missionCostCurrency()
+                        );
+                        updated.setNew(false);
+                        return tripRepository.save(updated);
+                    })
+                    .flatMap(saved -> loadTripWithDetails(saved.getId()));
             });
+    }
+
+    /**
+     * Valide puis applique (sans enregistrer) un changement de véhicule, de chauffeur
+     * et/ou d'horaire de départ d'un trajet non clôturé, avec les mêmes règles qu'à la
+     * création : ressources engageables et créneau libre (trajets + affectations).
+     * Pour un trajet en cours, bascule aussi le statut des véhicules et la liaison.
+     */
+    private Mono<TripEntity> changeResources(TripEntity trip, UUID actorId,
+                                             UUID nextVehicleId, UUID nextDriverId,
+                                             LocalDate nextStartDate, LocalTime nextStartTime) {
+        boolean vehicleChanged = !nextVehicleId.equals(trip.getVehicleId());
+        boolean driverChanged = !nextDriverId.equals(trip.getDriverId());
+        boolean slotChanged = !java.util.Objects.equals(nextStartDate, trip.getStartDate())
+                || !java.util.Objects.equals(nextStartTime, trip.getStartTime());
+        if (!vehicleChanged && !driverChanged && !slotChanged) {
+            return Mono.just(trip);
+        }
+        boolean inProgress = isInProgress(trip.getStatus());
+        LocalDateTime start = ResourceAvailabilityService.slotStart(nextStartDate, nextStartTime);
+        LocalDateTime end = ResourceAvailabilityService.slotEnd(trip.getScheduledReturnDatetime());
+        if (!end.isAfter(start)) {
+            return Mono.error(TripException.invalidSchedule());
+        }
+
+        Mono<Void> driverCheck = !driverChanged
+            ? Mono.empty()
+            : driverPersistence.findById(nextDriverId)
+                .switchIfEmpty(Mono.error(TripException.notFound(nextDriverId)))
+                .flatMap(driver -> availability.assertDriverEngageable(actorId, driver, TripException::driverInactive))
+                .then(inProgress
+                    ? tripRepository.existsInProgressTripForDriver(nextDriverId, trip.getId())
+                        .flatMap(busy -> Boolean.TRUE.equals(busy)
+                            ? Mono.<Void>error(TripException.driverOccupied())
+                            : Mono.<Void>empty())
+                    : Mono.<Void>empty());
+
+        Mono<Void> vehicleCheck = !vehicleChanged
+            ? Mono.empty()
+            : vehicleRepository.findById(nextVehicleId)
+                .filter(v -> v.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(TripException.notFound(nextVehicleId)))
+                .flatMap(vehicle -> {
+                    if (!java.util.Objects.equals(trip.getFleetId(), vehicle.getFleetId())) {
+                        return Mono.<Void>error(TripException.vehicleNotInFleet());
+                    }
+                    if ("MAINTENANCE".equals(vehicle.getStatus())) {
+                        return Mono.<Void>error(TripException.vehicleUnavailable(vehicle.getStatus()));
+                    }
+                    return inProgress
+                        ? tripRepository.existsInProgressTripForVehicle(nextVehicleId, trip.getId())
+                            .flatMap(busy -> Boolean.TRUE.equals(busy)
+                                ? Mono.<Void>error(TripException.vehicleOccupied())
+                                : Mono.<Void>empty())
+                        : Mono.<Void>empty();
+                });
+
+        return driverCheck
+            .then(vehicleCheck)
+            .then(availability.assertDriverLicensed(nextDriverId, nextVehicleId, start, end))
+            .then(availability.assertTripSlotFree(nextVehicleId, nextDriverId, start, end, trip.getId()))
+            .then(inProgress
+                ? switchInProgressResources(trip, nextVehicleId, nextDriverId)
+                : Mono.<Void>empty())
+            .then(Mono.fromCallable(() -> {
+                // Véhicule de remplacement affecté à un trajet interrompu : la mission reprend.
+                if (inProgress && vehicleChanged && trip.isInterrupted()) {
+                    trip.setResumedAt(LocalDateTime.now());
+                }
+                trip.setVehicleId(nextVehicleId);
+                trip.setDriverId(nextDriverId);
+                trip.setStartDate(nextStartDate);
+                trip.setStartTime(nextStartTime);
+                trip.setNew(false);
+                return trip;
+            }));
+    }
+
+    /** Trajet en cours : le nouveau véhicule part, l'ancien est libéré, la liaison suit. */
+    private Mono<Void> switchInProgressResources(TripEntity trip, UUID nextVehicleId, UUID nextDriverId) {
+        boolean vehicleChanged = !nextVehicleId.equals(trip.getVehicleId());
+        Mono<Void> unlinkOld = trip.isDriverVehicleLinked()
+            ? unlinkDriverVehicleForTrip(trip.getDriverId(), trip.getVehicleId())
+            : Mono.empty();
+        Mono<Void> vehicles = vehicleChanged
+            ? releaseVehicle(trip.getVehicleId(), trip.getId())
+                .then(vehicleRepository.findById(nextVehicleId)
+                    .flatMap(v -> {
+                        v.setStatus("ON_TRIP");
+                        v.setNew(false);
+                        return vehicleRepository.save(v);
+                    })
+                    .then())
+            : Mono.empty();
+        return unlinkOld
+            .then(vehicles)
+            .then(linkDriverVehicleIfFree(nextDriverId, nextVehicleId))
+            .doOnNext(trip::setDriverVehicleLinked)
+            .then();
     }
 
     @Override
@@ -652,6 +764,7 @@ public class TripService implements ManageTripUseCase {
             .flatMap(sub ->
                 tripRepository
                     .findById(sub.getTripId())
+                    .flatMap(trip -> accessScope.assertTripFleetAccess(managerId, trip.getFleetId()).thenReturn(trip))
                     .flatMap(trip -> {
                         TripDetailEntity detail = new TripDetailEntity();
                         detail.setId(UUID.randomUUID());
@@ -695,13 +808,16 @@ public class TripService implements ManageTripUseCase {
                     new RuntimeException("Complément introuvable ou déjà traité.")
                 )
             )
-            .flatMap(sub -> {
-                sub.setStatus("REJECTED");
-                sub.setReviewedBy(managerId);
-                sub.setReviewedAt(Instant.now());
-                sub.setNew(false);
-                return submissionRepository.save(sub).then();
-            });
+            .flatMap(sub -> tripRepository
+                .findById(sub.getTripId())
+                .flatMap(trip -> accessScope.assertTripFleetAccess(managerId, trip.getFleetId()))
+                .then(Mono.defer(() -> {
+                    sub.setStatus("REJECTED");
+                    sub.setReviewedBy(managerId);
+                    sub.setReviewedAt(Instant.now());
+                    sub.setNew(false);
+                    return submissionRepository.save(sub).then();
+                })));
     }
 
     // ── Télémétrie (conservé) ─────────────────────────────────────────────────
@@ -709,12 +825,17 @@ public class TripService implements ManageTripUseCase {
     @Override
     public Mono<Void> sendTelemetry(
         UUID tripId,
+        UUID driverId,
         Double lat,
         Double lng,
         Double speed
     ) {
         return tripRepository
             .findById(tripId)
+            // Un chauffeur ne peut alimenter que la position de SON trajet.
+            .flatMap(t -> driverId.equals(t.getDriverId())
+                ? Mono.just(t)
+                : Mono.<TripEntity>error(TripException.forbidden()))
             .filter(
                 t ->
                     "DEPARTED".equals(t.getStatus()) ||
@@ -745,7 +866,8 @@ public class TripService implements ManageTripUseCase {
     @Override
     public Mono<Trip> getMyActiveTrip(UUID driverId) {
         return tripRepository
-            .findByDriverIdAndStatus(driverId, "DEPARTED")
+            // Aller (DEPARTED) ou retour (RETURNING) : les deux sont « en cours ».
+            .findInProgressTripForDriver(driverId)
             .flatMap(e -> loadTripWithDetails(e.getId()));
     }
 
@@ -766,101 +888,57 @@ public class TripService implements ManageTripUseCase {
         );
     }
 
-    private Mono<Void> assertNoActiveTripForDriver(
-        UUID driverId,
-        UUID excludeTripId
-    ) {
-        Mono<Boolean> check =
-            excludeTripId == null
-                ? tripRepository.existsActiveTripForDriver(driverId)
-                : tripRepository.existsActiveTripForDriverExcluding(
-                      driverId,
-                      excludeTripId
-                  );
-        return check.flatMap(busy ->
-            Boolean.TRUE.equals(busy)
-                ? Mono.error(TripException.driverOccupied())
-                : Mono.empty()
-        );
+    /** Départ enregistré, retour non enregistré : le trajet mobilise physiquement ses ressources. */
+    private static boolean isInProgress(String status) {
+        return "DEPARTED".equals(status) || "RETURNING".equals(status);
     }
 
-    private Mono<Void> assertNoActiveTripForVehicle(
-        UUID vehicleId,
-        UUID excludeTripId
-    ) {
-        Mono<Boolean> check =
-            excludeTripId == null
-                ? tripRepository.existsActiveTripForVehicle(vehicleId)
-                : tripRepository.existsActiveTripForVehicleExcluding(
-                      vehicleId,
-                      excludeTripId
-                  );
-        return check.flatMap(busy ->
-            Boolean.TRUE.equals(busy)
-                ? Mono.error(TripException.vehicleOccupied())
-                : Mono.empty()
-        );
-    }
-
-    /** Associe chauffeur et véhicule le temps d'un trajet actif. */
-    private Mono<Void> linkDriverVehicleForTrip(UUID driverId, UUID vehicleId) {
-        Mono<Void> clearDriverOldVehicle = driverPersistence
-            .findById(driverId)
-            .flatMap(driver -> {
-                if (
-                    driver.assignedVehicleId() != null &&
-                    !driver.assignedVehicleId().equals(vehicleId)
-                ) {
-                    return vehicleRepository
-                        .findById(driver.assignedVehicleId())
-                        .flatMap(v -> {
-                            v.setCurrentDriverId(null);
-                            v.setNew(false);
-                            return vehicleRepository.save(v);
-                        })
-                        .then(
-                            driverPersistence.updateVehicleAssignment(
-                                driverId,
-                                null
-                            )
-                        );
-                }
-                return Mono.empty();
-            });
-
-        Mono<Void> clearVehicleOldDriver = driverPersistence
-            .findByAssignedVehicleId(vehicleId)
-            .flatMap(oldDriver -> {
-                if (!oldDriver.userId().equals(driverId)) {
-                    return driverPersistence
-                        .updateVehicleAssignment(oldDriver.userId(), null)
-                        .then(
-                            vehicleRepository
-                                .findById(vehicleId)
-                                .flatMap(v -> {
-                                    v.setCurrentDriverId(null);
-                                    v.setNew(false);
-                                    return vehicleRepository.save(v);
-                                })
-                                .then()
-                        );
-                }
-                return Mono.empty();
-            })
-            .onErrorResume(e -> Mono.empty());
-
-        Mono<Void> setLinks = vehicleRepository
-            .findById(vehicleId)
+    /**
+     * Repasse le véhicule AVAILABLE s'il était ON_TRIP et qu'aucun AUTRE trajet en cours
+     * ne le mobilise. Ne touche jamais à un statut MAINTENANCE posé entre-temps.
+     */
+    private Mono<Void> releaseVehicle(UUID vehicleId, UUID closingTripId) {
+        return tripRepository.existsInProgressTripForVehicle(vehicleId, closingTripId)
+            .filter(busy -> !Boolean.TRUE.equals(busy))
+            .flatMap(free -> vehicleRepository.findById(vehicleId))
+            .filter(v -> "ON_TRIP".equals(v.getStatus()))
             .flatMap(v -> {
-                v.setCurrentDriverId(driverId);
+                v.setStatus("AVAILABLE");
                 v.setNew(false);
                 return vehicleRepository.save(v);
             })
-            .then(driverPersistence.updateVehicleAssignment(driverId, vehicleId));
+            .then();
+    }
 
-        return clearDriverOldVehicle
-            .then(clearVehicleOldDriver)
-            .then(setLinks);
+    /**
+     * Associe chauffeur et véhicule le temps d'un trajet, seulement si aucun des deux
+     * n'a d'affectation permanente (ou s'ils sont déjà associés l'un à l'autre). L'ancien
+     * code effaçait les affectations permanentes du chauffeur ET du véhicule au départ,
+     * puis vidait tout au retour : chaque trajet détruisait les affectations existantes.
+     *
+     * @return true si c'est ce trajet qui a posé la liaison (à défaire à sa clôture)
+     */
+    private Mono<Boolean> linkDriverVehicleIfFree(UUID driverId, UUID vehicleId) {
+        return Mono.zip(
+                driverPersistence.findById(driverId),
+                vehicleRepository.findById(vehicleId),
+                driverPersistence.findByAssignedVehicleId(vehicleId).hasElement())
+            .flatMap(t -> {
+                var driver = t.getT1();
+                var vehicle = t.getT2();
+                boolean free = driver.assignedVehicleId() == null
+                    && vehicle.getCurrentDriverId() == null
+                    && !Boolean.TRUE.equals(t.getT3());
+                if (!free) {
+                    return Mono.just(false);
+                }
+                vehicle.setCurrentDriverId(driverId);
+                vehicle.setNew(false);
+                return vehicleRepository.save(vehicle)
+                    .then(driverPersistence.updateVehicleAssignment(driverId, vehicleId))
+                    .thenReturn(true);
+            })
+            .defaultIfEmpty(false);
     }
 
     /** Dissocie chauffeur et véhicule à la clôture du trajet. */
@@ -991,7 +1069,7 @@ public class TripService implements ManageTripUseCase {
             }
         }
 
-        return new Trip(
+        Trip trip = new Trip(
             e.getId(),
             e.getTripCode(),
             e.getVehicleId(),
@@ -1028,5 +1106,7 @@ public class TripService implements ManageTripUseCase {
             e.getCancelledAt(),
             details
         );
+        trip.setInterruption(e.getInterruptedAt(), e.getResumedAt(), e.getInterruptionIncidentId());
+        return trip;
     }
 }

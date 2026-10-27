@@ -9,6 +9,7 @@ import com.yowyob.fleet.infrastructure.adapters.inbound.rest.AuthController;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelAdminApiClient;
 import com.yowyob.fleet.infrastructure.adapters.outbound.external.client.KernelAuthApiClient;
 import com.yowyob.fleet.infrastructure.config.KernelTokenHolder;
+import com.yowyob.fleet.infrastructure.config.security.KernelJwtVerifier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -42,17 +43,20 @@ public class KernelAuthAdapter implements AuthPort {
     private final KernelAdminApiClient kernelAdminClient;
     private final KernelTokenHolder kernelTokenHolder;
     private final WebClient kernelWebClient;
+    private final KernelJwtVerifier jwtVerifier;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public KernelAuthAdapter(
             KernelAuthApiClient kernelClient,
             KernelAdminApiClient kernelAdminClient,
             KernelTokenHolder kernelTokenHolder,
-            WebClient kernelWebClient) {
+            WebClient kernelWebClient,
+            KernelJwtVerifier jwtVerifier) {
         this.kernelClient = kernelClient;
         this.kernelAdminClient = kernelAdminClient;
         this.kernelTokenHolder = kernelTokenHolder;
         this.kernelWebClient = kernelWebClient;
+        this.jwtVerifier = jwtVerifier;
     }
 
     @Value("${application.kernel.service:FLEET_MANAGEMENT}")
@@ -172,12 +176,13 @@ public class KernelAuthAdapter implements AuthPort {
     // ── Profil utilisateur ────────────────────────────────────────────────────
 
     /**
-     * Extrait le profil utilisateur DIRECTEMENT depuis les claims JWT,
-     * sans appel réseau vers le Kernel.
+     * Extrait le profil utilisateur depuis les claims JWT, après vérification
+     * de la signature RS256 avec la clé publique du Kernel (JWKS mis en cache,
+     * pas d'appel réseau par requête).
      *
      * Le JWT (RS256 signé par le Kernel) contient :
      * - sub        : userId (UUID Kernel)
-     * - permissions: rôles et permissions (source fiable)
+     * - permissions: rôles et permissions (source fiable une fois la signature vérifiée)
      * - tid        : tenantId
      * - exp        : expiration
      */
@@ -185,7 +190,8 @@ public class KernelAuthAdapter implements AuthPort {
     public Mono<UserDetail> getUserProfile(String token) {
         try {
             String rawToken = token.startsWith("Bearer ") ? token.substring(7) : token;
-            return parseUserDetailFromJwt(rawToken);
+            return jwtVerifier.verify(rawToken)
+                    .then(Mono.defer(() -> parseUserDetailFromJwt(rawToken)));
         } catch (Exception e) {
             log.error("❌ [KERNEL AUTH] Erreur lecture JWT : {}", e.getMessage());
             return Mono.error(AuthException.tokenExpired());
@@ -279,7 +285,7 @@ public class KernelAuthAdapter implements AuthPort {
                                     ctx.contextId(), ctx.tenantId(), ctx.userId(), ctx.actorId(),
                                     ctx.organizations() == null ? List.of()
                                             : ctx.organizations().stream()
-                                                    .map(o -> new AuthController.OrgItem(o.organizationId(), o.shortName(), o.service()))
+                                                    .map(o -> new AuthController.OrgItem(o.organizationId(), o.shortName(), o.effectiveService(serviceName)))
                                                     .toList()
                             )).toList();
                     return new AuthController.DiscoverContextsResponse(data.selectionToken(), data.expiresInSeconds(), contexts);
@@ -396,7 +402,7 @@ public class KernelAuthAdapter implements AuthPort {
                 continue;
             }
             for (var org : ctx.organizations()) {
-                if (serviceName.equalsIgnoreCase(org.service())) {
+                if (org.providesService(serviceName)) {
                     return java.util.Optional.of(
                             new SelectedLoginContext(ctx.contextId(), org.organizationId()));
                 }
@@ -421,7 +427,7 @@ public class KernelAuthAdapter implements AuthPort {
     private UUID resolveOrganizationId(KernelAuthApiClient.DiscoveredContext ctx) {
         if (ctx.organizations() != null && !ctx.organizations().isEmpty()) {
             return ctx.organizations().stream()
-                    .filter(o -> serviceName.equalsIgnoreCase(o.service()))
+                    .filter(o -> o.providesService(serviceName))
                     .map(KernelAuthApiClient.OrganizationRef::organizationId)
                     .findFirst()
                     .orElse(ctx.organizations().get(0).organizationId());
@@ -546,6 +552,9 @@ public class KernelAuthAdapter implements AuthPort {
         if (ex.getStatusCode().value() == 401 && body != null && body.contains("AUTH_INVALID_REFRESH_TOKEN")) {
             return Mono.error(AuthException.tokenExpired());
         }
+        if (ex.getStatusCode().value() == 401 && body != null && body.contains("AUTH_YOWYOB_IDENTITY")) {
+            return Mono.error(AuthException.yowyobIdentityRequired(readKernelMessage(body)));
+        }
         return switch (ex.getStatusCode().value()) {
             case 401 -> Mono.error(AuthException.invalidCredentials());
             case 403 -> Mono.error(AuthException.accountLocked());
@@ -556,6 +565,15 @@ public class KernelAuthAdapter implements AuthPort {
                     "Erreur Kernel [" + ex.getStatusCode() + "]: " + ex.getResponseBodyAsString(),
                     (HttpStatus) ex.getStatusCode()));
         };
+    }
+
+    private String readKernelMessage(String body) {
+        try {
+            JsonNode message = objectMapper.readTree(body).get("message");
+            return message != null && !message.isNull() ? message.asText() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private <T> Mono<T> mapConnectivityError(Throwable ex) {

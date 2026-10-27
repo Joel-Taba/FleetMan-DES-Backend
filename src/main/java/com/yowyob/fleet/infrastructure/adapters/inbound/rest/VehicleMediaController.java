@@ -3,6 +3,7 @@ package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 import com.yowyob.fleet.domain.model.Vehicle;
 import com.yowyob.fleet.domain.ports.in.ManageVehicleMediaUseCase;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
+import com.yowyob.fleet.infrastructure.config.security.AuthPrincipal;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -24,6 +25,7 @@ import java.util.UUID;
 public class VehicleMediaController {
 
     private final ManageVehicleMediaUseCase mediaUseCase;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private String extractToken(Authentication auth) {
         return "Bearer " + auth.getCredentials().toString();
@@ -32,25 +34,25 @@ public class VehicleMediaController {
     @PutMapping(value = "/vin", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Uploader photo VIN")
     public Mono<Vehicle> uploadVin(@PathVariable UUID vehicleId, @RequestPart("file") FilePart file, Authentication auth) {
-        return mediaUseCase.uploadVinPhoto(vehicleId, file, extractToken(auth));
+        return resourceAccess.assertVehicleAccess(AuthPrincipal.userId(auth), vehicleId).then(mediaUseCase.uploadVinPhoto(vehicleId, file, extractToken(auth)));
     }
 
     @PutMapping(value = "/registration", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Uploader photo Carte Grise")
     public Mono<Vehicle> uploadReg(@PathVariable UUID vehicleId, @RequestPart("file") FilePart file, Authentication auth) {
-        return mediaUseCase.uploadRegistrationPhoto(vehicleId, file, extractToken(auth));
+        return resourceAccess.assertVehicleAccess(AuthPrincipal.userId(auth), vehicleId).then(mediaUseCase.uploadRegistrationPhoto(vehicleId, file, extractToken(auth)));
     }
 
     @PostMapping(value = "/gallery", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Ajouter photo galerie")
     public Mono<Vehicle> addImage(@PathVariable UUID vehicleId, @RequestPart("file") FilePart file, Authentication auth) {
-        return mediaUseCase.addIllustrationImage(vehicleId, file, extractToken(auth));
+        return resourceAccess.assertVehicleAccess(AuthPrincipal.userId(auth), vehicleId).then(mediaUseCase.addIllustrationImage(vehicleId, file, extractToken(auth)));
     }
 
     @DeleteMapping("/gallery/{imageId}")
     @Operation(summary = "Supprimer photo galerie")
     public Mono<Vehicle> deleteImage(@PathVariable UUID vehicleId, @PathVariable UUID imageId, Authentication auth) {
-        return mediaUseCase.deleteIllustrationImage(vehicleId, imageId, extractToken(auth));
+        return resourceAccess.assertVehicleAccess(AuthPrincipal.userId(auth), vehicleId).then(mediaUseCase.deleteIllustrationImage(vehicleId, imageId, extractToken(auth)));
     }
 }

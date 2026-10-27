@@ -16,18 +16,19 @@
 # -----------------------------------------------------------------------------
 readonly KERNEL_URL="https://kernel-core.yowyob.com"
 readonly CLIENT_ID="fleet-management-backend"
-readonly API_KEY="K5mWlNhc6zH2-JcaZJWSs1sLxUzjS902u4MxEnJar5g"
+readonly API_KEY="${KERNEL_API_KEY:?KERNEL_API_KEY manquant — copiez .env.example en .env}"
 readonly TENANT_ID="f5b814d9-766e-4c87-91ec-d6c8e32cb56c"
 readonly ORG_ID="5e69f5c5-1f03-41cb-a4a3-d59188f73323"
 readonly SERVICE_NAME="FLEET_MANAGEMENT"
 
 # Compte Owner (admin Kernel)
-readonly OWNER_EMAIL="joeltaba4@gmail.com"
-readonly OWNER_PASSWORD="FleetMan2026!"
+# Identité Yowyob (le Kernel refuse désormais l'email au login)
+readonly OWNER_EMAIL="${KERNEL_OWNER_PRINCIPAL:?KERNEL_OWNER_PRINCIPAL manquant dans .env}"
+readonly OWNER_PASSWORD="${KERNEL_OWNER_PASSWORD:?KERNEL_OWNER_PASSWORD manquant dans .env}"
 
 # Compte manager1 (tests FleetMan)
-readonly MANAGER_EMAIL="manager1@fleetman.cm"
-readonly MANAGER_PASSWORD="FleetMan2026!"
+readonly MANAGER_EMAIL="${MANAGER_PRINCIPAL:-manager.dupont}"
+readonly MANAGER_PASSWORD="${DEMO_PASSWORD:?DEMO_PASSWORD manquant dans .env}"
 
 # Fichiers de cache dans /tmp (réinitialisés au reboot)
 readonly OWNER_TOKEN_FILE="/tmp/kernel_owner_token.json"

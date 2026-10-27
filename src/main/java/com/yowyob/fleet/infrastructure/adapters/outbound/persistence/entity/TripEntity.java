@@ -132,6 +132,29 @@ public class TripEntity implements Persistable<UUID> {
     @Column("cancelled_at")
     private Instant cancelledAt;
 
+    // ── Liaison chauffeur ↔ véhicule ──────────────────────────────────────────
+    // true si c'est CE trajet qui a posé la liaison à son départ : seule une
+    // liaison posée par le trajet est défaite à sa clôture (une affectation
+    // permanente préexistante n'est jamais effacée par un trajet).
+    @Column("driver_vehicle_linked")
+    private boolean driverVehicleLinked;
+
+    // ── Interruption (incident grave immobilisant le véhicule en cours de trajet) ──
+    // Le trajet reste ouvert ; il reprend quand le véhicule est remplacé ou libéré.
+    @Column("interrupted_at")
+    private LocalDateTime interruptedAt;
+
+    @Column("resumed_at")
+    private LocalDateTime resumedAt;
+
+    @Column("interruption_incident_id")
+    private UUID interruptionIncidentId;
+
+    /** Interrompu et pas encore repris. */
+    public boolean isInterrupted() {
+        return interruptedAt != null && resumedAt == null;
+    }
+
     // ── R2DBC Persistable ─────────────────────────────────────────────────────
     @Transient
     private boolean isNew = false;

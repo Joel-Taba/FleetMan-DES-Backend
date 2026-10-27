@@ -147,6 +147,7 @@ public class IncidentPersistenceAdapter implements IncidentPersistencePort {
         if (e.getWitnessName() != null || e.getWitnessContact() != null) {
             incident.addWitness(e.getWitnessName(), e.getWitnessContact());
         }
+        incident.setVehicleImmobilized(e.isVehicleImmobilized());
 
         return incident;
     }
@@ -173,6 +174,7 @@ public class IncidentPersistenceAdapter implements IncidentPersistencePort {
         entity.setVehicleRegistration(i.getVehicleRegistration());
         entity.setDriverId(i.getDriverId());
         entity.setDriverFullName(i.getDriverFullName());
+        entity.setVehicleImmobilized(i.isVehicleImmobilized());
 
         if (i.getLocation() != null) {
             entity.setLongitude(i.getLocation().longitude());

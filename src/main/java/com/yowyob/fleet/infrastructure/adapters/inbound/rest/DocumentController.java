@@ -24,6 +24,7 @@ import java.util.UUID;
 public class DocumentController {
 
     private final ManageDocumentUseCase documentUseCase;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -42,7 +43,8 @@ public class DocumentController {
                        + "Le statut est calculé automatiquement selon la date d'expiration.")
     public Mono<VehicleDocumentResponse> addVehicleDoc(
             @PathVariable UUID vehicleId,
-            @Valid @RequestBody VehicleDocumentRequest request) {
+            @Valid @RequestBody VehicleDocumentRequest request,
+            Authentication auth) {
 
         ManageDocumentUseCase.AddVehicleDocumentCommand cmd =
                 new ManageDocumentUseCase.AddVehicleDocumentCommand(
@@ -52,7 +54,8 @@ public class DocumentController {
                         request.fileMimeType(), request.fileSizeBytes(),
                         request.notes()
                 );
-        return documentUseCase.addVehicleDocument(cmd).map(VehicleDocumentResponse::from);
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                .then(documentUseCase.addVehicleDocument(cmd).map(VehicleDocumentResponse::from));
     }
 
     @Tag(name = "17. Documents | Véhicules")
@@ -63,10 +66,12 @@ public class DocumentController {
     public Mono<PageResponse<VehicleDocumentResponse>> getVehicleDocs(
             @PathVariable UUID vehicleId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication auth) {
 
         return PageResponse.of(
-                documentUseCase.getVehicleDocuments(vehicleId)
+                resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                        .thenMany(documentUseCase.getVehicleDocuments(vehicleId))
                         .map(VehicleDocumentResponse::from),
                 page, size
         );
@@ -78,8 +83,10 @@ public class DocumentController {
     @Operation(summary = "Détail d'un document véhicule")
     public Mono<VehicleDocumentResponse> getVehicleDocById(
             @PathVariable UUID vehicleId,
-            @PathVariable UUID docId) {
-        return documentUseCase.getVehicleDocById(docId).map(VehicleDocumentResponse::from);
+            @PathVariable UUID docId,
+            Authentication auth) {
+        return resourceAccess.assertVehicleDocumentAccess(getUserId(auth), docId)
+                .then(documentUseCase.getVehicleDocById(docId).map(VehicleDocumentResponse::from));
     }
 
     @Tag(name = "17. Documents | Véhicules")
@@ -90,7 +97,8 @@ public class DocumentController {
     public Mono<VehicleDocumentResponse> updateVehicleDoc(
             @PathVariable UUID vehicleId,
             @PathVariable UUID docId,
-            @RequestBody VehicleDocumentRequest request) {
+            @RequestBody VehicleDocumentRequest request,
+            Authentication auth) {
 
         ManageDocumentUseCase.UpdateVehicleDocumentCommand cmd =
                 new ManageDocumentUseCase.UpdateVehicleDocumentCommand(
@@ -100,7 +108,8 @@ public class DocumentController {
                         request.fileMimeType(), request.fileSizeBytes(),
                         null, request.notes()
                 );
-        return documentUseCase.updateVehicleDocument(cmd).map(VehicleDocumentResponse::from);
+        return resourceAccess.assertVehicleDocumentAccess(getUserId(auth), docId)
+                .then(documentUseCase.updateVehicleDocument(cmd).map(VehicleDocumentResponse::from));
     }
 
     @Tag(name = "17. Documents | Véhicules")
@@ -110,8 +119,10 @@ public class DocumentController {
     @Operation(summary = "Supprimer un document véhicule")
     public Mono<Void> deleteVehicleDoc(
             @PathVariable UUID vehicleId,
-            @PathVariable UUID docId) {
-        return documentUseCase.deleteVehicleDocument(docId);
+            @PathVariable UUID docId,
+            Authentication auth) {
+        return resourceAccess.assertVehicleDocumentAccess(getUserId(auth), docId)
+                .then(documentUseCase.deleteVehicleDocument(docId));
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -126,7 +137,8 @@ public class DocumentController {
                description = "Enregistre un document légal (permis, visite médicale, carte pro...).")
     public Mono<DriverDocumentResponse> addDriverDoc(
             @PathVariable UUID driverId,
-            @Valid @RequestBody DriverDocumentRequest request) {
+            @Valid @RequestBody DriverDocumentRequest request,
+            Authentication auth) {
 
         ManageDocumentUseCase.AddDriverDocumentCommand cmd =
                 new ManageDocumentUseCase.AddDriverDocumentCommand(
@@ -137,7 +149,8 @@ public class DocumentController {
                         request.fileMimeType(), request.fileSizeBytes(),
                         request.notes()
                 );
-        return documentUseCase.addDriverDocument(cmd).map(DriverDocumentResponse::from);
+        return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                .then(documentUseCase.addDriverDocument(cmd).map(DriverDocumentResponse::from));
     }
 
     @Tag(name = "18. Documents | Conducteurs")
@@ -147,10 +160,12 @@ public class DocumentController {
     public Mono<PageResponse<DriverDocumentResponse>> getDriverDocs(
             @PathVariable UUID driverId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication auth) {
 
         return PageResponse.of(
-                documentUseCase.getDriverDocuments(driverId)
+                resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                        .thenMany(documentUseCase.getDriverDocuments(driverId))
                         .map(DriverDocumentResponse::from),
                 page, size
         );
@@ -162,8 +177,10 @@ public class DocumentController {
     @Operation(summary = "Détail d'un document conducteur")
     public Mono<DriverDocumentResponse> getDriverDocById(
             @PathVariable UUID driverId,
-            @PathVariable UUID docId) {
-        return documentUseCase.getDriverDocById(docId).map(DriverDocumentResponse::from);
+            @PathVariable UUID docId,
+            Authentication auth) {
+        return resourceAccess.assertDriverDocumentAccess(getUserId(auth), docId)
+                .then(documentUseCase.getDriverDocById(docId).map(DriverDocumentResponse::from));
     }
 
     @Tag(name = "18. Documents | Conducteurs")
@@ -173,7 +190,8 @@ public class DocumentController {
     public Mono<DriverDocumentResponse> updateDriverDoc(
             @PathVariable UUID driverId,
             @PathVariable UUID docId,
-            @RequestBody DriverDocumentRequest request) {
+            @RequestBody DriverDocumentRequest request,
+            Authentication auth) {
 
         ManageDocumentUseCase.UpdateDriverDocumentCommand cmd =
                 new ManageDocumentUseCase.UpdateDriverDocumentCommand(
@@ -183,7 +201,8 @@ public class DocumentController {
                         request.fileMimeType(), request.fileSizeBytes(),
                         null, request.notes()
                 );
-        return documentUseCase.updateDriverDocument(cmd).map(DriverDocumentResponse::from);
+        return resourceAccess.assertDriverDocumentAccess(getUserId(auth), docId)
+                .then(documentUseCase.updateDriverDocument(cmd).map(DriverDocumentResponse::from));
     }
 
     @Tag(name = "18. Documents | Conducteurs")
@@ -193,8 +212,10 @@ public class DocumentController {
     @Operation(summary = "Supprimer un document conducteur")
     public Mono<Void> deleteDriverDoc(
             @PathVariable UUID driverId,
-            @PathVariable UUID docId) {
-        return documentUseCase.deleteDriverDocument(docId);
+            @PathVariable UUID docId,
+            Authentication auth) {
+        return resourceAccess.assertDriverDocumentAccess(getUserId(auth), docId)
+                .then(documentUseCase.deleteDriverDocument(docId));
     }
 
     // ═══════════════════════════════════════════════════════════════════════

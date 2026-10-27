@@ -26,6 +26,12 @@ public class MaintenanceParameterEntity implements Persistable<UUID> {
     @Column("last_maintenance_at")
     private LocalDate lastMaintenanceAt;
 
+    // Odomètre relevé lors de la dernière maintenance : base des seuils kilométriques
+    // de la maintenance préventive (sans lui, la cible était recalculée depuis le
+    // kilométrage courant à chaque évaluation et n'était jamais atteinte).
+    @Column("last_maintenance_km")
+    private java.math.BigDecimal lastMaintenanceKm;
+
     @Column("next_maintenance_at")
     private LocalDate nextMaintenanceAt;
 

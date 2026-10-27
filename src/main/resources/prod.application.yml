@@ -123,7 +123,7 @@ application:
     mode: http # 'http' ou 'kafka'
     url: https://traefikdev.yowyob.com/notification
     # URL du Swagger fourni
-    service-token: "a77599d3-8de7-4d52-b9d0-2202b2e13a9e" # Token récupéré après enregistrement du service
+    service-token: ${NOTIFICATION_SERVICE_TOKEN:} # Token récupéré après enregistrement du service
     templates:
       new-offer: 1 # ID template: Nouvelle offre pour les chauffeurs
       driver-applied: 2 # ID template: Un chauffeur a postulé (pour le client)

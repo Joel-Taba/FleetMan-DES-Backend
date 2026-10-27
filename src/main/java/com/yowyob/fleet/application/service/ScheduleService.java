@@ -1,8 +1,10 @@
 package com.yowyob.fleet.application.service;
 
 import com.yowyob.fleet.domain.exception.PlanningException;
+import com.yowyob.fleet.domain.model.Assignment;
 import com.yowyob.fleet.domain.model.Schedule;
 import com.yowyob.fleet.domain.ports.in.ManageScheduleUseCase;
+import com.yowyob.fleet.domain.ports.out.AssignmentPersistencePort;
 import com.yowyob.fleet.domain.ports.out.SchedulePersistencePort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +21,7 @@ import java.util.UUID;
 public class ScheduleService implements ManageScheduleUseCase {
 
     private final SchedulePersistencePort schedulePersistencePort;
+    private final AssignmentPersistencePort assignmentPersistencePort;
 
     @Override
     public Mono<Schedule> createSchedule(CreateScheduleCommand cmd) {
@@ -95,10 +98,17 @@ public class ScheduleService implements ManageScheduleUseCase {
     public Mono<Schedule> archive(UUID id) {
         return schedulePersistencePort.findById(id)
                 .switchIfEmpty(Mono.error(PlanningException.scheduleNotFound(id)))
-                .flatMap(schedule -> {
-                    schedule.archive();
-                    return schedulePersistencePort.save(schedule);
-                });
+                // Archivage = « toutes affectations terminées » (doc §5.4) : un planning
+                // archivé est figé, ses affectations encore actives deviendraient orphelines.
+                .flatMap(schedule -> assignmentPersistencePort.findAllByScheduleId(id)
+                        .any(Assignment::isActive)
+                        .flatMap(hasActive -> {
+                            if (Boolean.TRUE.equals(hasActive)) {
+                                return Mono.<Schedule>error(PlanningException.scheduleHasActiveAssignments(id));
+                            }
+                            schedule.archive();
+                            return schedulePersistencePort.save(schedule);
+                        }));
     }
 
     @Override

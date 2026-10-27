@@ -46,6 +46,7 @@ public class VehicleService implements ManageVehicleUseCase {
 
     // Repositories des ressources (Souveraineté)
     private final VehicleTypeR2dbcRepository vehicleTypeRepo;
+    private final com.yowyob.fleet.domain.ports.out.IncidentPersistencePort incidentPersistence;
     private final ManufacturerR2dbcRepository mfrRepo;
     private final BrandR2dbcRepository brandRepo;
     private final VehicleModelR2dbcRepository modelRepo;
@@ -59,6 +60,8 @@ public class VehicleService implements ManageVehicleUseCase {
     private final VehicleIllustrationImageR2dbcRepository galleryRepo;
     private final PlanLimitGuard planLimitGuard;
     private final AccessScopeService accessScope;
+    private final ResourceAvailabilityService availability;
+    private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripR2dbcRepository tripRepository;
 
     // ========================================================================
     // --- 09a. GESTION DU PARC (FLEET MANAGER) ---
@@ -254,11 +257,69 @@ public class VehicleService implements ManageVehicleUseCase {
         };
     }
 
+    /**
+     * Variante stricte pour une modification : une valeur inconnue (ex. « SOLD », annoncée
+     * par Swagger mais refusée par la base) était silencieusement convertie en AVAILABLE.
+     */
+    private static String normalizeRequestedStatus(Object raw) {
+        String value = raw == null ? "" : String.valueOf(raw).trim().toUpperCase();
+        return switch (value) {
+            case "AVAILABLE", "ON_TRIP", "MAINTENANCE" -> value;
+            case "IN_SERVICE", "PARKED" -> "AVAILABLE";
+            case "UNDER_MAINTENANCE", "IN_MAINTENANCE" -> "MAINTENANCE";
+            default -> throw VehicleException.invalidStatus(String.valueOf(raw));
+        };
+    }
+
+    /**
+     * Règles d'une modification de véhicule :
+     * - le statut ON_TRIP est piloté par les trajets (départ / retour) : on ne le pose pas
+     *   à la main, et on ne le quitte pas (AVAILABLE, MAINTENANCE) pendant un trajet en cours,
+     *   ce qui rendait le véhicule réservable deux fois ;
+     * - un changement de flotte est refusé tant que des trajets ou affectations non
+     *   terminés sont rattachés à l'ancienne flotte.
+     */
+    private Mono<Void> guardPatch(Vehicle local, Map<String, Object> updates) {
+        Mono<Void> statusGuard = Mono.empty();
+        if (updates.containsKey("status")) {
+            String requested = normalizeRequestedStatus(updates.get("status"));
+            updates.put("status", requested);
+            if (!requested.equals(local.status())) {
+                statusGuard = "ON_TRIP".equals(requested)
+                        ? Mono.error(VehicleException.statusManagedByTrips())
+                        : tripRepository.existsInProgressTripForVehicle(local.id(), null)
+                            .flatMap(onTrip -> Boolean.TRUE.equals(onTrip)
+                                    ? Mono.<Void>error(VehicleException.statusManagedByTrips())
+                                    : Mono.<Void>empty());
+                // Un véhicule immobilisé par un incident grave ouvert ne redevient disponible
+                // qu'à la résolution de l'incident.
+                // Vérifié en premier : c'est le motif le plus utile à afficher.
+                if ("MAINTENANCE".equals(local.status())) {
+                    statusGuard = incidentPersistence.findByVehicleId(local.id())
+                            .any(i -> i.isVehicleImmobilized() && i.immobilizesVehicle())
+                            .flatMap(held -> Boolean.TRUE.equals(held)
+                                    ? Mono.<Void>error(VehicleException.heldByIncident())
+                                    : Mono.<Void>empty())
+                            .then(statusGuard);
+                }
+            }
+        }
+        UUID targetFleet = toUuid(updates.get("fleetId"));
+        Mono<Void> fleetGuard = targetFleet != null && !targetFleet.equals(local.fleetId())
+                ? availability.vehicleHasOpenCommitments(local.id())
+                    .flatMap(open -> Boolean.TRUE.equals(open)
+                            ? Mono.<Void>error(VehicleException.openCommitments())
+                            : Mono.<Void>empty())
+                : Mono.empty();
+        return statusGuard.then(fleetGuard);
+    }
+
     @Override
     @Transactional
     public Mono<Vehicle> patchVehicleInfo(UUID id, Map<String, Object> updates, String token) {
         return localPersistencePort.getLocalDataById(id)
                 .switchIfEmpty(Mono.error(VehicleException.notFound(id)))
+                .flatMap(local -> Mono.defer(() -> guardPatch(local, updates)).thenReturn(local))
                 .flatMap(local -> externalVehiclePort.patchRemoteVehicle(id, updates, token)
                         .flatMap(remote -> syncLocalCache(remote, id))
                         .switchIfEmpty(Mono.defer(() -> {
@@ -370,12 +431,21 @@ public class VehicleService implements ManageVehicleUseCase {
 
     @Override
     public Mono<Void> removeVehicle(UUID id, String t) {
+        // VehicleException.ongoingTripConflict (VHC_005) existait mais n'était plus appelée :
+        // un véhicule en trajet, ou promis à des trajets / affectations, était supprimé.
+        Mono<Void> guard = tripRepository.existsInProgressTripForVehicle(id, null)
+                .flatMap(onTrip -> Boolean.TRUE.equals(onTrip)
+                        ? Mono.<Boolean>error(VehicleException.ongoingTripConflict())
+                        : availability.vehicleHasOpenCommitments(id))
+                .flatMap(open -> Boolean.TRUE.equals(open)
+                        ? Mono.<Void>error(VehicleException.openCommitments())
+                        : Mono.<Void>empty());
         Mono<Void> remote = externalVehiclePort.deleteRemoteVehicle(id, t)
                 .onErrorResume(e -> {
                     log.warn("Suppression distante véhicule {} ignorée : {}", id, e.getMessage());
                     return Mono.empty();
                 });
-        return remote.then(localPersistencePort.deleteLocalData(id));
+        return guard.then(remote).then(localPersistencePort.deleteLocalData(id));
     }
 
     // ========================================================================

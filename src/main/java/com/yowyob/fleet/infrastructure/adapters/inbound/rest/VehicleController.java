@@ -39,6 +39,7 @@ public class VehicleController {
     private final ManageVehicleUseCase vehicleUseCase;
     private final DriverPersistencePort driverPersistencePort;
     private final AccessScopeService accessScope;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
     private final ObjectMapper objectMapper;
 
     /**
@@ -53,7 +54,20 @@ public class VehicleController {
     }
 
     private Mono<Void> requireVehicleAccess(UUID vehicleId, Authentication auth) {
-        return accessScope.assertVehicleAccess(getUserId(auth), vehicleId);
+        // Inclut les véhicules sans flotte du gestionnaire qui les a créés (création
+        // « indépendante »), jusque-là inaccessibles à leur propre gestionnaire.
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId);
+    }
+
+    /** Un changement de flotte doit viser une flotte du périmètre. */
+    private Mono<Void> requireTargetFleetAccess(Map<String, Object> updates, Authentication auth) {
+        Object fleetId = updates.get("fleetId");
+        if (fleetId == null) return Mono.empty();
+        try {
+            return accessScope.assertFleetAccess(getUserId(auth), UUID.fromString(fleetId.toString()));
+        } catch (IllegalArgumentException e) {
+            return Mono.error(new IllegalArgumentException("fleetId invalide : " + fleetId));
+        }
     }
 
     // ========================================================================
@@ -138,6 +152,7 @@ public class VehicleController {
         updates.remove("maintenanceParameters");
         updates.remove("operationalParameters");
         return requireVehicleAccess(vehicleId, auth)
+                .then(requireTargetFleetAccess(updates, auth))
                 .then(vehicleUseCase.patchVehicleInfo(vehicleId, updates, extractToken(auth)));
     }
 
@@ -175,6 +190,7 @@ public class VehicleController {
         updates.values().removeIf(java.util.Objects::isNull);
 
         return requireVehicleAccess(vehicleId, auth)
+                .then(requireTargetFleetAccess(updates, auth))
                 .then(vehicleUseCase.patchVehicleInfo(vehicleId, updates, extractToken(auth)));
     }
 
@@ -238,8 +254,11 @@ public class VehicleController {
     @PatchMapping("/vehicles/{vehicleId}/operational")
     @PreAuthorize("hasRole('FLEET_DRIVER')")
     @Operation(summary = "Mise à jour terrain", description = "Permet au chauffeur d'ajuster l'odomètre ou le niveau de carburant. Acteur: Driver.")
-    public Mono<Void> updateOp(@PathVariable UUID vehicleId, @RequestBody Map<String, Object> updates) {
-        return vehicleUseCase.updateOperationalData(vehicleId, updates);
+    public Mono<Void> updateOp(@PathVariable UUID vehicleId, @RequestBody Map<String, Object> updates,
+                               Authentication auth) {
+        // Le chauffeur n'ajuste que le véhicule qu'il conduit (affecté ou trajet en cours).
+        return resourceAccess.assertDriverOperatesVehicle(getUserId(auth), vehicleId)
+                .then(vehicleUseCase.updateOperationalData(vehicleId, updates));
     }
 
     // ========================================================================

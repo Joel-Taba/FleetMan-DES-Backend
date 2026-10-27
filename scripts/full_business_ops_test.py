@@ -7,7 +7,20 @@ import urllib.error
 import urllib.request
 
 BASE = "http://localhost:8081"
-PWD = "FleetMan2026!"
+def _env_value(name):
+    """Lit une valeur dans l'environnement ou dans le fichier .env (ignoré par git)."""
+    import os
+    if os.environ.get(name):
+        return os.environ[name]
+    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
+    if os.path.exists(env_file):
+        for line in open(env_file, encoding="utf-8"):
+            if line.strip().startswith(name + "="):
+                return line.split("=", 1)[1].strip()
+    raise SystemExit(f"{name} manquant — copiez .env.example en .env")
+
+
+PWD = _env_value("DEMO_PASSWORD")
 
 
 def req(method, path, token=None, body=None):

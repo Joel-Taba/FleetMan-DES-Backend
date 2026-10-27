@@ -5,9 +5,9 @@
 #   admin1@gmail.com … admin3@gmail.com
 #   manager11@gmail.com … manager35@gmail.com
 #   driver101@gmail.com … driver352@gmail.com
-# Tous acceptent aussi FleetMan2026!
+# Tous acceptent aussi le mot de passe démo DEMO_PASSWORD (fichier .env).
 #
-# Comptes démo historiques (mot de passe : FleetMan2026!) :
+# Comptes démo historiques (mot de passe : DEMO_PASSWORD, fichier .env) :
 #   superadmin@fleetman.cm  → FLEET_SUPER_ADMIN  (alias joeltaba4@gmail.com)
 #   admin@fleetman.cm       → FLEET_ADMIN
 #   manager1@fleetman.cm    → FLEET_MANAGER  (Jean Dupont)

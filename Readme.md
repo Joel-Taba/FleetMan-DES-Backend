@@ -22,6 +22,19 @@ Ce projet est développé en mode **Pair Programming** avec une IA (Gemini/ChatG
 - PostgreSQL (avec accès aux serveurs distants configurés dans le `.yml`)
 
 
+### Secrets (obligatoire avant le premier lancement)
+
+Aucun secret (clé API Kernel, mots de passe, jetons) n'est versionné. Ils sont lus depuis
+un fichier `.env` local, **ignoré par git** :
+
+```bash
+cp .env.example .env   # puis compléter les valeurs (à demander à l'équipe)
+```
+
+Le fichier `.env` est chargé automatiquement par Spring Boot et par `docker compose`.
+En CI / production, définir les mêmes noms comme variables d'environnement ou secrets
+GitHub Actions. Sans ces valeurs, l'application refuse de démarrer avec un message explicite.
+
 ### Comment lancer le projet ?
 
 **Sur Linux / Mac :**

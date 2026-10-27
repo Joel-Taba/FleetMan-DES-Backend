@@ -101,6 +101,35 @@ public class PlanningException extends DomainException {
                 HttpStatus.NOT_FOUND, "PLN_011");
     }
 
+    /** PLN_013 — Affectation incompatible avec son planning (flotte ou période) */
+    public static PlanningException scheduleMismatch() {
+        return new PlanningException(
+                "L'affectation doit appartenir à la flotte du planning et se situer dans sa période.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "PLN_013");
+    }
+
+    /** PLN_014 — Archivage impossible tant que des affectations sont actives */
+    public static PlanningException scheduleHasActiveAssignments(UUID id) {
+        return new PlanningException(
+                "Le planning " + id + " contient encore des affectations en attente ou en cours : "
+                        + "terminez-les ou annulez-les avant de l'archiver.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "PLN_014");
+    }
+
+    /** PLN_015 — Une affectation commencée ou terminée fait partie de l'historique */
+    public static PlanningException assignmentNotDeletable(UUID id) {
+        return new PlanningException(
+                "L'affectation " + id + " est en cours ou terminée : elle ne peut pas être supprimée (annulez-la si besoin).",
+                HttpStatus.UNPROCESSABLE_ENTITY, "PLN_015");
+    }
+
+    /** PLN_016 — Le véhicule n'appartient pas à la flotte de l'affectation */
+    public static PlanningException vehicleNotInFleet(UUID vehicleId) {
+        return new PlanningException(
+                "Le véhicule " + vehicleId + " n'appartient pas à la flotte de l'affectation.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "PLN_016");
+    }
+
     /** PLN_012 — Conducteur introuvable pour l'affectation */
     public static PlanningException driverNotFound(UUID driverId) {
         return new PlanningException(

@@ -73,6 +73,11 @@ public class Trip {
     private String cancelReason;
     private Instant cancelledAt;
 
+    // ── Interruption ──────────────────────────────────────────────────────────
+    private LocalDateTime interruptedAt;
+    private LocalDateTime resumedAt;
+    private UUID interruptionIncidentId;
+
     // ── Détails de mission ────────────────────────────────────────────────────
     private List<TripDetail> details;
 
@@ -391,6 +396,31 @@ public class Trip {
 
     public void setCancelledAt(Instant cancelledAt) {
         this.cancelledAt = cancelledAt;
+    }
+
+    // ── Interruption (véhicule immobilisé par un incident grave en cours de trajet) ──
+
+    public LocalDateTime getInterruptedAt() {
+        return interruptedAt;
+    }
+
+    public LocalDateTime getResumedAt() {
+        return resumedAt;
+    }
+
+    public UUID getInterruptionIncidentId() {
+        return interruptionIncidentId;
+    }
+
+    /** Trajet en cours interrompu et pas encore repris (véhicule de remplacement ou libéré). */
+    public boolean isInterrupted() {
+        return interruptedAt != null && resumedAt == null;
+    }
+
+    public void setInterruption(LocalDateTime interruptedAt, LocalDateTime resumedAt, UUID incidentId) {
+        this.interruptedAt = interruptedAt;
+        this.resumedAt = resumedAt;
+        this.interruptionIncidentId = incidentId;
     }
 
     public void setDetails(List<TripDetail> details) {

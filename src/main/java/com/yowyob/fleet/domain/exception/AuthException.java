@@ -32,6 +32,14 @@ public class AuthException extends DomainException {
         return new AuthException("Le service d'authentification central est indisponible.", HttpStatus.SERVICE_UNAVAILABLE, "AUTH_006");
     }
     
+    /** Le Kernel n'accepte plus l'adresse personnelle : il faut l'identifiant Yowyob (envoyé par email). */
+    public static AuthException yowyobIdentityRequired(String kernelMessage) {
+        String message = kernelMessage != null && !kernelMessage.isBlank()
+                ? kernelMessage
+                : "Cette adresse n'est plus un identifiant de connexion. Connectez-vous avec votre identifiant Yowyob, envoyé par email.";
+        return new AuthException(message, HttpStatus.UNAUTHORIZED, "AUTH_008");
+    }
+
     public static AuthException generic(String message, HttpStatus status) {
         return new AuthException(message, status, "AUTH_GENERIC");
     }

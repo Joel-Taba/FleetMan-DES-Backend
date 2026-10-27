@@ -19,6 +19,8 @@ public interface ManageDriverUseCase {
     // ----------------------
 
     Mono<Void> recruitDriver(UUID fleetId, String identifier, UUID managerId, String token);
+    /** Rattache un chauffeur existant à une flotte (périmètre, limite du plan, chauffeur libre). */
+    Mono<Void> attachDriverToFleet(UUID driverId, UUID fleetId, UUID managerId);
     Mono<Driver> getDriverById(UUID userId);
     Flux<Driver> getDrivers(UUID fleetId, UUID requesterId, boolean isAdmin);
     Mono<Void> assignVehicle(UUID userId, UUID vehicleId, UUID requesterId, String token);

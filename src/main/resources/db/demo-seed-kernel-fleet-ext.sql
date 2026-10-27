@@ -10,8 +10,12 @@ VALUES
   ('a1000004-0000-4000-8000-000000000004', 'driver.bella', 'driver5@fleetman.cm', 'Claire', 'Bella', true, '2c991c31-c68d-426a-934d-dd4d20e70093')
 ON CONFLICT (id) DO UPDATE SET kernel_id = EXCLUDED.kernel_id, email = EXCLUDED.email;
 
-INSERT INTO fleet.fleet_managers (user_id, company_name)
-VALUES ('f2000002-0000-4000-8000-000000000002', 'Logistique Foka SARL')
+-- created_by_admin_id obligatoire (migration 049) : admin principal, comme le rattrapage de la 048.
+INSERT INTO fleet.fleet_managers (user_id, company_name, created_by_admin_id)
+VALUES ('f2000002-0000-4000-8000-000000000002', 'Logistique Foka SARL',
+        (SELECT pa.user_id FROM fleet.platform_admins pa
+         JOIN fleet.users u ON u.id = pa.user_id
+         WHERE u.email = 'admin@fleetman.cm' LIMIT 1))
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO fleet.fleets (id, manager_id, name, phone_number, kernel_organization_id)

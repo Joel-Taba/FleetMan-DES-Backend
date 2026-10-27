@@ -34,6 +34,8 @@ public class IncidentService implements ManageIncidentUseCase {
     private final OperationEventPort eventPort;
     private final SendAlertPort sendAlertPort;
     private final UserLocalR2dbcRepository userRepo;
+    private final com.yowyob.fleet.domain.ports.in.ManageExpenseUseCase expenseUseCase;
+    private final IncidentImpactService incidentImpact;
 
     // ── 1. CRÉATION ──────────────────────────────────────────────────────────
 
@@ -82,6 +84,9 @@ public class IncidentService implements ManageIncidentUseCase {
 
                     return incidentPersistence.save(incident);
                 })
+                // Incident grave → véhicule immobilisé, trajet en cours interrompu.
+                .flatMap(incidentImpact::applyImpact)
+                .flatMap(saved -> syncExpense(saved).thenReturn(saved))
                 .flatMap(saved -> {
                     // 3. Publication événement (Kafka, best-effort — no-op si Kafka indisponible)
                     // 4. Notification in-app immédiate au Fleet Manager (toujours active,
@@ -199,7 +204,10 @@ public class IncidentService implements ManageIncidentUseCase {
                     Coordinates coords = buildCoordinates(cmd.longitude(), cmd.latitude());
                     if (coords != null) incident.setLocation(coords);
 
-                    return incidentPersistence.save(incident);
+                    // Une hausse ou une baisse de gravité immobilise ou libère le véhicule.
+                    return incidentPersistence.save(incident)
+                            .flatMap(incidentImpact::applyImpact)
+                            .flatMap(saved -> syncExpense(saved).thenReturn(saved));
                 });
     }
 
@@ -221,7 +229,9 @@ public class IncidentService implements ManageIncidentUseCase {
                         default       -> incident.updateStatus(newStatus);
                     }
 
-                    return incidentPersistence.save(incident);
+                    // Résolu / clôturé → le véhicule est libéré (sauf autre incident grave ouvert).
+                    return incidentPersistence.save(incident)
+                            .flatMap(incidentImpact::applyImpact);
                 });
     }
 
@@ -247,15 +257,28 @@ public class IncidentService implements ManageIncidentUseCase {
     // ── 5. SUPPRESSION ───────────────────────────────────────────────────────
 
     @Override
+    @Transactional
     public Mono<Void> delete(UUID id) {
-        return incidentPersistence.existsById(id)
-                .flatMap(exists -> {
-                    if (!exists) return Mono.error(OperationException.incidentNotFound(id));
-                    return incidentPersistence.deleteById(id);
-                });
+        return incidentPersistence.findById(id)
+                .switchIfEmpty(Mono.error(OperationException.incidentNotFound(id)))
+                .flatMap(incident -> incidentImpact.releaseBeforeDelete(incident)
+                        .then(expenseUseCase.deleteAutoExpenses(id))
+                        .then(incidentPersistence.deleteById(id)));
     }
 
     // ── HELPERS PRIVÉS ───────────────────────────────────────────────────────
+
+    /** Dépense INCIDENT auto-générée, alignée sur le coût de l'incident. */
+    private Mono<Void> syncExpense(Incident incident) {
+        return expenseUseCase.syncAutoExpense(
+                com.yowyob.fleet.domain.model.Expense.ExpenseType.INCIDENT,
+                incident.getId(),
+                incident.getCost(),
+                "Incident " + incident.getType().name()
+                        + (incident.getDescription() != null ? " — " + incident.getDescription() : ""),
+                incident.getVehicleId(),
+                incident.getDriverId());
+    }
 
     private Coordinates buildCoordinates(Double longitude, Double latitude) {
         if (longitude != null && latitude != null) {
@@ -268,19 +291,22 @@ public class IncidentService implements ManageIncidentUseCase {
         String title = incident.isCritical()
                 ? "🚨 Incident CRITIQUE signalé"
                 : "Incident signalé sur un véhicule";
-        String message = String.format("Incident %s (%s) sur le véhicule %s.",
+        String base = String.format("Incident %s (%s) sur le véhicule %s.",
                 incident.getType(), incident.getSeverity(), incident.getVehicleRegistration());
 
-        AlertEvent event = new AlertEvent(
-                null, null, null,
-                managerId, AlertRule.TriggerType.INCIDENT_REPORTED, AlertRule.ActionType.IN_APP_NOTIFICATION,
-                title, message,
-                incident.getId(), "INCIDENT",
-                AlertEvent.ReadStatus.UNREAD,
-                java.time.LocalDateTime.now(), null
-        );
-        return sendAlertPort.sendInApp(event)
-                .doOnSuccess(saved -> notifyManagerByEmail(saved, managerId));
+        // Si le véhicule est immobilisé : trajets / affectations à réorganiser.
+        return incidentImpact.describeImpact(incident).flatMap(impact -> {
+            AlertEvent event = new AlertEvent(
+                    null, null, null,
+                    managerId, AlertRule.TriggerType.INCIDENT_REPORTED, AlertRule.ActionType.IN_APP_NOTIFICATION,
+                    title, base + impact,
+                    incident.getId(), "INCIDENT",
+                    AlertEvent.ReadStatus.UNREAD,
+                    java.time.LocalDateTime.now(), null
+            );
+            return sendAlertPort.sendInApp(event)
+                    .doOnSuccess(saved -> notifyManagerByEmail(saved, managerId));
+        });
     }
 
     /**

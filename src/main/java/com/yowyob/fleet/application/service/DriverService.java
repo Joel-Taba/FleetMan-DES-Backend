@@ -1,6 +1,8 @@
 package com.yowyob.fleet.application.service;
 
 import com.yowyob.fleet.domain.model.Driver;
+import com.yowyob.fleet.domain.exception.DriverException;
+import com.yowyob.fleet.domain.exception.PlanningException;
 import com.yowyob.fleet.domain.model.Vehicle;
 import com.yowyob.fleet.domain.ports.in.AuthUseCase;
 import com.yowyob.fleet.domain.ports.in.ManageDriverUseCase;
@@ -18,7 +20,6 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.User
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetManagerR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
-import com.yowyob.fleet.infrastructure.config.bootstrap.DemoTestAccounts;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,8 +56,13 @@ public class DriverService implements ManageDriverUseCase {
     private final PlanLimitGuard planLimitGuard;
     private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripR2dbcRepository tripRepository;
     private final AccessScopeService accessScope;
+    private final ResourceAvailabilityService availability;
 
     private static final String SERVICE_NAME = "FLEET_MANAGEMENT";
+
+    /** Mot de passe initial d'un chauffeur créé sans mot de passe (variable DRIVER_DEFAULT_PASSWORD). */
+    @Value("${application.driver.default-password:}")
+    private String driverDefaultPassword;
 
     @Value("${application.kernel.tenant-id:}")
     private String defaultTenantId;
@@ -178,7 +184,42 @@ public class DriverService implements ManageDriverUseCase {
                 .next()
                 .switchIfEmpty(
                         Mono.error(new RuntimeException("Aucun chauffeur trouvé avec cet identifiant : " + identifier)))
-                .flatMap(user -> driverPersistencePort.updateFleetAssignment(user.id(), fleetId));
+                .flatMap(user -> attachDriverToFleet(user.id(), fleetId, managerId));
+    }
+
+    /**
+     * Rattache un chauffeur existant à une flotte. Un chauffeur sans flotte consomme une
+     * place du plan (comme une création) ; un chauffeur déjà rattaché ne peut qu'être
+     * transféré entre flottes du périmètre, sans trajet ni affectation en cours, et perd
+     * son véhicule de l'ancienne flotte. Avant : recruter « volait » le chauffeur d'une
+     * autre entreprise et contournait la limite de chauffeurs du plan.
+     */
+    @Override
+    public Mono<Void> attachDriverToFleet(UUID driverId, UUID fleetId, UUID managerId) {
+        return accessScope.assertFleetAccess(managerId, fleetId)
+                .then(driverPersistencePort.findById(driverId))
+                .switchIfEmpty(Mono.error(new RuntimeException("Chauffeur introuvable ou non enregistré")))
+                .flatMap(driver -> {
+                    if (fleetId.equals(driver.fleetId())) {
+                        return Mono.<Void>empty();
+                    }
+                    if (driver.fleetId() != null) {
+                        return accessScope.assertFleetAccess(managerId, driver.fleetId())
+                                .onErrorMap(e -> DriverException.alreadyInAnotherFleet())
+                                .then(assertNoOpenCommitments(driverId))
+                                .then(unassignVehicle(driverId, managerId))
+                                .then(driverPersistencePort.updateFleetAssignment(driverId, fleetId));
+                    }
+                    return planLimitGuard.assertCanCreateDriver(managerId)
+                            .then(driverPersistencePort.updateFleetAssignment(driverId, fleetId));
+                });
+    }
+
+    private Mono<Void> assertNoOpenCommitments(UUID driverId) {
+        return availability.driverHasOpenCommitments(driverId)
+                .flatMap(open -> Boolean.TRUE.equals(open)
+                        ? Mono.<Void>error(DriverException.openCommitments())
+                        : Mono.<Void>empty());
     }
 
     private boolean isMatch(AuthPort.UserDetail user, String id) {
@@ -208,7 +249,14 @@ public class DriverService implements ManageDriverUseCase {
     // --- 4. GESTION LIENS ---
     @Override
     public Mono<Void> removeDriverFromFleet(UUID fleetId, UUID driverId, UUID requesterId) {
+        // Le chauffeur doit être dans CETTE flotte et libre de tout trajet ou affectation
+        // non terminés (règle 8.3) — sinon trajets/affectations pointeraient hors flotte.
         return accessScope.assertFleetAccess(requesterId, fleetId)
+                .then(driverPersistencePort.findById(driverId))
+                .switchIfEmpty(Mono.error(new RuntimeException("Conducteur introuvable")))
+                .flatMap(driver -> fleetId.equals(driver.fleetId())
+                        ? assertNoOpenCommitments(driverId)
+                        : Mono.<Void>error(DriverException.notInFleet()))
                 .then(unassignVehicle(driverId, requesterId))
                 .then(driverPersistencePort.updateFleetAssignment(driverId, null));
     }
@@ -219,6 +267,14 @@ public class DriverService implements ManageDriverUseCase {
         return vehiclePersistencePort.getLocalDataById(targetVehicleId)
                 .switchIfEmpty(Mono.error(new RuntimeException("Véhicule introuvable")))
                 .flatMap(vehicle -> accessScope.assertFleetAccess(requesterId, vehicle.fleetId()).thenReturn(vehicle))
+                // Chauffeur du périmètre et actif ; aucune réaffectation pendant un trajet en
+                // cours du chauffeur ou du véhicule (règle 8.3 « verrouillage de course »).
+                .flatMap(vehicle -> driverPersistencePort.findById(driverId)
+                        .switchIfEmpty(Mono.error(new RuntimeException("Conducteur introuvable")))
+                        .flatMap(driver -> availability.assertDriverEngageable(
+                                requesterId, driver, () -> PlanningException.driverInactive(driverId)))
+                        .then(assertNoTripInProgress(driverId, vehicle.id()))
+                        .thenReturn(vehicle))
                 .flatMap(targetVehicle -> {
 
                     // 1. Nettoyage local (Driver précédent, etc.)
@@ -260,15 +316,29 @@ public class DriverService implements ManageDriverUseCase {
                 .flatMap(driver -> {
                     if (driver.assignedVehicleId() == null)
                         return Mono.empty();
-                    return updateVehicleLink(driver.assignedVehicleId(), null)
+                    return assertNoTripInProgress(driverId, driver.assignedVehicleId())
+                            .then(updateVehicleLink(driver.assignedVehicleId(), null))
                             .then(driverPersistencePort.updateVehicleAssignment(driverId, null));
                 });
+    }
+
+    /** Règle 8.3 : pas de (dés)affectation pendant un trajet en cours du chauffeur ou du véhicule. */
+    private Mono<Void> assertNoTripInProgress(UUID driverId, UUID vehicleId) {
+        return tripRepository.existsInProgressTripForDriver(driverId, null)
+                .flatMap(driverBusy -> Boolean.TRUE.equals(driverBusy)
+                        ? Mono.just(true)
+                        : tripRepository.existsInProgressTripForVehicle(vehicleId, null))
+                .flatMap(busy -> Boolean.TRUE.equals(busy)
+                        ? Mono.<Void>error(DriverException.ongoingTripConflict())
+                        : Mono.<Void>empty());
     }
 
     // ... (ajouter les nouvelles méthodes à l'existant)
 
     public Mono<Driver> registerDriverWithPhoto(UUID fleetId, DriverRegistrationRequest request, UUID managerId, AuthUseCase.FileContent photo) {
-        return accessScope.assertFleetAccess(managerId, fleetId)
+        // Même limite de plan que registerDriver (contournée par la variante avec photo).
+        return planLimitGuard.assertCanCreateDriver(managerId)
+                .then(accessScope.assertFleetAccess(managerId, fleetId))
                 .then(Mono.defer(() -> {
                     // 1. Création Auth avec Photo
                     AuthUseCase.RegisterCommand cmd = new AuthUseCase.RegisterCommand(
@@ -316,7 +386,7 @@ public class DriverService implements ManageDriverUseCase {
     public Mono<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> getDriverEnriched(UUID userId) {
         return driverPersistencePort.findById(userId)
                 .switchIfEmpty(Mono.error(new RuntimeException("Conducteur introuvable")))
-                .flatMap(driver -> tripRepository.existsActiveTripForDriver(userId)
+                .flatMap(driver -> tripRepository.existsInProgressTripForDriver(userId, null)
                         .flatMap(onTrip -> enrichDriver(driver, Boolean.TRUE.equals(onTrip))));
     }
 
@@ -423,7 +493,11 @@ private Mono<Void> updateVehicleLink(UUID vehicleId, UUID driverId) {
                 : "+237600000000";
         String password = (request.password() != null && !request.password().isBlank())
                 ? request.password()
-                : DemoTestAccounts.DEMO_PASSWORD;
+                : driverDefaultPassword;
+        if (password == null || password.isBlank()) {
+            return Mono.error(new IllegalArgumentException(
+                    "Mot de passe du chauffeur obligatoire (aucun mot de passe par défaut configuré)"));
+        }
         DriverRegistrationRequest registration = new DriverRegistrationRequest(
                 baseUsername,
                 password,
@@ -457,11 +531,22 @@ private Mono<Void> updateVehicleLink(UUID vehicleId, UUID driverId) {
                             ? accessScope.assertFleetAccess(managerId, driver.fleetId())
                             : Mono.empty();
                     return ownership.then(Mono.defer(() -> {
-                        Mono<Void> fleetMove = Mono.empty();
-                        if (request.fleetId() != null && !request.fleetId().equals(driver.fleetId())) {
-                            fleetMove = accessScope.assertFleetAccess(managerId, request.fleetId())
+                        boolean moving = request.fleetId() != null && !request.fleetId().equals(driver.fleetId());
+                        boolean deactivating = request.status() != null
+                                && "INACTIVE".equalsIgnoreCase(request.status().trim())
+                                && "ACTIVE".equals(driver.status());
+                        // Un chauffeur désactivé ou changé de flotte ne peut laisser derrière lui
+                        // des trajets/affectations non terminés, ni garder le véhicule de son
+                        // ancienne flotte / un véhicule qu'il ne peut plus conduire.
+                        Mono<Void> fleetMove = (moving || deactivating)
+                                ? assertNoOpenCommitments(userId).then(unassignVehicle(userId, managerId))
+                                : Mono.empty();
+                        if (moving) {
+                            fleetMove = fleetMove
+                                    .then(accessScope.assertFleetAccess(managerId, request.fleetId()))
                                     .then(driverPersistencePort.updateFleetAssignment(userId, request.fleetId()));
                         }
+                        UUID nextAssignedVehicle = (moving || deactivating) ? null : driver.assignedVehicleId();
                         Driver next = new Driver(
                                 driver.userId(),
                                 request.fleetId() != null ? request.fleetId() : driver.fleetId(),
@@ -469,7 +554,7 @@ private Mono<Void> updateVehicleLink(UUID vehicleId, UUID driverId) {
                                 request.status() != null
                                         ? ("INACTIVE".equalsIgnoreCase(request.status().trim()) ? "INACTIVE" : "ACTIVE")
                                         : driver.status(),
-                                driver.assignedVehicleId(),
+                                nextAssignedVehicle,
                                 request.photoUrl() != null ? request.photoUrl() : driver.photoUrl(),
                                 driver.kernelActorId()
                         );
@@ -504,6 +589,7 @@ private Mono<Void> updateVehicleLink(UUID vehicleId, UUID driverId) {
                             ? unassignVehicle(userId, callerId).onErrorResume(e -> Mono.empty())
                             : Mono.empty();
                     return ownership
+                            .then(assertNoOpenCommitments(userId))
                             .then(unassign)
                             .then(driverPersistencePort.softDelete(userId))
                             .then(softDeleteUser(userId));

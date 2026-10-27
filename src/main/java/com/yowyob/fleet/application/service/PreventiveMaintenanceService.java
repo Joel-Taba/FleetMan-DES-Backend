@@ -25,6 +25,8 @@ public class PreventiveMaintenanceService implements ManageMaintenancePlanUseCas
     private final MaintenanceAlertPersistencePort alertPort;
     private final VehiclePersistencePort vehiclePort;
     private final FleetRepositoryPort fleetPort;
+    private final com.yowyob.fleet.domain.ports.out.MaintenancePersistencePort maintenancePort;
+    private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.MaintenanceParameterR2dbcRepository maintenanceParamRepo;
 
     // ── Plans — CRUD ──────────────────────────────────────────────────────────
 
@@ -168,8 +170,16 @@ public class PreventiveMaintenanceService implements ManageMaintenancePlanUseCas
                     if (alert.getStatus() == MaintenanceAlert.AlertStatus.RESOLVED) {
                         return Mono.error(PreventiveMaintenanceException.alertAlreadyResolved(alertId));
                     }
-                    alert.resolve(maintenanceId);
-                    return alertPort.save(alert)
+                    // L'alerte se résout par une maintenance RÉELLE du MÊME véhicule (n'importe
+                    // quel identifiant était accepté, y compris inexistant).
+                    return maintenancePort.findById(maintenanceId)
+                            .filter(m -> alert.getVehicleId().equals(m.getVehicleId()))
+                            .switchIfEmpty(Mono.error(new IllegalArgumentException(
+                                    "La maintenance indiquée n'existe pas ou ne concerne pas le véhicule de l'alerte.")))
+                            .flatMap(m -> {
+                                alert.resolve(maintenanceId);
+                                return alertPort.save(alert);
+                            })
                             .doOnSuccess(a -> log.info("✅ Alerte {} résolue par maintenance {}",
                                     alertId, maintenanceId));
                 });
@@ -215,11 +225,20 @@ public class PreventiveMaintenanceService implements ManageMaintenancePlanUseCas
      * 4. Crée ou met à jour l'alerte (évite les doublons)
      */
     private Mono<MaintenanceAlert> evaluateSingleVehiclePlan(UUID vehicleId, MaintenancePlan plan) {
+        // Kilométrage relevé à la dernière maintenance : base du seuil kilométrique. Il valait
+        // toujours 0, la cible était donc recalculée depuis le kilométrage COURANT à chaque
+        // évaluation et restait toujours un intervalle plus loin : aucune alerte km.
+        Mono<Float> lastKmMono = maintenanceParamRepo.findByVehicleId(vehicleId)
+                .mapNotNull(p -> p.getLastMaintenanceKm())
+                .map(java.math.BigDecimal::floatValue)
+                .defaultIfEmpty(0f);
         return vehiclePort.getLocalDataById(vehicleId)
-                .flatMap(vehicle -> {
+                .zipWith(lastKmMono)
+                .flatMap(tuple -> {
+                    var vehicle = tuple.getT1();
                     float currentKm = 0f;
                     LocalDate lastMaintenanceDate = null;
-                    float lastMaintenanceKm = 0f;
+                    float lastMaintenanceKm = tuple.getT2();
 
                     if (vehicle.operationalParameters() != null) {
                         Float mileage = vehicle.operationalParameters().mileage();
@@ -304,11 +323,16 @@ public class PreventiveMaintenanceService implements ManageMaintenancePlanUseCas
                 .then();
 
         if (scope == MaintenancePlan.PlanScope.VEHICLE && vehicleId != null) {
+            // Un plan VEHICLE n'est évalué que pour les plans de la flotte du véhicule
+            // (evaluatePlansForVehicle) : un véhicule d'une autre flotte rendait le plan inopérant.
             return fleetCheck.then(
                     vehiclePort.getLocalDataById(vehicleId)
                             .switchIfEmpty(Mono.error(
                                     PreventiveMaintenanceException.vehicleNotFound(vehicleId)))
-                            .then()
+                            .flatMap(v -> fleetId.equals(v.fleetId())
+                                    ? Mono.<Void>empty()
+                                    : Mono.<Void>error(new IllegalArgumentException(
+                                            "Le véhicule n'appartient pas à la flotte du plan.")))
             );
         }
         return fleetCheck;

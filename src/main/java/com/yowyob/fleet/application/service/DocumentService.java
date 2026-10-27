@@ -38,6 +38,7 @@ public class DocumentService implements ManageDocumentUseCase {
                     } catch (IllegalArgumentException e) {
                         return Mono.error(DocumentException.invalidDocType(cmd.docType()));
                     }
+                    VehicleDocument.requireConsistentDates(cmd.issueDate(), cmd.expiryDate());
 
                     VehicleDocument doc = new VehicleDocument(
                             null, cmd.vehicleId(), type,
@@ -75,13 +76,15 @@ public class DocumentService implements ManageDocumentUseCase {
                         doc.setFileMetadata(cmd.fileOriginalName(), cmd.fileMimeType(), cmd.fileSizeBytes());
                     }
                     if (cmd.notes() != null)     doc.setNotes(cmd.notes());
-                    if (cmd.status() != null) {
-                        try {
-                            doc.setStatus(VehicleDocument.Status.valueOf(cmd.status()));
-                        } catch (IllegalArgumentException ignored) {}
+                    doc.updateDetails(cmd.docNumber(), cmd.issuer(), cmd.issueDate(), cmd.expiryDate());
+                    // Seul « en renouvellement » se pose à la main : VALID / EXPIRING_SOON /
+                    // EXPIRED découlent de la date d'expiration (un document expiré pouvait
+                    // être forcé VALID et fausser le rapport de conformité).
+                    if ("PENDING_RENEWAL".equals(cmd.status())) {
+                        doc.markPendingRenewal();
+                    } else {
+                        doc.refreshStatus();
                     }
-                    // Recalcul du statut si pas de statut forcé
-                    if (cmd.status() == null) doc.refreshStatus();
                     return documentPort.saveVehicleDoc(doc);
                 });
     }
@@ -108,6 +111,7 @@ public class DocumentService implements ManageDocumentUseCase {
                     } catch (IllegalArgumentException e) {
                         return Mono.error(DocumentException.invalidDocType(cmd.docType()));
                     }
+                    DriverDocument.requireConsistentDates(cmd.issueDate(), cmd.expiryDate());
 
                     DriverDocument doc = new DriverDocument(
                             null, cmd.driverId(), type,
@@ -145,12 +149,14 @@ public class DocumentService implements ManageDocumentUseCase {
                         doc.setFileMetadata(cmd.fileOriginalName(), cmd.fileMimeType(), cmd.fileSizeBytes());
                     }
                     if (cmd.notes() != null)   doc.setNotes(cmd.notes());
-                    if (cmd.status() != null) {
-                        try {
-                            doc.setStatus(DriverDocument.Status.valueOf(cmd.status()));
-                        } catch (IllegalArgumentException ignored) {}
+                    doc.updateDetails(cmd.docNumber(), cmd.licenseCategories(), cmd.issuer(),
+                            cmd.issueDate(), cmd.expiryDate());
+                    // Même règle que pour les documents véhicule.
+                    if ("PENDING_RENEWAL".equals(cmd.status())) {
+                        doc.markPendingRenewal();
+                    } else {
+                        doc.refreshStatus();
                     }
-                    if (cmd.status() == null) doc.refreshStatus();
                     return documentPort.saveDriverDoc(doc);
                 });
     }

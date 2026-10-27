@@ -17,8 +17,6 @@ import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authentication.AuthenticationWebFilter;
-import org.springframework.security.web.server.util.matcher.AndServerWebExchangeMatcher;
-import org.springframework.security.web.server.util.matcher.NegatedServerWebExchangeMatcher;
 import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatchers;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
@@ -66,15 +64,11 @@ public class SecurityConfig {
             return response.writeWith(Mono.just(buffer));
         });
 
+        // Les fichiers (/api/v1/files/**) passent aussi par ce filtre : ils contiennent des
+        // documents KYC, permis et photos, et ne sont plus servis anonymement. Le front les
+        // télécharge avec le Bearer et les affiche via une URL blob: (lib/files/secure-file.ts).
         jwtFilter.setRequiresAuthenticationMatcher(
-                new AndServerWebExchangeMatcher(
-                        ServerWebExchangeMatchers.pathMatchers("/api/v1/**"),
-                        new NegatedServerWebExchangeMatcher(
-                                // GET fichiers publics anonymes ; POST upload doit pouvoir lire le Bearer
-                                ServerWebExchangeMatchers.pathMatchers(
-                                        org.springframework.http.HttpMethod.GET, "/api/v1/files/**")
-                        )
-                )
+                ServerWebExchangeMatchers.pathMatchers("/api/v1/**")
         );
 
         return http
@@ -84,12 +78,6 @@ public class SecurityConfig {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
-                // Le viewer PDF intégré (iframe) du front sert /api/v1/files/**, servi
-                // depuis une origine distincte (autre port en dev, sous-domaine en prod).
-                // X-Frame-Options DENY (défaut Spring Security) bloque cet embed même en
-                // SAMEORIGIN puisque front et back n'ont jamais la même origine ici — cette
-                // API ne sert que du JSON/fichiers, pas de pages HTML sensibles au clickjacking.
-                .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()))
                 .authenticationManager(authenticationManager)
 
                 .exceptionHandling(handling -> handling
@@ -111,7 +99,6 @@ public class SecurityConfig {
                                 "/api/v1/auth/**",
                                 "/api/v1/public/**"
                         ).permitAll()
-                        .pathMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/files/**").permitAll()
                         // Upload inscription publique (signup) — catégorie restreinte dans le contrôleur
                         .pathMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/files/upload").permitAll()
                         // B. OPTIONS (Indispensable pour le pre-flight CORS)

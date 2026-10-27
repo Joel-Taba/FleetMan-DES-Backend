@@ -36,6 +36,8 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
     private final SendAlertPort sendAlertPort;
     private final MaintenanceParameterR2dbcRepository maintenanceParamRepo;
     private final UserLocalR2dbcRepository userRepo;
+    private final com.yowyob.fleet.domain.ports.in.ManageExpenseUseCase expenseUseCase;
+    private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.OperationalParameterR2dbcRepository operationalRepo;
 
     // ── 1. CRÉATION ──────────────────────────────────────────────────────────
 
@@ -80,7 +82,8 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
                 })
                 .flatMap(saved -> {
                     // 3. Synchronisation maintenance_parameters du véhicule
-                    Mono<Void> syncParams = syncMaintenanceParameters(saved.getVehicleId());
+                    Mono<Void> syncParams = syncMaintenanceParameters(saved.getVehicleId())
+                            .then(syncExpense(saved));
 
                     // 4. Publication événement (Kafka, best-effort — no-op si Kafka indisponible)
                     //    + notification in-app immédiate au Fleet Manager (toujours active)
@@ -140,8 +143,12 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
 
     @Override
     public Flux<Maintenance> getByDateRange(LocalDateTime start, LocalDateTime end, UUID managerId) {
-        return maintenancePersistence.findByDateRange(start, end)
-                .filter(m -> true); // le filtrage par manager est délégué à la couche persistance si nécessaire
+        // Limité aux véhicules du gestionnaire : l'ancien filter(m -> true) renvoyait les
+        // maintenances de TOUTES les entreprises.
+        return maintenancePersistence.findAllByManagerId(managerId)
+                .filter(m -> m.getDateTime() != null
+                        && (start == null || !m.getDateTime().isBefore(start))
+                        && (end == null || !m.getDateTime().isAfter(end)));
     }
 
     @Override
@@ -165,7 +172,8 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
                         maintenance.updateLocation(coords, cmd.locationName());
                     }
 
-                    return maintenancePersistence.save(maintenance);
+                    return maintenancePersistence.save(maintenance)
+                            .flatMap(saved -> syncExpense(saved).thenReturn(saved));
                 });
     }
 
@@ -176,7 +184,8 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
         return maintenancePersistence.existsById(id)
                 .flatMap(exists -> {
                     if (!exists) return Mono.error(OperationException.maintenanceNotFound(id));
-                    return maintenancePersistence.deleteById(id);
+                    return expenseUseCase.deleteAutoExpenses(id)
+                            .then(maintenancePersistence.deleteById(id));
                 });
     }
 
@@ -197,9 +206,16 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
      * Appelé après chaque création de maintenance.
      */
     private Mono<Void> syncMaintenanceParameters(UUID vehicleId) {
+        // Le kilométrage relevé à la maintenance sert de base aux seuils kilométriques
+        // de la maintenance préventive.
+        Mono<java.math.BigDecimal> odometer = operationalRepo.findByVehicleId(vehicleId)
+                .mapNotNull(op -> op.getOdometerReading());
         return maintenanceParamRepo.findByVehicleId(vehicleId)
-                .flatMap(params -> {
+                .zipWith(odometer.map(java.util.Optional::of).defaultIfEmpty(java.util.Optional.empty()))
+                .flatMap(tuple -> {
+                    var params = tuple.getT1();
                     params.setLastMaintenanceAt(LocalDate.now());
+                    tuple.getT2().ifPresent(params::setLastMaintenanceKm);
                     params.setMaintenanceStatus("UP_TO_DATE");
                     return maintenanceParamRepo.save(params);
                 })
@@ -207,6 +223,17 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
                 .doOnError(e -> log.warn("⚠️ Impossible de mettre à jour maintenance_parameters pour {}: {}",
                         vehicleId, e.getMessage()))
                 .then();
+    }
+
+    /** Dépense MAINTENANCE auto-générée, alignée sur le coût de l'intervention. */
+    private Mono<Void> syncExpense(Maintenance maintenance) {
+        return expenseUseCase.syncAutoExpense(
+                com.yowyob.fleet.domain.model.Expense.ExpenseType.MAINTENANCE,
+                maintenance.getId(),
+                maintenance.getCost(),
+                "Maintenance — " + maintenance.getSubject(),
+                maintenance.getVehicleId(),
+                maintenance.getDriverId());
     }
 
     private Mono<AlertEvent> notifyManagerOfMaintenance(Maintenance maintenance, UUID managerId) {

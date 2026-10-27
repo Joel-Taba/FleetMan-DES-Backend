@@ -48,6 +48,7 @@ public class IdempotencyWebFilter implements WebFilter {
 
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
+    private final InternalSyncCallMarker internalSyncCallMarker;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
@@ -227,7 +228,9 @@ public class IdempotencyWebFilter implements WebFilter {
         // une fois par SyncPushService lui-même) : la seconde écriture échoue en base
         // ("Row with Id [...] does not exist") et fait échouer la mutation rejouée —
         // symptôme observé côté client : édition perdue / requête rejetée au reconnect.
-        if ("true".equalsIgnoreCase(request.getHeaders().getFirst("X-Internal-Sync-Call"))) {
+        // La valeur attendue est secrète (cf. InternalSyncCallMarker) : un client
+        // externe ne peut pas désactiver ce filtre en posant lui-même l'en-tête.
+        if (internalSyncCallMarker.matches(request.getHeaders().getFirst(InternalSyncCallMarker.HEADER))) {
             return false;
         }
         String path = request.getURI().getPath();

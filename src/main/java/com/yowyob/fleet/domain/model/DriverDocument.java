@@ -109,6 +109,34 @@ public class DriverDocument {
         this.updatedAt = LocalDateTime.now();
     }
 
+    /** La délivrance ne peut pas être postérieure à l'expiration. */
+    public static void requireConsistentDates(LocalDate issueDate, LocalDate expiryDate) {
+        if (issueDate != null && expiryDate != null && issueDate.isAfter(expiryDate)) {
+            throw new IllegalArgumentException("La date de délivrance doit précéder la date d'expiration.");
+        }
+    }
+
+    /**
+     * Met à jour l'identification et la validité du document (ex. renouvellement du
+     * permis). Une nouvelle date d'expiration recalcule le statut. Ces champs, envoyés
+     * par le formulaire de modification, étaient ignorés.
+     */
+    public void updateDetails(String docNumber, String licenseCategories, String issuer,
+                              LocalDate issueDate, LocalDate expiryDate) {
+        LocalDate nextIssue = issueDate != null ? issueDate : this.issueDate;
+        LocalDate nextExpiry = expiryDate != null ? expiryDate : this.expiryDate;
+        requireConsistentDates(nextIssue, nextExpiry);
+        if (docNumber != null) this.docNumber = docNumber;
+        if (licenseCategories != null) this.licenseCategories = licenseCategories;
+        if (issuer != null) this.issuer = issuer;
+        this.issueDate = nextIssue;
+        if (expiryDate != null && !expiryDate.equals(this.expiryDate)) {
+            this.expiryDate = expiryDate;
+            this.status = computeStatus(expiryDate);
+        }
+        this.updatedAt = LocalDateTime.now();
+    }
+
     public void markPendingRenewal() {
         this.status = Status.PENDING_RENEWAL;
         this.updatedAt = LocalDateTime.now();

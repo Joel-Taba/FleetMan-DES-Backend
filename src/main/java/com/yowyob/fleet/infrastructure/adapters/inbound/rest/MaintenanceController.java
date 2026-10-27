@@ -29,6 +29,7 @@ import java.util.UUID;
 public class MaintenanceController {
 
     private final ManageMaintenanceUseCase maintenanceUseCase;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -42,7 +43,8 @@ public class MaintenanceController {
     @Operation(summary = "Déclarer une maintenance",
                description = "Enregistre une intervention technique sur un véhicule. Notifie automatiquement le Fleet Manager.")
     public Mono<MaintenanceResponse> create(
-            @Valid @RequestBody MaintenanceRequest request) {
+            @Valid @RequestBody MaintenanceRequest request,
+            Authentication auth) {
 
         ManageMaintenanceUseCase.CreateMaintenanceCommand cmd =
                 new ManageMaintenanceUseCase.CreateMaintenanceCommand(
@@ -55,7 +57,13 @@ public class MaintenanceController {
                         request.vehicleId(),
                         request.driverId()
                 );
-        return maintenanceUseCase.createMaintenance(cmd).map(MaintenanceResponse::from);
+        UUID actor = getUserId(auth);
+        // Un chauffeur ne déclare que pour le véhicule qu'il conduit ; un gestionnaire,
+        // pour un véhicule de son périmètre.
+        Mono<Void> scope = com.yowyob.fleet.infrastructure.config.security.AuthPrincipal.isFleetDriver(auth)
+                ? resourceAccess.assertDriverOperatesVehicle(actor, request.vehicleId())
+                : resourceAccess.assertVehicleAccess(actor, request.vehicleId());
+        return scope.then(maintenanceUseCase.createMaintenance(cmd)).map(MaintenanceResponse::from);
     }
 
     // ── LECTURE ───────────────────────────────────────────────────────────────
@@ -72,8 +80,10 @@ public class MaintenanceController {
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
     @Operation(summary = "Détail d'une maintenance")
     public Mono<MaintenanceResponse> getById(
-            @Parameter(description = "ID de la maintenance") @PathVariable UUID id) {
-        return maintenanceUseCase.getById(id).map(MaintenanceResponse::from);
+            @Parameter(description = "ID de la maintenance") @PathVariable UUID id,
+            Authentication auth) {
+        return resourceAccess.assertMaintenanceAccess(getUserId(auth), id)
+                .then(maintenanceUseCase.getById(id)).map(MaintenanceResponse::from);
     }
 
     @GetMapping("/vehicle/{vehicleId}")
@@ -81,8 +91,10 @@ public class MaintenanceController {
     @Operation(summary = "Maintenances d'un véhicule",
                description = "Retourne l'historique complet des maintenances pour un véhicule donné.")
     public Flux<MaintenanceResponse> getByVehicle(
-            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
-        return maintenanceUseCase.getByVehicleId(vehicleId).map(MaintenanceResponse::from);
+            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
+            Authentication auth) {
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                .thenMany(maintenanceUseCase.getByVehicleId(vehicleId)).map(MaintenanceResponse::from);
     }
 
     @GetMapping("/driver/{driverId}")
@@ -90,8 +102,10 @@ public class MaintenanceController {
     @Operation(summary = "Maintenances d'un chauffeur",
                description = "Retourne toutes les maintenances impliquant un chauffeur donné.")
     public Flux<MaintenanceResponse> getByDriver(
-            @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId) {
-        return maintenanceUseCase.getByDriverId(driverId).map(MaintenanceResponse::from);
+            @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId,
+            Authentication auth) {
+        return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                .thenMany(maintenanceUseCase.getByDriverId(driverId)).map(MaintenanceResponse::from);
     }
 
     @GetMapping("/range")
@@ -114,7 +128,8 @@ public class MaintenanceController {
                description = "Met à jour le rapport, le coût ou la localisation d'une maintenance existante.")
     public Mono<MaintenanceResponse> update(
             @Parameter(description = "ID de la maintenance") @PathVariable UUID id,
-            @Valid @RequestBody MaintenanceRequest request) {
+            @Valid @RequestBody MaintenanceRequest request,
+            Authentication auth) {
 
         ManageMaintenanceUseCase.UpdateMaintenanceCommand cmd =
                 new ManageMaintenanceUseCase.UpdateMaintenanceCommand(
@@ -126,7 +141,8 @@ public class MaintenanceController {
                         request.latitude(),
                         request.locationName()
                 );
-        return maintenanceUseCase.update(cmd).map(MaintenanceResponse::from);
+        return resourceAccess.assertMaintenanceAccess(getUserId(auth), id)
+                .then(maintenanceUseCase.update(cmd)).map(MaintenanceResponse::from);
     }
 
     // ── SUPPRESSION ───────────────────────────────────────────────────────────
@@ -136,7 +152,9 @@ public class MaintenanceController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Supprimer une maintenance")
     public Mono<Void> delete(
-            @Parameter(description = "ID de la maintenance") @PathVariable UUID id) {
-        return maintenanceUseCase.delete(id);
+            @Parameter(description = "ID de la maintenance") @PathVariable UUID id,
+            Authentication auth) {
+        return resourceAccess.assertMaintenanceAccess(getUserId(auth), id)
+                .then(maintenanceUseCase.delete(id));
     }
 }

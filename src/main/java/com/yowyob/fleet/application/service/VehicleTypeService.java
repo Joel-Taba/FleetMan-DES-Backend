@@ -32,6 +32,7 @@ public class VehicleTypeService {
                 request.code().toUpperCase(),
                 request.label(),
                 request.description(),
+                requiredCategory(request),
                 true // isNew force l'INSERT
         );
         return repository.save(entity);
@@ -43,6 +44,7 @@ public class VehicleTypeService {
                     existing.setCode(request.code().toUpperCase());
                     existing.setLabel(request.label());
                     existing.setDescription(request.description());
+                    existing.setRequiredLicenseCategory(requiredCategory(request));
                     existing.setNew(false); // Update
                     return repository.save(existing);
                 });
@@ -52,5 +54,13 @@ public class VehicleTypeService {
         // Note : PostgreSQL renverra une erreur si ce type est utilisé par des véhicules (FK Constraint).
         // C'est le comportement voulu pour la sécurité des données.
         return repository.deleteById(id);
+    }
+
+    /** Catégorie fournie, sinon celle déduite du code (ex. TRUCK → C). */
+    private static String requiredCategory(VehicleTypeRequest request) {
+        String given = request.requiredLicenseCategory();
+        return given != null && !given.isBlank()
+                ? given.trim().toUpperCase()
+                : com.yowyob.fleet.domain.model.DrivingLicenseRules.defaultCategoryFor(request.code());
     }
 }

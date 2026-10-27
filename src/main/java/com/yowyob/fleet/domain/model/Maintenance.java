@@ -67,6 +67,11 @@ public class Maintenance {
         if (vehicleId == null) {
             throw new IllegalArgumentException("Le véhicule est obligatoire pour une maintenance.");
         }
+        // Même règle qu'updateCost : un coût négatif était refusé à la modification
+        // mais accepté à la création.
+        if (cost != null && cost.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Le coût de maintenance ne peut pas être négatif.");
+        }
 
         this.id = id;
         this.subject = subject;

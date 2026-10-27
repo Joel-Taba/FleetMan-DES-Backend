@@ -82,6 +82,9 @@ public class IncidentEntity implements Persistable<UUID> {
     @Column("driver_full_name")
     private String driverFullName;
 
+    @Column("vehicle_immobilized")
+    private boolean vehicleImmobilized;
+
     @Transient
     private boolean isNew = false;
 

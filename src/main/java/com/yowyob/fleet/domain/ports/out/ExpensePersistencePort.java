@@ -96,6 +96,9 @@ public interface ExpensePersistencePort {
                                                         LocalDateTime monthStart,
                                                         LocalDateTime monthEnd);
 
+    /** Dépense(s) auto-générée(s) depuis l'opération source donnée. */
+    Flux<Expense> findBySourceId(UUID sourceId);
+
     Mono<Boolean> existsById(UUID id);
 
     Mono<Void> deleteById(UUID id);

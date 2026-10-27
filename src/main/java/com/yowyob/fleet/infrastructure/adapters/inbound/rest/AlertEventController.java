@@ -25,6 +25,7 @@ import java.util.UUID;
 public class AlertEventController {
 
     private final ManageAlertRuleUseCase useCase;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -58,8 +59,11 @@ public class AlertEventController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Détail d'une notification")
     public Mono<AlertEventResponse> getById(
-            @Parameter(description = "ID de la notification") @PathVariable UUID id) {
-        return useCase.getEventById(id).map(AlertEventResponse::from);
+            @Parameter(description = "ID de la notification") @PathVariable UUID id,
+            Authentication auth) {
+        return useCase.getEventById(id)
+                .flatMap(r -> resourceAccess.assertOwner(getUserId(auth), r.getManagerId()))
+                .then(useCase.getEventById(id).map(AlertEventResponse::from));
     }
 
     @PatchMapping("/{id}/read")
@@ -67,8 +71,11 @@ public class AlertEventController {
     @Operation(summary = "Marquer comme lue",
                description = "Marque une notification spécifique comme lue (UNREAD → READ).")
     public Mono<AlertEventResponse> markAsRead(
-            @Parameter(description = "ID de la notification") @PathVariable UUID id) {
-        return useCase.markAsRead(id).map(AlertEventResponse::from);
+            @Parameter(description = "ID de la notification") @PathVariable UUID id,
+            Authentication auth) {
+        return useCase.getEventById(id)
+                .flatMap(r -> resourceAccess.assertOwner(getUserId(auth), r.getManagerId()))
+                .then(useCase.markAsRead(id).map(AlertEventResponse::from));
     }
 
     @PatchMapping("/read-all")
@@ -84,8 +91,11 @@ public class AlertEventController {
     @Operation(summary = "Ignorer une notification",
                description = "Masque une notification sans la supprimer (UNREAD → DISMISSED).")
     public Mono<AlertEventResponse> dismiss(
-            @Parameter(description = "ID de la notification") @PathVariable UUID id) {
-        return useCase.dismiss(id).map(AlertEventResponse::from);
+            @Parameter(description = "ID de la notification") @PathVariable UUID id,
+            Authentication auth) {
+        return useCase.getEventById(id)
+                .flatMap(r -> resourceAccess.assertOwner(getUserId(auth), r.getManagerId()))
+                .then(useCase.dismiss(id).map(AlertEventResponse::from));
     }
 
     // ── DTOs internes ─────────────────────────────────────────────────────────

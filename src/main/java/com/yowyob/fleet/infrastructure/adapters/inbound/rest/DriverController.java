@@ -38,6 +38,7 @@ import java.util.UUID;
 public class DriverController {
 
     private final ManageDriverUseCase driverUseCase;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) { return ((AuthPort.UserDetail) auth.getPrincipal()).id(); }
     private String getToken(String header) { return header.startsWith("Bearer ") ? header.substring(7) : header; }
@@ -103,8 +104,9 @@ public class DriverController {
 
     @GetMapping("/drivers/{userId}")
     @Operation(summary = "Profil détaillé d'un chauffeur")
-    public Mono<DriverResponse> getById(@PathVariable UUID userId) {
-        return driverUseCase.getDriverEnriched(userId);
+    public Mono<DriverResponse> getById(@PathVariable UUID userId, Authentication auth) {
+        return resourceAccess.assertDriverAccess(getUserId(auth), userId)
+                .then(driverUseCase.getDriverEnriched(userId));
     }
 
     @GetMapping("/drivers/search")
@@ -114,14 +116,17 @@ public class DriverController {
     }
 
     @PostMapping("/drivers/{userId}/assign-vehicle")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     public Mono<Void> assign(@PathVariable UUID userId, @RequestBody VehicleAssignRequest req, 
                              @RequestHeader(HttpHeaders.AUTHORIZATION) String authHeader, Authentication auth) {
         return driverUseCase.assignVehicle(userId, req.vehicleId(), getUserId(auth), getToken(authHeader));
     }
 
     @PostMapping("/drivers/{userId}/unassign-vehicle")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     public Mono<Void> unassign(@PathVariable UUID userId, Authentication auth) {
-        return driverUseCase.unassignVehicle(userId, getUserId(auth));
+        return resourceAccess.assertDriverAccess(getUserId(auth), userId)
+                .then(driverUseCase.unassignVehicle(userId, getUserId(auth)));
     }
 
     private Mono<AuthUseCase.FileContent> processFile(Part fp) {

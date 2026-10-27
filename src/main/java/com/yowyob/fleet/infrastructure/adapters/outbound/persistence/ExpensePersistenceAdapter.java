@@ -119,6 +119,11 @@ public class ExpensePersistenceAdapter implements ExpensePersistencePort {
         return repository.deleteById(id);
     }
 
+    @Override
+    public Flux<Expense> findBySourceId(UUID sourceId) {
+        return repository.findBySourceId(sourceId).map(this::toDomain);
+    }
+
     // ── Conversion Entity → Domain ────────────────────────────────────────────
 
     private Expense toDomain(ExpenseEntity e) {

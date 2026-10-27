@@ -16,11 +16,21 @@ import java.util.UUID;
  *       identiques à {@code fleet.users.id}</li>
  * </ul>
  * Mot de passe seed : {@code <username>@123} (ex. admin1@123).
- * Tous les comptes acceptent aussi {@link #DEMO_PASSWORD}.
+ * Tous les comptes acceptent aussi le mot de passe démo commun ({@link #demoPassword()}),
+ * lu dans la propriété {@code application.demo.password} (variable DEMO_PASSWORD du fichier .env).
  */
 public final class DemoTestAccounts {
 
-    public static final String DEMO_PASSWORD = "FleetMan2026!";
+    /** Mot de passe démo commun : configuré au démarrage, jamais écrit dans le code. */
+    private static volatile String demoPassword = "";
+
+    public static void configureDemoPassword(String password) {
+        demoPassword = password == null ? "" : password;
+    }
+
+    public static String demoPassword() {
+        return demoPassword;
+    }
 
     public record Account(
             UUID id,
@@ -175,7 +185,7 @@ public final class DemoTestAccounts {
     }
 
     public static boolean isDemoPassword(String password) {
-        return DEMO_PASSWORD.equals(password);
+        return !demoPassword.isEmpty() && demoPassword.equals(password);
     }
 
     /** Mot de passe démo commun, ou {@code username@123} pour les comptes seed @gmail.com. */
@@ -183,7 +193,7 @@ public final class DemoTestAccounts {
         if (password == null || account == null) {
             return false;
         }
-        if (DEMO_PASSWORD.equals(password)) {
+        if (isDemoPassword(password)) {
             return true;
         }
         return account.email() != null

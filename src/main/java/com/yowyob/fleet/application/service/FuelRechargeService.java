@@ -30,6 +30,7 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
     private final VehiclePersistencePort vehiclePersistence;
     private final DriverPersistencePort driverPersistence;
     private final OperationalParameterR2dbcRepository operationalRepo;
+    private final com.yowyob.fleet.domain.ports.in.ManageExpenseUseCase expenseUseCase;
 
     // ── 1. CRÉATION ──────────────────────────────────────────────────────────
 
@@ -76,7 +77,9 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
                     );
 
                     return fuelRechargePersistence.save(recharge)
-                            .flatMap(saved -> syncFuelLevel(saved, tankCapacity).thenReturn(saved));
+                            .flatMap(saved -> syncFuelLevel(saved, tankCapacity)
+                                    .then(syncExpense(saved))
+                                    .thenReturn(saved));
                 });
     }
 
@@ -152,7 +155,8 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
                             existing.getDriverFullName()
                     );
 
-                    return fuelRechargePersistence.save(updated);
+                    return fuelRechargePersistence.save(updated)
+                            .flatMap(saved -> syncExpense(saved).thenReturn(saved));
                 });
     }
 
@@ -163,16 +167,42 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
         return fuelRechargePersistence.existsById(id)
                 .flatMap(exists -> {
                     if (!exists) return Mono.error(OperationException.fuelRechargeNotFound(id));
-                    return fuelRechargePersistence.deleteById(id);
+                    return expenseUseCase.deleteAutoExpenses(id)
+                            .then(fuelRechargePersistence.deleteById(id));
                 });
     }
 
     // ── HELPERS PRIVÉS ───────────────────────────────────────────────────────
 
+    /** Dépense FUEL auto-générée, alignée sur le prix du plein. */
+    private Mono<Void> syncExpense(FuelRecharge recharge) {
+        return expenseUseCase.syncAutoExpense(
+                com.yowyob.fleet.domain.model.Expense.ExpenseType.FUEL,
+                recharge.getId(),
+                recharge.getPrice(),
+                "Carburant — " + recharge.getQuantity().stripTrailingZeros().toPlainString() + " L",
+                recharge.getVehicleId(),
+                recharge.getDriverId());
+    }
+
+    /** Niveau courant en % (« 45 », « 45% », « FULL ») ; null s'il est inconnu. */
+    private static BigDecimal parseFuelLevel(String level) {
+        if (level == null || level.isBlank()) return null;
+        String value = level.trim().toUpperCase();
+        if ("FULL".equals(value)) return BigDecimal.valueOf(100);
+        try {
+            return new BigDecimal(value.replace("%", "").trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     /**
-     * Met à jour le fuel_level dans operational_parameters après une recharge.
-     * Calcule le nouveau niveau en pourcentage : (quantité rechargée / capacité du réservoir) * 100.
-     * Le niveau est plafonné à "FULL" si la recharge dépasse la capacité.
+     * Met à jour le fuel_level dans operational_parameters après une recharge : le niveau
+     * courant + la quantité rechargée rapportée à la capacité du réservoir, plafonné à 100 %.
+     * Avant, le niveau était remplacé par la seule recharge (un appoint de 10 L dans un
+     * réservoir à moitié plein le faisait « tomber » à ~15 %), et « FULL » s'affichait 0 %
+     * côté front, qui attend un pourcentage numérique.
      */
     private Mono<Void> syncFuelLevel(FuelRecharge recharge, BigDecimal tankCapacity) {
         if (tankCapacity.compareTo(BigDecimal.ZERO) == 0) {
@@ -184,13 +214,14 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
         return operationalRepo.findByVehicleId(recharge.getVehicleId())
                 .flatMap(params -> {
                     // Calcul du nouveau niveau en pourcentage
-                    BigDecimal percentage = recharge.getQuantity()
-                            .divide(tankCapacity, 2, RoundingMode.HALF_UP)
+                    BigDecimal added = recharge.getQuantity()
+                            .divide(tankCapacity, 4, RoundingMode.HALF_UP)
                             .multiply(BigDecimal.valueOf(100));
+                    BigDecimal current = parseFuelLevel(params.getFuelLevel());
+                    BigDecimal percentage = (current != null ? current : BigDecimal.ZERO).add(added)
+                            .min(BigDecimal.valueOf(100));
 
-                    String fuelLevel = percentage.compareTo(BigDecimal.valueOf(100)) >= 0
-                            ? "FULL"
-                            : percentage.setScale(0, RoundingMode.HALF_UP) + "%";
+                    String fuelLevel = percentage.setScale(0, RoundingMode.HALF_UP) + "%";
 
                     params.setFuelLevel(fuelLevel);
                     params.setTimestamp(Instant.now());

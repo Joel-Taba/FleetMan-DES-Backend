@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Secrets lus depuis le fichier .env (ignoré par git) — voir .env.example
+_FLEET_ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../.env"
+if [[ -f "$_FLEET_ENV_FILE" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$_FLEET_ENV_FILE"
+  set +a
+fi
+
 KERNEL_URL="${KERNEL_URL:-https://kernel-core.yowyob.com}"
 CLIENT_ID="${CLIENT_ID:-fleet-management-backend}"
-API_KEY="${API_KEY:-K5mWlNhc6zH2-JcaZJWSs1sLxUzjS902u4MxEnJar5g}"
+API_KEY="${API_KEY:-${KERNEL_API_KEY:?KERNEL_API_KEY manquant — copiez .env.example en .env}}"
 TENANT_ID="${TENANT_ID:-f5b814d9-766e-4c87-91ec-d6c8e32cb56c}"
 ORG_ID="${ORG_ID:-5e69f5c5-1f03-41cb-a4a3-d59188f73323}"
-OWNER_EMAIL="${OWNER_EMAIL:-joeltaba4@gmail.com}"
-OWNER_PASSWORD="${OWNER_PASSWORD:-FleetMan2026!}"
+OWNER_EMAIL="${OWNER_EMAIL:-${KERNEL_OWNER_PRINCIPAL:?KERNEL_OWNER_PRINCIPAL manquant dans .env}}"
+OWNER_PASSWORD="${OWNER_PASSWORD:-${KERNEL_OWNER_PASSWORD:?KERNEL_OWNER_PASSWORD manquant dans .env}}"
 FAKE_FILE_ID="00000000-0000-4000-8000-000000000001"
 FAKE_RESOURCE_ID="00000000-0000-4000-8000-000000000002"
 

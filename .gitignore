@@ -73,3 +73,15 @@ build/
 CLAUDE.md
 GEMINI.md
 AGENTS.md
+
+### Logs d'exécution locaux ###
+*.log
+
+### Fichiers uploadés (documents KYC, permis, photos) — jamais versionnés ###
+uploads/
+
+### Export de contexte généré par import_context.sh (contient la config, donc des secrets) ###
+project_context.txt
+
+### Ancienne sortie IDE (copie obsolète du projet, contenait des secrets) ###
+bin/

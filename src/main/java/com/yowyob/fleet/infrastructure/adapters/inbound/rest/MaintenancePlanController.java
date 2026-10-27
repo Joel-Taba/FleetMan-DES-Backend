@@ -27,6 +27,7 @@ import java.util.UUID;
 public class MaintenancePlanController {
 
     private final ManageMaintenancePlanUseCase useCase;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -50,7 +51,11 @@ public class MaintenancePlanController {
                         request.intervalKm(), request.intervalDays(),
                         request.preAlertKm(), request.preAlertDays()
                 );
-        return useCase.createPlan(cmd).map(MaintenancePlanResponse::from);
+        Mono<Void> scope = (request.fleetId() != null
+                ? resourceAccess.assertFleetAccess(getUserId(auth), request.fleetId())
+                : Mono.<Void>empty())
+                .then(resourceAccess.assertVehicleAccess(getUserId(auth), request.vehicleId()));
+        return scope.then(useCase.createPlan(cmd)).map(MaintenancePlanResponse::from);
     }
 
     @GetMapping
@@ -65,8 +70,10 @@ public class MaintenancePlanController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Détail d'un plan")
     public Mono<MaintenancePlanResponse> getById(
-            @Parameter(description = "ID du plan") @PathVariable UUID id) {
-        return useCase.getPlanById(id).map(MaintenancePlanResponse::from);
+            @Parameter(description = "ID du plan") @PathVariable UUID id,
+            Authentication auth) {
+        return resourceAccess.assertMaintenancePlanAccess(getUserId(auth), id)
+                .then(useCase.getPlanById(id).map(MaintenancePlanResponse::from));
     }
 
     @GetMapping("/fleet/{fleetId}")
@@ -74,8 +81,10 @@ public class MaintenancePlanController {
     @Operation(summary = "Plans d'une flotte",
                description = "Retourne tous les plans actifs et inactifs d'une flotte.")
     public Flux<MaintenancePlanResponse> getByFleet(
-            @Parameter(description = "ID de la flotte") @PathVariable UUID fleetId) {
-        return useCase.getPlansByFleet(fleetId).map(MaintenancePlanResponse::from);
+            @Parameter(description = "ID de la flotte") @PathVariable UUID fleetId,
+            Authentication auth) {
+        return resourceAccess.assertFleetAccess(getUserId(auth), fleetId)
+                .thenMany(useCase.getPlansByFleet(fleetId).map(MaintenancePlanResponse::from));
     }
 
     @GetMapping("/vehicle/{vehicleId}")
@@ -83,8 +92,10 @@ public class MaintenancePlanController {
     @Operation(summary = "Plans spécifiques d'un véhicule",
                description = "Retourne les plans de scope VEHICLE pour un véhicule donné (surcharges individuelles).")
     public Flux<MaintenancePlanResponse> getByVehicle(
-            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId) {
-        return useCase.getPlansByVehicle(vehicleId).map(MaintenancePlanResponse::from);
+            @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
+            Authentication auth) {
+        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
+                .thenMany(useCase.getPlansByVehicle(vehicleId).map(MaintenancePlanResponse::from));
     }
 
     @PutMapping("/{id}")
@@ -92,7 +103,8 @@ public class MaintenancePlanController {
     @Operation(summary = "Mettre à jour un plan")
     public Mono<MaintenancePlanResponse> update(
             @Parameter(description = "ID du plan") @PathVariable UUID id,
-            @RequestBody MaintenancePlanUpdateRequest request) {
+            @RequestBody MaintenancePlanUpdateRequest request,
+            Authentication auth) {
 
         ManageMaintenancePlanUseCase.UpdatePlanCommand cmd =
                 new ManageMaintenancePlanUseCase.UpdatePlanCommand(
@@ -101,7 +113,8 @@ public class MaintenancePlanController {
                         request.preAlertKm(), request.preAlertDays(),
                         request.active()
                 );
-        return useCase.updatePlan(cmd).map(MaintenancePlanResponse::from);
+        return resourceAccess.assertMaintenancePlanAccess(getUserId(auth), id)
+                .then(useCase.updatePlan(cmd).map(MaintenancePlanResponse::from));
     }
 
     @PatchMapping("/{id}/toggle")
@@ -111,8 +124,10 @@ public class MaintenancePlanController {
     public Mono<MaintenancePlanResponse> toggle(
             @Parameter(description = "ID du plan") @PathVariable UUID id,
             @Parameter(description = "true = activer, false = désactiver")
-            @RequestParam boolean active) {
-        return useCase.togglePlan(id, active).map(MaintenancePlanResponse::from);
+            @RequestParam boolean active,
+            Authentication auth) {
+        return resourceAccess.assertMaintenancePlanAccess(getUserId(auth), id)
+                .then(useCase.togglePlan(id, active).map(MaintenancePlanResponse::from));
     }
 
     @DeleteMapping("/{id}")
@@ -120,7 +135,9 @@ public class MaintenancePlanController {
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Supprimer un plan")
     public Mono<Void> delete(
-            @Parameter(description = "ID du plan") @PathVariable UUID id) {
-        return useCase.deletePlan(id);
+            @Parameter(description = "ID du plan") @PathVariable UUID id,
+            Authentication auth) {
+        return resourceAccess.assertMaintenancePlanAccess(getUserId(auth), id)
+                .then(useCase.deletePlan(id));
     }
 }

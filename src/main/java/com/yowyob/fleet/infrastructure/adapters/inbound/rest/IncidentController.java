@@ -36,6 +36,7 @@ public class IncidentController {
 
     private final ManageIncidentUseCase incidentUseCase;
     private final AccessScopeService accessScope;
+    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -71,9 +72,11 @@ public class IncidentController {
                         request.vehicleId(),
                         request.driverId()
                 );
+        // Un chauffeur ne déclare que pour le véhicule qu'il conduit (il pouvait viser
+        // n'importe quel véhicule, y compris d'une autre entreprise).
         Mono<Void> scope = AuthPrincipal.isFleetDriver(auth)
-                ? Mono.empty()
-                : accessScope.assertVehicleAccess(getUserId(auth), request.vehicleId());
+                ? resourceAccess.assertDriverOperatesVehicle(getUserId(auth), request.vehicleId())
+                : resourceAccess.assertVehicleAccess(getUserId(auth), request.vehicleId());
         return scope.then(incidentUseCase.createIncident(cmd)).map(IncidentResponse::from);
     }
 
@@ -121,8 +124,10 @@ public class IncidentController {
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(summary = "Incidents d'un chauffeur")
     public Flux<IncidentResponse> getByDriver(
-            @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId) {
-        return incidentUseCase.getByDriverId(driverId).map(IncidentResponse::from);
+            @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId,
+            Authentication auth) {
+        return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
+                .thenMany(incidentUseCase.getByDriverId(driverId)).map(IncidentResponse::from);
     }
 
     @GetMapping("/open")

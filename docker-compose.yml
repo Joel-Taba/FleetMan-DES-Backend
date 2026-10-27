@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: fleetmanBD
       POSTGRES_USER: fleet_admin
-      POSTGRES_PASSWORD: fleet_password
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD manquant — copiez .env.example en .env}
     ports:
       # 5433 sur l'hôte pour éviter le conflit avec un PostgreSQL système sur 5432
       - "5433:5432"

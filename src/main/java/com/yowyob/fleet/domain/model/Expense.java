@@ -37,6 +37,11 @@ public class Expense {
     }
 
     /** Source de création */
+    /** Niveau de validation exigé : le gestionnaire de la flotte, ou l'administrateur de l'entreprise. */
+    public enum ApprovalLevel {
+        MANAGER, ADMIN
+    }
+
     public enum SourceType {
         AUTO,   // Générée automatiquement depuis une opération existante
         MANUAL  // Saisie manuellement par le Manager ou le Driver
@@ -98,6 +103,14 @@ public class Expense {
 
     /** Date de création */
     private final LocalDateTime createdAt;
+
+    // Circuit de validation (migration 057)
+    private UUID createdBy;
+    private ApprovalLevel approvalLevel = ApprovalLevel.MANAGER;
+    private boolean overBudget;
+    private String receiptUrl;
+    private String receiptName;
+    private String receiptMime;
 
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -252,4 +265,24 @@ public class Expense {
     public void setRejectionReason(String reason)          { this.rejectionReason = reason; }
     public void setDriverId(UUID driverId)                 { this.driverId = driverId; }
     public void setDriverFullName(String name)             { this.driverFullName = name; }
+
+    // ── Circuit de validation ────────────────────────────────────────────────
+
+    public boolean hasReceipt() { return receiptUrl != null && !receiptUrl.isBlank(); }
+
+    public UUID getCreatedBy()                          { return createdBy; }
+    public void setCreatedBy(UUID createdBy)            { this.createdBy = createdBy; }
+    public ApprovalLevel getApprovalLevel()             { return approvalLevel; }
+    public void setApprovalLevel(ApprovalLevel level)   { this.approvalLevel = level != null ? level : ApprovalLevel.MANAGER; }
+    public boolean isOverBudget()                       { return overBudget; }
+    public void setOverBudget(boolean overBudget)       { this.overBudget = overBudget; }
+    public String getReceiptUrl()                       { return receiptUrl; }
+    public String getReceiptName()                      { return receiptName; }
+    public String getReceiptMime()                      { return receiptMime; }
+
+    public void attachReceipt(String url, String name, String mime) {
+        this.receiptUrl = url;
+        this.receiptName = name;
+        this.receiptMime = mime;
+    }
 }

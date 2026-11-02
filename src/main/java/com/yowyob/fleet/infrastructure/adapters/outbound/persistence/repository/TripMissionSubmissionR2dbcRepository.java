@@ -17,4 +17,6 @@ public interface TripMissionSubmissionR2dbcRepository
     );
 
     Mono<TripMissionSubmissionEntity> findByIdAndStatus(UUID id, String status);
+
+    Flux<TripMissionSubmissionEntity> findAllByTripIdOrderByCreatedAtDesc(UUID tripId);
 }

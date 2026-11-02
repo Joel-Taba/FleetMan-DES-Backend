@@ -17,5 +17,6 @@ public record ManagerDriverCreateRequest(
         String phone,
         String username,
         String password,
-        String status
+        String status,
+        java.time.LocalDate hireDate
 ) {}

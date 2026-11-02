@@ -38,9 +38,59 @@ public class SubscriptionException extends DomainException {
                 HttpStatus.FORBIDDEN, "SUB_005");
     }
 
-    public static SubscriptionException featureDisabled(String feature) {
+    public static SubscriptionException featureDisabled(String featureLabel) {
         return new SubscriptionException(
-                "Fonctionnalité non incluse dans votre plan : " + feature,
+                "Fonctionnalité non incluse dans votre plan : " + featureLabel
+                        + ". Passez à un plan supérieur pour y accéder.",
                 HttpStatus.FORBIDDEN, "SUB_006");
+    }
+
+    /** Plan incohérent (limites, prix…) : le message précise la règle enfreinte. */
+    public static SubscriptionException invalidPlan(String reason) {
+        return new SubscriptionException(reason, HttpStatus.UNPROCESSABLE_ENTITY, "SUB_007");
+    }
+
+    public static SubscriptionException planNameTaken(String name) {
+        return new SubscriptionException(
+                "Un plan nommé « " + name + " » existe déjà.", HttpStatus.CONFLICT, "SUB_008");
+    }
+
+    public static SubscriptionException planNotFound() {
+        return new SubscriptionException("Plan tarifaire introuvable.", HttpStatus.NOT_FOUND, "SUB_009");
+    }
+
+    public static SubscriptionException planInactive(String name) {
+        return new SubscriptionException(
+                "Le plan « " + name + " » n'est plus proposé.", HttpStatus.UNPROCESSABLE_ENTITY, "SUB_010");
+    }
+
+    /** Passage à un plan plus petit que l'usage actuel (flottes, véhicules, chauffeurs). */
+    public static SubscriptionException usageExceedsPlan(String planName, String details) {
+        return new SubscriptionException(
+                "Le plan « " + planName + " » ne couvre pas votre usage actuel (" + details
+                        + "). Réduisez votre parc ou choisissez un plan supérieur.",
+                HttpStatus.CONFLICT, "SUB_011");
+    }
+
+    public static SubscriptionException billingCycleUnavailable(String planName) {
+        return new SubscriptionException(
+                "Le plan « " + planName + " » n'est pas proposé en facturation annuelle.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "SUB_012");
+    }
+
+    public static SubscriptionException orderNotFound() {
+        return new SubscriptionException("Commande d'abonnement introuvable.", HttpStatus.NOT_FOUND, "SUB_013");
+    }
+
+    public static SubscriptionException orderNotPayable(String status) {
+        return new SubscriptionException(
+                "Cette commande ne peut plus être réglée (statut : " + status + ").",
+                HttpStatus.CONFLICT, "SUB_014");
+    }
+
+    public static SubscriptionException paymentSimulationDisabled() {
+        return new SubscriptionException(
+                "La simulation de paiement est désactivée : le paiement passe par le service de paiement réel.",
+                HttpStatus.FORBIDDEN, "SUB_015");
     }
 }

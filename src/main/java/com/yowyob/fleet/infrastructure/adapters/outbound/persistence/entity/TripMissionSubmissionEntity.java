@@ -25,6 +25,16 @@ public class TripMissionSubmissionEntity implements Persistable<UUID> {
     @Column("submitted_by")
     private UUID submittedBy;
 
+    /** ADD : chargement ajouté en route ; REMOVE : ligne du manifeste non livrée / refusée. */
+    @Column("change_type")
+    private String changeType;
+
+    @Column("detail_id")
+    private UUID detailId;
+
+    @Column("rejection_reason")
+    private String rejectionReason;
+
     @Column("item_type")
     private String itemType;
 

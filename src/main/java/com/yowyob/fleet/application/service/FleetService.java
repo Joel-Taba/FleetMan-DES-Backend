@@ -57,6 +57,9 @@ public class FleetService implements ManageFleetUseCase {
     private final AccessScopeService accessScope;
     private final ResourceAvailabilityService availability;
     private final ResourceAccessService resourceAccess;
+    private final CompanyScopeService companyScope;
+    private final com.yowyob.fleet.domain.ports.in.ManageBudgetUseCase budgetUseCase;
+    private final org.springframework.r2dbc.core.DatabaseClient db;
 
     @Value("${application.kernel.organization-sync:true}")
     private boolean organizationSync;
@@ -144,51 +147,140 @@ public class FleetService implements ManageFleetUseCase {
         return normalized + "-" + UUID.randomUUID().toString().substring(0, 4).toUpperCase();
     }
 
+    /**
+     * Création par l'administrateur de l'entreprise : la flotte est confiée d'emblée à un
+     * gestionnaire actif de l'entreprise, dans la limite du plan, avec un nom unique dans
+     * l'entreprise (une flotte sans gestionnaire n'était pilotée par personne).
+     */
     @Override
     @Transactional
     public Mono<Fleet> createFleetAsAdmin(Fleet fleet, UUID managerId, UUID createdByAdminId) {
-        return saveFleetLocally(fleet, managerId, null, createdByAdminId);
+        if (managerId == null) {
+            return Mono.error(FleetException.managerRequired());
+        }
+        return companyScope.requireOwnCompany(createdByAdminId)
+                .flatMap(companyId -> assertActiveManagerOfCompany(managerId, companyId)
+                        .then(assertNameFree(companyId, fleet.name(), null))
+                        .then(planLimitGuard.assertCanCreateFleet(companyId))
+                        .then(Mono.defer(() -> {
+                            if (!organizationSync || !externalOrganizationPort.isEnabled()) {
+                                return Mono.<java.util.Optional<UUID>>just(java.util.Optional.empty());
+                            }
+                            return kernelTokenHolder.getValidAccessToken()
+                                    .flatMap(token -> provisionKernelOrganization(fleet, token))
+                                    .map(java.util.Optional::of);
+                        }))
+                        .flatMap(orgId -> saveFleetLocally(fleet, managerId, orgId.orElse(null), createdByAdminId)
+                                .flatMap(saved -> repository.findById(saved.id())
+                                        .flatMap(entity -> {
+                                            entity.setCompanyId(companyId);
+                                            entity.setNew(false);
+                                            return repository.save(entity);
+                                        })
+                                        // L'enveloppe récurrente crée le budget du mois de la flotte.
+                                        .flatMap(entity -> budgetUseCase.ensureFleetEnvelope(entity.getId()).thenReturn(entity))
+                                        .map(mapper::toDomain))));
     }
 
+    /** Gestionnaire de l'entreprise, compte actif (ni suspendu, ni clôturé). */
+    private Mono<Void> assertActiveManagerOfCompany(UUID managerId, UUID companyId) {
+        return db.sql("""
+                        SELECT fm.created_by_admin_id AS company_id, fm.account_status, u.is_active
+                        FROM fleet.fleet_managers fm JOIN fleet.users u ON u.id = fm.user_id
+                        WHERE fm.user_id = :id AND u.deleted_at IS NULL
+                        """)
+                .bind("id", managerId)
+                .fetch().one()
+                .switchIfEmpty(Mono.error(FleetException.managerNotInCompany()))
+                .flatMap(row -> {
+                    if (!companyId.equals(row.get("company_id"))) {
+                        return Mono.<Void>error(FleetException.managerNotInCompany());
+                    }
+                    boolean active = "ACTIVE".equals(String.valueOf(row.get("account_status")))
+                            && Boolean.TRUE.equals(row.get("is_active"));
+                    return active ? Mono.<Void>empty() : Mono.<Void>error(FleetException.managerNotActive());
+                });
+    }
+
+    /** Nom de flotte unique dans l'entreprise (sans tenir compte de la casse). */
+    private Mono<Void> assertNameFree(UUID companyId, String name, UUID excludeFleetId) {
+        if (name == null || name.isBlank()) {
+            return Mono.error(FleetException.invalidResourceStatus("le nom de la flotte est obligatoire"));
+        }
+        return repository.findAllByOrganizationAdminId(companyId)
+                .filter(f -> !f.getId().equals(excludeFleetId))
+                .any(f -> f.getName() != null && f.getName().trim().equalsIgnoreCase(name.trim()))
+                .flatMap(taken -> Boolean.TRUE.equals(taken)
+                        ? Mono.<Void>error(FleetException.nameTaken(name.trim()))
+                        : Mono.<Void>empty());
+    }
+
+    /**
+     * Transfert contrôlé : flottes de l'entreprise de l'admin, confiées à un gestionnaire actif de
+     * cette même entreprise, sans trajet ni affectation ouverts. Véhicules et chauffeurs suivent
+     * leur flotte, les plannings non archivés aussi ; dépenses et budgets passés restent attachés
+     * à l'ancien gestionnaire (historique). L'ancien « désassigner » laissait des flottes sans
+     * responsable et a été retiré.
+     */
     @Override
     @Transactional
-    public Mono<Void> assignFleetsToManager(java.util.List<UUID> fleetIds, UUID managerId) {
-        // Cardinalité : un gestionnaire peut avoir plusieurs flottes, mais une flotte
-        // ne peut être assignée qu'à un seul gestionnaire à la fois. Une flotte déjà
-        // prise par un AUTRE gestionnaire doit d'abord être désassignée.
-        return repository.findAllById(fleetIds)
-                .collectList()
-                .flatMap(entities -> {
-                    var alreadyTaken = entities.stream()
-                            .filter(e -> e.getManagerId() != null && !e.getManagerId().equals(managerId))
-                            .findFirst();
-                    if (alreadyTaken.isPresent()) {
-                        return Mono.error(FleetException.alreadyAssignedToAnotherManager(alreadyTaken.get().getName()));
+    public Mono<Void> assignFleetsToManager(java.util.List<UUID> fleetIds, UUID managerId, UUID adminId) {
+        return companyScope.requireOwnCompany(adminId)
+                .flatMap(companyId -> assertActiveManagerOfCompany(managerId, companyId)
+                        .thenMany(repository.findAllById(fleetIds))
+                        .filter(f -> f.getDeletedAt() == null)
+                        .collectList()
+                        .flatMap(fleets -> {
+                            if (fleets.size() != new java.util.HashSet<>(fleetIds).size()) {
+                                return Mono.<Void>error(FleetException.notFound(null));
+                            }
+                            return Flux.fromIterable(fleets)
+                                    .concatMap(fleet -> transferOne(fleet, managerId, companyId))
+                                    .then();
+                        }));
+    }
+
+    private Mono<Void> transferOne(FleetEntity fleet, UUID targetManagerId, UUID companyId) {
+        if (!companyId.equals(fleet.getCompanyId())) {
+            return Mono.error(FleetException.accessDenied());
+        }
+        if (targetManagerId.equals(fleet.getManagerId())) {
+            return Mono.error(FleetException.sameManager());
+        }
+        return fleetHasOpenCommitments(fleet.getId())
+                .flatMap(open -> {
+                    if (Boolean.TRUE.equals(open)) {
+                        return Mono.<Void>error(FleetException.openCommitments(fleet.getName()));
                     }
-                    return Flux.fromIterable(entities)
-                            .flatMap(entity -> {
-                                entity.setManagerId(managerId);
-                                entity.setNew(false);
-                                return repository.save(entity);
-                            })
+                    UUID previous = fleet.getManagerId();
+                    fleet.setManagerId(targetManagerId);
+                    fleet.setNew(false);
+                    return repository.save(fleet)
+                            .then(vehicleRepo.reassignManagerForFleet(fleet.getId(), targetManagerId))
+                            .then(db.sql("""
+                                            UPDATE fleet.schedules SET manager_id = :m
+                                            WHERE fleet_id = :f AND status <> 'ARCHIVED'
+                                            """)
+                                    .bind("m", targetManagerId).bind("f", fleet.getId())
+                                    .fetch().rowsUpdated())
+                            .doOnSuccess(n -> log.info("🔁 Flotte {} transférée de {} à {}",
+                                    fleet.getName(), previous, targetManagerId))
                             .then();
                 });
     }
 
-    @Override
-    @Transactional
-    public Mono<Void> unassignFleetFromManager(UUID fleetId, UUID managerId) {
-        return repository.findById(fleetId)
-                .switchIfEmpty(Mono.error(FleetException.notFound(fleetId)))
-                .filter(e -> managerId.equals(e.getManagerId()))
-                .switchIfEmpty(Mono.error(FleetException.invalidResourceStatus(
-                        "cette flotte n'est pas assignée à ce gestionnaire.")))
-                .flatMap(entity -> {
-                    entity.setManagerId(null);
-                    entity.setNew(false);
-                    return repository.save(entity);
-                })
-                .then();
+    /** Trajet non terminé ou affectation en cours / à venir rattachés à la flotte. */
+    private Mono<Boolean> fleetHasOpenCommitments(UUID fleetId) {
+        return db.sql("""
+                        SELECT EXISTS (SELECT 1 FROM fleet.trips WHERE fleet_id = :f
+                                       AND deleted_at IS NULL AND status IN ('SCHEDULED', 'DEPARTED', 'ARRIVED'))
+                            OR EXISTS (SELECT 1 FROM fleet.assignments WHERE fleet_id = :f
+                                       AND (status = 'IN_PROGRESS' OR (status = 'PENDING' AND end_datetime > NOW()))) AS busy
+                        """)
+                .bind("f", fleetId)
+                .map((row, meta) -> Boolean.TRUE.equals(row.get("busy", Boolean.class)))
+                .one()
+                .defaultIfEmpty(false);
     }
 
     @Override
@@ -236,13 +328,19 @@ public class FleetService implements ManageFleetUseCase {
         return repository.findById(id)
                 .switchIfEmpty(Mono.error(FleetException.notFound(id)))
                 .flatMap(existing -> accessScope.assertFleetAccess(requesterId, id).thenReturn(existing))
+                .flatMap(existing -> (existing.getCompanyId() != null
+                        ? assertNameFree(existing.getCompanyId(), fleet.name(), id)
+                        : Mono.<Void>empty()).thenReturn(existing))
                 .flatMap(existing -> {
-                    existing.setName(fleet.name());
+                    existing.setName(fleet.name().trim());
                     existing.setPhoneNumber(fleet.phoneNumber());
                     existing.setMonthlyBudget(fleet.monthlyBudget());
                     existing.setNew(false);
                     return repository.save(existing);
-                }).map(mapper::toDomain);
+                })
+                // Une seule source : l'enveloppe récurrente fixe le budget du mois en cours.
+                .flatMap(saved -> budgetUseCase.ensureFleetEnvelope(saved.getId()).thenReturn(saved))
+                .map(mapper::toDomain);
     }
 
     @Override

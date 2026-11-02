@@ -32,13 +32,9 @@ public class Assignment {
     private final UUID fleetId;
     private final UUID vehicleId;
     private final UUID driverId;
-    private UUID missionId;         // Optionnel — lien vers une mission
     private final LocalDateTime startDatetime;
     private final LocalDateTime endDatetime;
     private Status status;
-    private String startLocation;
-    private String endLocation;
-    private BigDecimal estimatedKm;
     private BigDecimal actualKm;
     private String notes;
     private final LocalDateTime createdAt;
@@ -50,13 +46,9 @@ public class Assignment {
                       UUID fleetId,
                       UUID vehicleId,
                       UUID driverId,
-                      UUID missionId,
                       LocalDateTime startDatetime,
                       LocalDateTime endDatetime,
                       Status status,
-                      String startLocation,
-                      String endLocation,
-                      BigDecimal estimatedKm,
                       BigDecimal actualKm,
                       String notes,
                       LocalDateTime createdAt) {
@@ -77,13 +69,9 @@ public class Assignment {
         this.fleetId = fleetId;
         this.vehicleId = vehicleId;
         this.driverId = driverId;
-        this.missionId = missionId;
         this.startDatetime = startDatetime;
         this.endDatetime = endDatetime;
         this.status = status != null ? status : Status.PENDING;
-        this.startLocation = startLocation;
-        this.endLocation = endLocation;
-        this.estimatedKm = estimatedKm;
         this.actualKm = actualKm;
         this.notes = notes;
         this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
@@ -91,17 +79,17 @@ public class Assignment {
 
     // ── Méthodes métier ───────────────────────────────────────────────────────
 
-    /** Démarre l'affectation. */
+    /** Le poste démarre avec le premier départ de l'un de ses trajets. */
     public void start() {
         if (this.status != Status.PENDING)
             throw new IllegalStateException("Seule une affectation en attente peut être démarrée.");
         this.status = Status.IN_PROGRESS;
     }
 
-    /** Termine l'affectation avec le kilométrage réel. */
+    /** Fin automatique du poste à son heure de fin : ses km sont ceux de ses trajets. */
     public void complete(BigDecimal actualKm) {
-        if (this.status != Status.IN_PROGRESS)
-            throw new IllegalStateException("Seule une affectation en cours peut être terminée.");
+        if (this.status != Status.IN_PROGRESS && this.status != Status.PENDING)
+            throw new IllegalStateException("Seule une affectation active peut être terminée.");
         this.status = Status.COMPLETED;
         this.actualKm = actualKm;
     }
@@ -142,19 +130,14 @@ public class Assignment {
     public UUID getFleetId()                { return fleetId; }
     public UUID getVehicleId()              { return vehicleId; }
     public UUID getDriverId()               { return driverId; }
-    public UUID getMissionId()              { return missionId; }
     public LocalDateTime getStartDatetime() { return startDatetime; }
     public LocalDateTime getEndDatetime()   { return endDatetime; }
     public Status getStatus()               { return status; }
-    public String getStartLocation()        { return startLocation; }
-    public String getEndLocation()          { return endLocation; }
-    public BigDecimal getEstimatedKm()      { return estimatedKm; }
     public BigDecimal getActualKm()         { return actualKm; }
     public String getNotes()                { return notes; }
     public LocalDateTime getCreatedAt()     { return createdAt; }
 
     public void setId(UUID id)              { this.id = id; }
     public void setScheduleId(UUID sid)     { this.scheduleId = sid; }
-    public void setMissionId(UUID mid)      { this.missionId = mid; }
     public void setNotes(String notes)      { this.notes = notes; }
 }

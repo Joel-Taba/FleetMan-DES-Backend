@@ -25,6 +25,7 @@ public class SuperAdminService implements ManageSuperAdminUseCase {
     private final AuthPort authPort;
     private final UserLocalR2dbcRepository userRepo;
     private final PlatformAdminR2dbcRepository platformAdminRepo;
+    private final CompanyService companyService;
     private final ExternalActorPort externalActorPort;
 
     @Override
@@ -58,9 +59,16 @@ public class SuperAdminService implements ManageSuperAdminUseCase {
                     return photoFlow
                             .then(roleFlow)
                             .then(syncIdentityOnly(res.user()))
-                            .flatMap(detail -> platformAdminRepo.save(new PlatformAdminEntity(userId))
+                            // L'administrateur est une entreprise : elle démarre sur l'offre gratuite.
+                            .flatMap(detail -> companyService.createOnFreePlan(userId, companyNameOf(command))
                                     .thenReturn(detail));
                 });
+    }
+
+    private static String companyNameOf(AuthUseCase.RegisterCommand command) {
+        String name = ((command.firstName() != null ? command.firstName() : "") + " "
+                + (command.lastName() != null ? command.lastName() : "")).trim();
+        return name.isBlank() ? command.username() : name;
     }
 
     // Le Kernel expose GET /api/users/admins pour lister les FLEET_ADMIN, mais

@@ -101,15 +101,11 @@ public class AssignmentPersistenceAdapter implements AssignmentPersistencePort {
                 e.getFleetId(),
                 e.getVehicleId(),
                 e.getDriverId(),
-                e.getMissionId(),
                 e.getStartDatetime(),
                 e.getEndDatetime(),
                 e.getStatus() != null
                         ? Assignment.Status.valueOf(e.getStatus())
                         : Assignment.Status.PENDING,
-                e.getStartLocation(),
-                e.getEndLocation(),
-                e.getEstimatedKm(),
                 e.getActualKm(),
                 e.getNotes(),
                 e.getCreatedAt()
@@ -123,13 +119,9 @@ public class AssignmentPersistenceAdapter implements AssignmentPersistencePort {
         e.setFleetId(a.getFleetId());
         e.setVehicleId(a.getVehicleId());
         e.setDriverId(a.getDriverId());
-        e.setMissionId(a.getMissionId());
         e.setStartDatetime(a.getStartDatetime());
         e.setEndDatetime(a.getEndDatetime());
         e.setStatus(a.getStatus().name());
-        e.setStartLocation(a.getStartLocation());
-        e.setEndLocation(a.getEndLocation());
-        e.setEstimatedKm(a.getEstimatedKm());
         e.setActualKm(a.getActualKm());
         e.setNotes(a.getNotes());
         e.setCreatedAt(a.getCreatedAt() != null ? a.getCreatedAt() : LocalDateTime.now());

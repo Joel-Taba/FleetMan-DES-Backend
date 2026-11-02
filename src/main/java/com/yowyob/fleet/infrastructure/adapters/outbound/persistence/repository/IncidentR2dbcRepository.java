@@ -83,6 +83,11 @@ public interface IncidentR2dbcRepository extends ReactiveCrudRepository<Incident
     @Query("SELECT COUNT(*) FROM fleet.incidents WHERE driver_id = :driverId")
     Mono<Long> countByDriverId(UUID driverId);
 
+    /** Incidents clôturés dont le chauffeur a été reconnu responsable. */
+    @Query("SELECT COUNT(*) FROM fleet.incidents i JOIN fleet.incident_cases c ON c.incident_id = i.id "
+            + "WHERE i.driver_id = :driverId AND c.responsibility = 'DRIVER'")
+    Mono<Long> countDriverResponsible(UUID driverId);
+
     /**
      * Coût total des incidents pour un véhicule (NULL si aucun incident avec coût).
      */

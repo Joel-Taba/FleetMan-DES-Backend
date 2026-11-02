@@ -43,4 +43,42 @@ public class FleetException extends DomainException {
                         + "Désassignez-la d'abord avant de la réassigner.",
                 HttpStatus.CONFLICT, "FLT_007");
     }
+
+    public static FleetException managerRequired() {
+        return new FleetException(
+                "Choisissez le gestionnaire responsable de la flotte : une flotte a toujours un gestionnaire.",
+                HttpStatus.BAD_REQUEST, "FLT_008");
+    }
+
+    public static FleetException managerNotInCompany() {
+        return new FleetException("Ce gestionnaire n'appartient pas à votre entreprise.", HttpStatus.FORBIDDEN, "FLT_009");
+    }
+
+    public static FleetException managerNotActive() {
+        return new FleetException(
+                "Ce gestionnaire est suspendu ou clôturé : choisissez un gestionnaire actif.", HttpStatus.CONFLICT, "FLT_010");
+    }
+
+    public static FleetException nameTaken(String name) {
+        return new FleetException("Votre entreprise a déjà une flotte nommée « " + name + " ».", HttpStatus.CONFLICT, "FLT_011");
+    }
+
+    public static FleetException openCommitments(String fleetName) {
+        return new FleetException(
+                "La flotte « " + fleetName + " » a des trajets ou des affectations en cours ou prévus : "
+                        + "terminez-les ou annulez-les avant de la transférer.",
+                HttpStatus.CONFLICT, "FLT_012");
+    }
+
+    public static FleetException frozen(String fleetName) {
+        return new FleetException(
+                "La flotte « " + fleetName + " » est gelée : son gestionnaire est suspendu. "
+                        + "L'administrateur doit la transférer à un gestionnaire actif.",
+                HttpStatus.CONFLICT, "FLT_013");
+    }
+
+    public static FleetException sameManager() {
+        return new FleetException("Cette flotte est déjà confiée à ce gestionnaire.", HttpStatus.CONFLICT, "FLT_014");
+    }
 }
+

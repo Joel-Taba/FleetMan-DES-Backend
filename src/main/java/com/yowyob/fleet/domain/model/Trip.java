@@ -9,22 +9,18 @@ import java.util.UUID;
 /**
  * Entité de domaine : Trajet (aller-retour complet).
  * Piloté exclusivement par le Fleet Manager.
- * Cycle de vie : SCHEDULED → DEPARTED → RETURNING → COMPLETED | CANCELLED
+ * Cycle de vie : SCHEDULED → DEPARTED → ARRIVED → COMPLETED | CANCELLED | MISSED
  */
 public class Trip {
 
+    /** Planifié → parti → arrivé à destination (livraison) → retour (terminé) ; ou annulé / manqué. */
     public enum Status {
         SCHEDULED,
         DEPARTED,
-        RETURNING,
+        ARRIVED,
         COMPLETED,
         CANCELLED,
-    }
-
-    public enum RateType {
-        FIXED,
-        PER_KM,
-        HOURLY,
+        MISSED,
     }
 
     // ── Identité ──────────────────────────────────────────────────────────────
@@ -58,9 +54,15 @@ public class Trip {
 
     // ── Mission ───────────────────────────────────────────────────────────────
     private String missionObject;
-    private BigDecimal missionCost;
-    private String missionCostCurrency;
-    private RateType rateType;
+    // Destination et arrivée (livraison)
+    private String destinationLocation;
+    private BigDecimal destinationLat;
+    private BigDecimal destinationLng;
+    private LocalDateTime arrivedAt;
+    private String arrivalLocation;
+    private String arrivalNotes;
+    /** Poste (affectation) pendant lequel le trajet est effectué. */
+    private UUID assignmentId;
     private Instant departureRegisteredAt;
 
     // ── Valeurs calculées ─────────────────────────────────────────────────────
@@ -107,9 +109,6 @@ public class Trip {
         Instant returnRegisteredAt,
         LocalDateTime scheduledReturnDatetime,
         String missionObject,
-        BigDecimal missionCost,
-        String missionCostCurrency,
-        RateType rateType,
         Instant departureRegisteredAt,
         Double distanceKm,
         Integer durationMinutes,
@@ -143,9 +142,6 @@ public class Trip {
         this.returnRegisteredAt = returnRegisteredAt;
         this.scheduledReturnDatetime = scheduledReturnDatetime;
         this.missionObject = missionObject;
-        this.missionCost = missionCost;
-        this.missionCostCurrency = missionCostCurrency;
-        this.rateType = rateType;
         this.departureRegisteredAt = departureRegisteredAt;
         this.distanceKm = distanceKm;
         this.durationMinutes = durationMinutes;
@@ -253,21 +249,12 @@ public class Trip {
         return missionObject;
     }
 
-    public BigDecimal getMissionCost() {
-        return missionCost;
-    }
 
-    public String getMissionCostCurrency() {
-        return missionCostCurrency;
-    }
 
     public Instant getDepartureRegisteredAt() {
         return departureRegisteredAt;
     }
 
-    public RateType getRateType() {
-        return rateType;
-    }
 
     public Double getDistanceKm() {
         return distanceKm;
@@ -354,13 +341,7 @@ public class Trip {
         this.durationMinutes = durationMinutes;
     }
 
-    public void setMissionCost(BigDecimal missionCost) {
-        this.missionCost = missionCost;
-    }
 
-    public void setMissionCostCurrency(String missionCostCurrency) {
-        this.missionCostCurrency = missionCostCurrency;
-    }
 
     public void setVehicleId(UUID vehicleId) {
         this.vehicleId = vehicleId;
@@ -426,4 +407,28 @@ public class Trip {
     public void setDetails(List<TripDetail> details) {
         this.details = details;
     }
+
+    // ── Destination, arrivée, poste ──────────────────────────────────────────
+
+    public String getDestinationLocation() { return destinationLocation; }
+    public BigDecimal getDestinationLat() { return destinationLat; }
+    public BigDecimal getDestinationLng() { return destinationLng; }
+    public LocalDateTime getArrivedAt() { return arrivedAt; }
+    public String getArrivalLocation() { return arrivalLocation; }
+    public String getArrivalNotes() { return arrivalNotes; }
+    public UUID getAssignmentId() { return assignmentId; }
+
+    public void setDestination(String location, BigDecimal lat, BigDecimal lng) {
+        this.destinationLocation = location;
+        this.destinationLat = lat;
+        this.destinationLng = lng;
+    }
+
+    public void setArrival(LocalDateTime at, String location, String notes) {
+        this.arrivedAt = at;
+        this.arrivalLocation = location;
+        this.arrivalNotes = notes;
+    }
+
+    public void setAssignmentId(UUID assignmentId) { this.assignmentId = assignmentId; }
 }

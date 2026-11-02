@@ -37,4 +37,11 @@ public interface ManageDriverUseCase {
             UUID managerId);
 
     Mono<Void> deleteDriverForManager(UUID userId, UUID callerId);
+
+    /** Départ de l'entreprise : historique conservé, véhicule attitré libéré, place du plan rendue. */
+    Mono<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> leaveCompany(
+            UUID driverId, java.time.LocalDate leftAt, String reason, UUID actorId);
+
+    /** Réintégration d'un chauffeur parti (consomme à nouveau une place du plan). */
+    Mono<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse> reinstate(UUID driverId, UUID actorId);
 }

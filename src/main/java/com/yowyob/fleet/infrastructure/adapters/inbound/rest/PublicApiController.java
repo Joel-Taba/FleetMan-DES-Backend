@@ -65,6 +65,8 @@ public class PublicApiController {
             @NotBlank String lastName,
             @NotBlank String companyName,
             UUID requestedPlanId,
+            /** Cycle souhaité : MONTHLY (défaut) ou ANNUAL. */
+            com.yowyob.fleet.domain.model.BillingCycle requestedBillingCycle,
             @NotEmpty @Size(max = 10) List<@Valid RegisterDocumentRequest> documents
     ) {}
 
@@ -82,7 +84,7 @@ public class PublicApiController {
                 new SubscriptionRegistrationService.RegisterManagerCommand(
                         req.username(), req.password(), req.email(), req.phone(),
                         req.firstName(), req.lastName(), req.companyName(),
-                        req.requestedPlanId(), docs))
+                        req.requestedPlanId(), req.requestedBillingCycle(), docs))
                 .map(ApiResponse::ok);
     }
 }

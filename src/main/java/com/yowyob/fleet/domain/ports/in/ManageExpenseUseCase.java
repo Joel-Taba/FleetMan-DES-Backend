@@ -26,7 +26,11 @@ public interface ManageExpenseUseCase {
             String description,
             LocalDateTime expenseDate,          // Optionnel — défaut now()
             UUID vehicleId,
-            UUID driverId                       // Optionnel
+            UUID driverId,                      // Optionnel (un chauffeur déclare pour lui-même)
+            UUID createdBy,                     // Auteur de la saisie : il ne pourra pas la valider
+            String receiptUrl,                  // Justificatif (exigé pour approuver, ajoutable ensuite)
+            String receiptName,
+            String receiptMime
     ) {}
 
     record UpdateExpenseCommand(
@@ -51,6 +55,12 @@ public interface ManageExpenseUseCase {
      */
     Mono<Expense> createManualExpense(CreateManualExpenseCommand command);
 
+    /** Dépenses de toutes les flottes de l'entreprise (vue administrateur). */
+    Flux<Expense> getAllByCompany(UUID companyId);
+
+    /** Ajoute ou remplace le justificatif d'une dépense manuelle en attente. */
+    Mono<Expense> attachReceipt(UUID expenseId, String url, String name, String mime);
+
     /**
      * Crée une dépense auto-générée depuis une opération existante.
      * Utilisé en interne après la création d'une Maintenance, FuelRecharge ou Incident.
@@ -65,6 +75,13 @@ public interface ManageExpenseUseCase {
 
     /** Supprime la dépense auto-générée d'une opération supprimée. */
     Mono<Void> deleteAutoExpenses(UUID sourceId);
+
+    /** Coût réel d'un incident : dépense en attente d'approbation, justificatif obligatoire. */
+    Mono<Expense> createIncidentCost(IncidentCostCommand cmd);
+
+    record IncidentCostCommand(UUID incidentId, UUID vehicleId, UUID driverId, String nature, BigDecimal amount,
+                               String description, String receiptUrl, String receiptName, String receiptMime, UUID createdBy) {
+    }
 
     Mono<Expense> createAutoExpense(Expense.ExpenseType type,
                                     BigDecimal amount,

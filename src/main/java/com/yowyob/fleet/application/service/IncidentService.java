@@ -34,7 +34,7 @@ public class IncidentService implements ManageIncidentUseCase {
     private final OperationEventPort eventPort;
     private final SendAlertPort sendAlertPort;
     private final UserLocalR2dbcRepository userRepo;
-    private final com.yowyob.fleet.domain.ports.in.ManageExpenseUseCase expenseUseCase;
+    private final IncidentCaseService caseService;
     private final IncidentImpactService incidentImpact;
 
     // ── 1. CRÉATION ──────────────────────────────────────────────────────────
@@ -52,8 +52,17 @@ public class IncidentService implements ManageIncidentUseCase {
         Mono<String> driverNameMono = cmd.driverId() != null
                 ? driverPersistence.findById(cmd.driverId())
                         .switchIfEmpty(Mono.error(OperationException.driverNotFound(cmd.driverId())))
-                        .map(d -> d.userId().toString())
+                        .flatMap(d -> userRepo.findById(d.userId())
+                                .map(u -> String.join(" ",
+                                        u.getFirstName() != null ? u.getFirstName() : "",
+                                        u.getLastName() != null ? u.getLastName() : "").trim())
+                                .defaultIfEmpty(""))
                 : Mono.just("");
+
+        // Un incident se déclare souvent après coup, jamais par avance.
+        if (cmd.occurredAt() != null && cmd.occurredAt().isAfter(LocalDateTime.now().plusMinutes(5))) {
+            return Mono.error(OperationException.incidentDateInFuture());
+        }
 
         return Mono.zip(vehicleRegistrationMono, driverNameMono)
                 .flatMap(tuple -> {
@@ -67,9 +76,9 @@ public class IncidentService implements ManageIncidentUseCase {
                             cmd.type(),
                             cmd.description(),
                             cmd.severity(),
-                            LocalDateTime.now(),
+                            cmd.occurredAt() != null ? cmd.occurredAt() : LocalDateTime.now(),
                             coords,
-                            cmd.cost(),
+                            null,
                             cmd.reportedBy(),
                             cmd.vehicleId(),
                             vehicleReg,
@@ -82,11 +91,12 @@ public class IncidentService implements ManageIncidentUseCase {
                         incident.addWitness(cmd.witnessName(), cmd.witnessContact());
                     }
 
+                    incident.setVehicleDrivable(cmd.vehicleDrivable() == null || cmd.vehicleDrivable());
                     return incidentPersistence.save(incident);
                 })
-                // Incident grave → véhicule immobilisé, trajet en cours interrompu.
+                .flatMap(saved -> caseService.open(saved, cmd.reporterId(), cmd.details()).thenReturn(saved))
+                // Incident grave, vol ou véhicule non roulant → immobilisé, trajet en cours interrompu.
                 .flatMap(incidentImpact::applyImpact)
-                .flatMap(saved -> syncExpense(saved).thenReturn(saved))
                 .flatMap(saved -> {
                     // 3. Publication événement (Kafka, best-effort — no-op si Kafka indisponible)
                     // 4. Notification in-app immédiate au Fleet Manager (toujours active,
@@ -192,7 +202,6 @@ public class IncidentService implements ManageIncidentUseCase {
 
                     if (cmd.description() != null)          incident.setDescription(cmd.description());
                     if (cmd.severity() != null)             incident.setSeverity(cmd.severity());
-                    if (cmd.cost() != null)                 incident.setCost(cmd.cost());
                     if (cmd.report() != null)               incident.setReport(cmd.report());
                     if (cmd.policeReportNumber() != null)   incident.setPoliceReportNumber(cmd.policeReportNumber());
                     if (cmd.insuranceClaimNumber() != null) incident.setInsuranceClaimNumber(cmd.insuranceClaimNumber());
@@ -206,34 +215,10 @@ public class IncidentService implements ManageIncidentUseCase {
 
                     // Une hausse ou une baisse de gravité immobilise ou libère le véhicule.
                     return incidentPersistence.save(incident)
-                            .flatMap(incidentImpact::applyImpact)
-                            .flatMap(saved -> syncExpense(saved).thenReturn(saved));
-                });
-    }
-
-    @Override
-    @Transactional
-    public Mono<Incident> updateStatus(UUID id, Incident.Status newStatus) {
-        return incidentPersistence.findById(id)
-                .switchIfEmpty(Mono.error(OperationException.incidentNotFound(id)))
-                .flatMap(incident -> {
-                    // Vérification : un incident clôturé ne peut pas changer de statut
-                    if (incident.getStatus() == Incident.Status.CLOSED) {
-                        return Mono.error(OperationException.incidentAlreadyClosed(id));
-                    }
-
-                    // Délégation à la machine à états de l'entité
-                    switch (newStatus) {
-                        case RESOLVED -> incident.resolve(null);
-                        case CLOSED   -> incident.close();
-                        default       -> incident.updateStatus(newStatus);
-                    }
-
-                    // Résolu / clôturé → le véhicule est libéré (sauf autre incident grave ouvert).
-                    return incidentPersistence.save(incident)
                             .flatMap(incidentImpact::applyImpact);
                 });
     }
+
 
     // ── 4. KPIs ──────────────────────────────────────────────────────────────
 
@@ -254,31 +239,7 @@ public class IncidentService implements ManageIncidentUseCase {
                 .defaultIfEmpty(BigDecimal.ZERO);
     }
 
-    // ── 5. SUPPRESSION ───────────────────────────────────────────────────────
-
-    @Override
-    @Transactional
-    public Mono<Void> delete(UUID id) {
-        return incidentPersistence.findById(id)
-                .switchIfEmpty(Mono.error(OperationException.incidentNotFound(id)))
-                .flatMap(incident -> incidentImpact.releaseBeforeDelete(incident)
-                        .then(expenseUseCase.deleteAutoExpenses(id))
-                        .then(incidentPersistence.deleteById(id)));
-    }
-
     // ── HELPERS PRIVÉS ───────────────────────────────────────────────────────
-
-    /** Dépense INCIDENT auto-générée, alignée sur le coût de l'incident. */
-    private Mono<Void> syncExpense(Incident incident) {
-        return expenseUseCase.syncAutoExpense(
-                com.yowyob.fleet.domain.model.Expense.ExpenseType.INCIDENT,
-                incident.getId(),
-                incident.getCost(),
-                "Incident " + incident.getType().name()
-                        + (incident.getDescription() != null ? " — " + incident.getDescription() : ""),
-                incident.getVehicleId(),
-                incident.getDriverId());
-    }
 
     private Coordinates buildCoordinates(Double longitude, Double latitude) {
         if (longitude != null && latitude != null) {
@@ -289,10 +250,10 @@ public class IncidentService implements ManageIncidentUseCase {
 
     private Mono<AlertEvent> notifyManagerOfIncident(Incident incident, java.util.UUID managerId) {
         String title = incident.isCritical()
-                ? "🚨 Incident CRITIQUE signalé"
+                ? "Incident grave signalé"
                 : "Incident signalé sur un véhicule";
-        String base = String.format("Incident %s (%s) sur le véhicule %s.",
-                incident.getType(), incident.getSeverity(), incident.getVehicleRegistration());
+        String base = String.format("%s (gravité %s) sur le véhicule %s.",
+                incident.getType().label(), incident.getSeverity().label(), incident.getVehicleRegistration());
 
         // Si le véhicule est immobilisé : trajets / affectations à réorganiser.
         return incidentImpact.describeImpact(incident).flatMap(impact -> {

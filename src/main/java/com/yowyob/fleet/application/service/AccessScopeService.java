@@ -88,7 +88,7 @@ public class AccessScopeService {
                             if (!Boolean.TRUE.equals(isAdmin)) {
                                 return Mono.error(FleetException.accessDenied());
                             }
-                            if (localId.equals(fleet.getCreatedBy())) {
+                            if (localId.equals(fleet.getCompanyId()) || localId.equals(fleet.getCreatedBy())) {
                                 return Mono.empty();
                             }
                             UUID managerId = fleet.getManagerId();

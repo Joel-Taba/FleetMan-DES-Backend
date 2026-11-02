@@ -16,6 +16,17 @@ public class AuthException extends DomainException {
         return new AuthException("Votre compte est suspendu localement. Contactez un admin.", HttpStatus.FORBIDDEN, "AUTH_002");
     }
 
+    public static AuthException managerSuspended(String reason) {
+        return new AuthException("Votre compte gestionnaire est suspendu"
+                + (reason != null && !reason.isBlank() ? " (" + reason + ")" : "")
+                + ". Contactez l'administrateur de votre entreprise.", HttpStatus.FORBIDDEN, "AUTH_002");
+    }
+
+    public static AuthException managerClosed() {
+        return new AuthException("Votre compte gestionnaire a été clôturé par l'administrateur de votre entreprise.",
+                HttpStatus.FORBIDDEN, "AUTH_003");
+    }
+
     public static AuthException accountDeleted() {
         return new AuthException("Ce compte n'existe plus dans le système.", HttpStatus.FORBIDDEN, "AUTH_003");
     }

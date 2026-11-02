@@ -26,56 +26,241 @@ public class ExpenseService implements ManageExpenseUseCase {
     private final VehiclePersistencePort vehiclePersistence;
     private final DriverPersistencePort driverPersistence;
     private final BudgetPersistencePort budgetPersistence;
+    private final CompanyScopeService companyScope;
+    private final BudgetJournal budgetJournal;
+    private final org.springframework.r2dbc.core.DatabaseClient db;
 
     // ── 1. CRÉATION MANUELLE ─────────────────────────────────────────────────
 
+    /**
+     * Dépense déclarée par un chauffeur (pour lui-même) ou saisie par un gestionnaire. Elle
+     * démarre en attente ; son niveau de validation est calculé (gestionnaire, ou admin si
+     * saisie par un gestionnaire, au-dessus du seuil de l'entreprise ou en dépassement de budget).
+     */
     @Override
     @Transactional
     public Mono<Expense> createManualExpense(CreateManualExpenseCommand cmd) {
-
-        // 1. Vérification existence du véhicule + récupération fleetId, managerId
+        if (cmd.expenseDate() != null && cmd.expenseDate().isAfter(LocalDateTime.now().plusMinutes(5))) {
+            return Mono.error(BudgetException.futureExpenseDate());
+        }
+        if (cmd.expenseType() == Expense.ExpenseType.FUEL || cmd.expenseType() == Expense.ExpenseType.MAINTENANCE
+                || cmd.expenseType() == Expense.ExpenseType.INCIDENT) {
+            return Mono.error(BudgetException.automaticTypeNotManual());
+        }
+        if (cmd.expenseType() == Expense.ExpenseType.OTHER && (cmd.description() == null || cmd.description().isBlank())) {
+            return Mono.error(BudgetException.descriptionRequired());
+        }
         return vehiclePersistence.getLocalDataById(cmd.vehicleId())
                 .switchIfEmpty(Mono.error(BudgetException.vehicleNotFound(cmd.vehicleId())))
-                .flatMap(vehicle -> {
-
-                    // 2. Résolution optionnelle du chauffeur
-                    Mono<String> driverNameMono = cmd.driverId() != null
-                            ? driverPersistence.findById(cmd.driverId())
-                                    .switchIfEmpty(Mono.error(BudgetException.driverNotFound(cmd.driverId())))
-                                    .map(d -> d.userId().toString())
-                            : Mono.just("");
-
-                    return driverNameMono.flatMap(driverName -> {
-
-                        LocalDateTime expenseDate = cmd.expenseDate() != null
-                                ? cmd.expenseDate()
-                                : LocalDateTime.now();
-
+                .flatMap(vehicle -> isDriver(cmd.createdBy()).flatMap(actorIsDriver -> {
+                    // Un chauffeur déclare ses propres frais.
+                    UUID driverId = Boolean.TRUE.equals(actorIsDriver) ? cmd.createdBy() : cmd.driverId();
+                    Mono<String> driverNameMono = driverId == null
+                            ? Mono.just("")
+                            : driverPersistence.findById(driverId)
+                                    .switchIfEmpty(Mono.error(BudgetException.driverNotFound(driverId)))
+                                    .flatMap(d -> java.util.Objects.equals(d.fleetId(), vehicle.fleetId())
+                                            ? fullName(driverId)
+                                            : Mono.<String>error(BudgetException.driverNotInVehicleFleet()));
+                    return driverNameMono.flatMap(driverName -> fleetManagerOf(vehicle.fleetId()).flatMap(managerId -> {
                         Expense expense = new Expense(
                                 null,
                                 cmd.expenseType(),
                                 cmd.amount(),
                                 cmd.description(),
-                                expenseDate,
+                                cmd.expenseDate() != null ? cmd.expenseDate() : LocalDateTime.now(),
                                 Expense.SourceType.MANUAL,
                                 null,
                                 cmd.vehicleId(),
                                 vehicle.licensePlate(),
                                 vehicle.fleetId(),
-                                vehicle.managerId(),
-                                cmd.driverId(),
+                                managerId,
+                                driverId,
                                 driverName.isBlank() ? null : driverName,
                                 null
                         );
+                        expense.setCreatedBy(cmd.createdBy());
+                        if (cmd.receiptUrl() != null && !cmd.receiptUrl().isBlank()) {
+                            expense.attachReceipt(cmd.receiptUrl(), cmd.receiptName(), cmd.receiptMime());
+                        }
+                        return evaluateApproval(expense).flatMap(expensePersistence::save);
+                    }));
+                }));
+    }
 
-                        return expensePersistence.save(expense)
-                                .flatMap(saved -> {
-                                    // 3. Mise à jour asynchrone des budgets actifs (fire & forget)
-                                    triggerBudgetUpdate(saved.getFleetId(), saved.getVehicleId(), saved.getExpenseDate());
-                                    return Mono.just(saved);
-                                });
-                    });
+    @Override
+    public Flux<Expense> getAllByCompany(UUID companyId) {
+        return db.sql("""
+                        SELECT e.id FROM fleet.expenses e JOIN fleet.fleets f ON f.id = e.fleet_id
+                        WHERE f.company_id = :c ORDER BY e.expense_date DESC
+                        """)
+                .bind("c", companyId)
+                .map((row, meta) -> row.get("id", UUID.class))
+                .all()
+                .concatMap(expensePersistence::findById);
+    }
+
+    private static final java.util.Map<String, String> INCIDENT_COST_LABELS = java.util.Map.of(
+            "REPAIR", "Réparation", "TOWING", "Remorquage", "THIRD_PARTY", "Indemnisation d'un tiers",
+            "FINE", "Amende", "OTHER", "Autre coût");
+
+    @Override
+    public Mono<Expense> createIncidentCost(IncidentCostCommand cmd) {
+        if (cmd.amount() == null || cmd.amount().signum() <= 0) {
+            return Mono.error(BudgetException.expenseAmountRequired());
+        }
+        if (cmd.receiptUrl() == null || cmd.receiptUrl().isBlank()) {
+            return Mono.error(BudgetException.receiptRequired());
+        }
+        String label = INCIDENT_COST_LABELS.getOrDefault(cmd.nature(), "Autre coût");
+        return vehiclePersistence.getLocalDataById(cmd.vehicleId())
+                .switchIfEmpty(Mono.error(BudgetException.vehicleNotFound(cmd.vehicleId())))
+                .flatMap(vehicle -> fleetManagerOf(vehicle.fleetId()).flatMap(managerId -> (cmd.driverId() != null ? fullName(cmd.driverId()) : Mono.just(""))
+                        .flatMap(driverName -> {
+                            Expense expense = new Expense(
+                                    null,
+                                    "FINE".equals(cmd.nature()) ? Expense.ExpenseType.FINE : Expense.ExpenseType.INCIDENT,
+                                    cmd.amount(),
+                                    "Incident — " + label + (cmd.description() != null && !cmd.description().isBlank() ? " — " + cmd.description().trim() : ""),
+                                    LocalDateTime.now(),
+                                    Expense.SourceType.MANUAL,
+                                    cmd.incidentId(),
+                                    cmd.vehicleId(),
+                                    vehicle.licensePlate(),
+                                    vehicle.fleetId(),
+                                    managerId,
+                                    cmd.driverId(),
+                                    driverName.isBlank() ? null : driverName,
+                                    null);
+                            expense.setCreatedBy(cmd.createdBy());
+                            expense.attachReceipt(cmd.receiptUrl(), cmd.receiptName(), cmd.receiptMime());
+                            return evaluateApproval(expense).flatMap(expensePersistence::save);
+                        })));
+    }
+
+    /** incidents.cost suit la somme des coûts réels approuvés (rapports, KPI). */
+    private Mono<Void> syncIncidentCost(UUID sourceId) {
+        if (sourceId == null) return Mono.empty();
+        return db.sql("""
+                UPDATE fleet.incidents i SET cost = (SELECT SUM(e.amount) FROM fleet.expenses e
+                                                     WHERE e.source_id = i.id AND e.status = 'APPROVED')
+                WHERE i.id = :id
+                """).bind("id", sourceId).fetch().rowsUpdated().then();
+    }
+
+    /** Ajoute (ou remplace) le justificatif d'une dépense manuelle en attente. */
+    @Override
+    public Mono<Expense> attachReceipt(UUID expenseId, String url, String name, String mime) {
+        if (url == null || url.isBlank()) {
+            return Mono.error(BudgetException.receiptRequired());
+        }
+        return expensePersistence.findById(expenseId)
+                .switchIfEmpty(Mono.error(BudgetException.expenseNotFound(expenseId)))
+                .flatMap(expense -> {
+                    if (!expense.isManualAndPending()) {
+                        return Mono.error(BudgetException.expenseNotEditable(expenseId));
+                    }
+                    expense.attachReceipt(url, name, mime);
+                    return expensePersistence.save(expense);
                 });
+    }
+
+    /** Gestionnaire de la flotte du véhicule : c'est à lui que la dépense est rattachée. */
+    private Mono<UUID> fleetManagerOf(UUID fleetId) {
+        return db.sql("SELECT manager_id FROM fleet.fleets WHERE id = :f")
+                .bind("f", fleetId)
+                .map((row, meta) -> row.get("manager_id", UUID.class))
+                .one()
+                .switchIfEmpty(Mono.error(BudgetException.fleetNotFound(fleetId)));
+    }
+
+    private Mono<Boolean> isDriver(UUID userId) {
+        if (userId == null) return Mono.just(false);
+        return driverPersistence.findById(userId).hasElement();
+    }
+
+    private Mono<String> fullName(UUID userId) {
+        return db.sql("SELECT TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) AS n FROM fleet.users WHERE id = :u")
+                .bind("u", userId)
+                .map((row, meta) -> row.get("n", String.class))
+                .one()
+                .defaultIfEmpty("");
+    }
+
+    // ── Niveau de validation ─────────────────────────────────────────────────
+
+    private record ApprovalNeeds(boolean enteredByStaff, boolean aboveThreshold, BigDecimal threshold, boolean overBudget) {
+        boolean admin() { return enteredByStaff || aboveThreshold || overBudget; }
+
+        String reason() {
+            java.util.List<String> parts = new java.util.ArrayList<>();
+            if (enteredByStaff) parts.add("saisie par un gestionnaire");
+            if (aboveThreshold) parts.add("montant supérieur au seuil de " + threshold.stripTrailingZeros().toPlainString() + " XAF");
+            if (overBudget) parts.add("dépassement du budget du mois");
+            return String.join(", ", parts);
+        }
+    }
+
+    private Mono<ApprovalNeeds> approvalNeeds(Expense e) {
+        Mono<BigDecimal> threshold = db.sql("""
+                        SELECT c.expense_approval_threshold AS t FROM fleet.fleets f
+                        JOIN fleet.companies c ON c.id = f.company_id WHERE f.id = :f
+                        """)
+                .bind("f", e.getFleetId())
+                .map((row, meta) -> row.get("t", BigDecimal.class))
+                .one()
+                .defaultIfEmpty(new BigDecimal("100000"));
+        Mono<Boolean> staff = e.getCreatedBy() == null
+                ? Mono.just(false)
+                : db.sql("""
+                        SELECT EXISTS (SELECT 1 FROM fleet.fleet_managers WHERE user_id = :u)
+                            OR EXISTS (SELECT 1 FROM fleet.companies WHERE id = :u) AS staff
+                        """)
+                        .bind("u", e.getCreatedBy())
+                        .map((row, meta) -> Boolean.TRUE.equals(row.get("staff", Boolean.class)))
+                        .one()
+                        .defaultIfEmpty(false);
+        return Mono.zip(threshold, staff, wouldExceedBudget(e))
+                .map(t -> new ApprovalNeeds(t.getT2(), e.getAmount().compareTo(t.getT1()) > 0, t.getT1(), t.getT3()));
+    }
+
+    /** Calcule et applique le niveau de validation exigé et l'indicateur de dépassement. */
+    private Mono<Expense> evaluateApproval(Expense e) {
+        return approvalNeeds(e).map(needs -> {
+            e.setApprovalLevel(needs.admin() ? Expense.ApprovalLevel.ADMIN : Expense.ApprovalLevel.MANAGER);
+            e.setOverBudget(needs.overBudget());
+            return e;
+        });
+    }
+
+    /** La dépense (si elle était approuvée) ferait-elle dépasser le budget flotte ou véhicule du mois ? */
+    private Mono<Boolean> wouldExceedBudget(Expense e) {
+        LocalDate month = e.getExpenseDate().toLocalDate().withDayOfMonth(1);
+        LocalDateTime start = month.atStartOfDay();
+        LocalDateTime end = month.plusMonths(1).atStartOfDay();
+        BigDecimal extra = e.getStatus() == Expense.ExpenseStatus.APPROVED ? BigDecimal.ZERO : e.getAmount();
+        Mono<Boolean> fleet = budgetPersistence.findByEntityAndMonth(Budget.BudgetScope.FLEET, e.getFleetId(), month)
+                .flatMap(b -> expensePersistence.getTotalApprovedByFleetAndMonth(e.getFleetId(), start, end)
+                        .defaultIfEmpty(BigDecimal.ZERO)
+                        .map(total -> total.add(extra).compareTo(b.getAmount()) > 0))
+                .defaultIfEmpty(false);
+        Mono<Boolean> vehicle = budgetPersistence.findByEntityAndMonth(Budget.BudgetScope.VEHICLE, e.getVehicleId(), month)
+                .flatMap(b -> expensePersistence.getTotalApprovedByVehicleAndMonth(e.getVehicleId(), start, end)
+                        .defaultIfEmpty(BigDecimal.ZERO)
+                        .map(total -> total.add(extra).compareTo(b.getAmount()) > 0))
+                .defaultIfEmpty(false);
+        return Mono.zip(fleet, vehicle).map(t -> t.getT1() || t.getT2());
+    }
+
+    /** L'acteur est-il l'administrateur de l'entreprise propriétaire de la flotte ? */
+    private Mono<Boolean> isCompanyAdminOfFleet(UUID actorId, UUID fleetId) {
+        return companyScope.isCompanyAdmin(actorId).flatMap(admin -> !Boolean.TRUE.equals(admin)
+                ? Mono.just(false)
+                : Mono.zip(companyScope.resolveCompanyId(actorId),
+                                db.sql("SELECT company_id FROM fleet.fleets WHERE id = :f").bind("f", fleetId)
+                                        .map((row, meta) -> row.get("company_id", UUID.class)).one())
+                        .map(t -> t.getT1().equals(t.getT2()))
+                        .defaultIfEmpty(false));
     }
 
     // ── 2. CRÉATION AUTO-GÉNÉRÉE ─────────────────────────────────────────────
@@ -107,11 +292,12 @@ public class ExpenseService implements ManageExpenseUseCase {
                 null
         );
 
-        return expensePersistence.save(expense)
-                .doOnSuccess(saved -> {
+        return evaluateApproval(expense)
+                .flatMap(expensePersistence::save)
+                .flatMap(saved -> {
                     log.info("✅ Dépense auto [{}] créée pour véhicule {} — montant: {} FCFA",
                             type, vehicleId, amount);
-                    triggerBudgetUpdate(fleetId, vehicleId, saved.getExpenseDate());
+                    return refreshBudgets(fleetId, vehicleId, saved.getExpenseDate()).thenReturn(saved);
                 });
     }
 
@@ -131,8 +317,7 @@ public class ExpenseService implements ManageExpenseUseCase {
                 .flatMap(existing -> {
                     if (!positive) {
                         return expensePersistence.deleteById(existing.getId())
-                                .doOnSuccess(v -> triggerBudgetUpdate(existing.getFleetId(),
-                                        existing.getVehicleId(), existing.getExpenseDate()))
+                                .then(refreshBudgets(existing.getFleetId(), existing.getVehicleId(), existing.getExpenseDate()))
                                 .thenReturn(true);
                     }
                     if (existing.getAmount().compareTo(amount) == 0) {
@@ -140,8 +325,7 @@ public class ExpenseService implements ManageExpenseUseCase {
                     }
                     existing.syncWithSource(amount);
                     return expensePersistence.save(existing)
-                            .doOnSuccess(saved -> triggerBudgetUpdate(saved.getFleetId(),
-                                    saved.getVehicleId(), saved.getExpenseDate()))
+                            .flatMap(saved -> refreshBudgets(saved.getFleetId(), saved.getVehicleId(), saved.getExpenseDate()))
                             .thenReturn(true);
                 })
                 .switchIfEmpty(Mono.defer(() -> !positive
@@ -158,8 +342,8 @@ public class ExpenseService implements ManageExpenseUseCase {
     public Mono<Void> deleteAutoExpenses(UUID sourceId) {
         return expensePersistence.findBySourceId(sourceId)
                 .filter(e -> e.getSourceType() == Expense.SourceType.AUTO)
-                .flatMap(e -> expensePersistence.deleteById(e.getId())
-                        .doOnSuccess(v -> triggerBudgetUpdate(e.getFleetId(), e.getVehicleId(), e.getExpenseDate())))
+                .concatMap(e -> expensePersistence.deleteById(e.getId())
+                        .then(refreshBudgets(e.getFleetId(), e.getVehicleId(), e.getExpenseDate())))
                 .then();
     }
 
@@ -249,8 +433,13 @@ public class ExpenseService implements ManageExpenseUseCase {
 
     // ── 5. VALIDATION ────────────────────────────────────────────────────────
 
+    /**
+     * Validation à deux niveaux : justificatif exigé pour une dépense manuelle ; personne ne
+     * valide sa propre dépense ; le niveau est réévalué au moment de la validation (le budget a pu
+     * se remplir entre-temps) et une dépense de niveau ADMIN n'est approuvée que par
+     * l'administrateur de l'entreprise.
+     */
     @Override
-    @Transactional
     public Mono<Expense> approve(UUID expenseId, UUID managerId) {
         return expensePersistence.findById(expenseId)
                 .switchIfEmpty(Mono.error(BudgetException.expenseNotFound(expenseId)))
@@ -258,17 +447,33 @@ public class ExpenseService implements ManageExpenseUseCase {
                     if (expense.getStatus() != Expense.ExpenseStatus.PENDING) {
                         return Mono.error(BudgetException.expenseAlreadyValidated(expenseId));
                     }
-                    expense.approve(managerId);
-                    return expensePersistence.save(expense)
-                            .doOnSuccess(saved -> {
-                                log.info("✅ Dépense {} approuvée par manager {}", expenseId, managerId);
-                                triggerBudgetUpdate(saved.getFleetId(), saved.getVehicleId(), saved.getExpenseDate());
+                    if (expense.getSourceType() == Expense.SourceType.MANUAL && !expense.hasReceipt()) {
+                        return Mono.error(BudgetException.receiptRequired());
+                    }
+                    if (managerId.equals(expense.getCreatedBy())) {
+                        return Mono.error(BudgetException.selfApproval());
+                    }
+                    return Mono.zip(approvalNeeds(expense), isCompanyAdminOfFleet(managerId, expense.getFleetId()))
+                            .flatMap(t -> {
+                                ApprovalNeeds needs = t.getT1();
+                                expense.setApprovalLevel(needs.admin() ? Expense.ApprovalLevel.ADMIN : Expense.ApprovalLevel.MANAGER);
+                                expense.setOverBudget(needs.overBudget());
+                                if (needs.admin() && !Boolean.TRUE.equals(t.getT2())) {
+                                    // Escalade : la dépense reste en attente, désormais chez l'administrateur.
+                                    return expensePersistence.save(expense)
+                                            .then(Mono.<Expense>error(BudgetException.adminApprovalRequired(needs.reason())));
+                                }
+                                expense.approve(managerId);
+                                return expensePersistence.save(expense)
+                                        .flatMap(saved -> refreshBudgets(saved.getFleetId(), saved.getVehicleId(),
+                                                saved.getExpenseDate()).thenReturn(saved))
+                                        .flatMap(saved -> syncIncidentCost(saved.getSourceId()).thenReturn(saved))
+                                        .doOnSuccess(saved -> log.info("✅ Dépense {} approuvée par {}", expenseId, managerId));
                             });
                 });
     }
 
     @Override
-    @Transactional
     public Mono<Expense> reject(ValidateExpenseCommand cmd) {
         return expensePersistence.findById(cmd.expenseId())
                 .switchIfEmpty(Mono.error(BudgetException.expenseNotFound(cmd.expenseId())))
@@ -279,11 +484,18 @@ public class ExpenseService implements ManageExpenseUseCase {
                     if (cmd.rejectionReason() == null || cmd.rejectionReason().isBlank()) {
                         return Mono.error(BudgetException.rejectionReasonRequired());
                     }
-                    expense.reject(cmd.managerId(), cmd.rejectionReason());
-                    return expensePersistence.save(expense)
-                            .doOnSuccess(saved ->
-                                    log.info("❌ Dépense {} rejetée par manager {} — motif: {}",
-                                            cmd.expenseId(), cmd.managerId(), cmd.rejectionReason()));
+                    if (cmd.managerId().equals(expense.getCreatedBy())) {
+                        return Mono.error(BudgetException.selfApproval());
+                    }
+                    return isCompanyAdminOfFleet(cmd.managerId(), expense.getFleetId()).flatMap(admin -> {
+                        if (expense.getApprovalLevel() == Expense.ApprovalLevel.ADMIN && !Boolean.TRUE.equals(admin)) {
+                            return Mono.<Expense>error(BudgetException.adminApprovalRequired("niveau administrateur"));
+                        }
+                        expense.reject(cmd.managerId(), cmd.rejectionReason());
+                        return expensePersistence.save(expense)
+                                .doOnSuccess(saved -> log.info("❌ Dépense {} rejetée par {} — motif: {}",
+                                        cmd.expenseId(), cmd.managerId(), cmd.rejectionReason()));
+                    });
                 });
     }
 
@@ -304,7 +516,7 @@ public class ExpenseService implements ManageExpenseUseCase {
                     if (cmd.description() != null) {
                         expense.setDescription(cmd.description());
                     }
-                    return expensePersistence.save(expense);
+                    return evaluateApproval(expense).flatMap(expensePersistence::save);
                 });
     }
 
@@ -319,16 +531,11 @@ public class ExpenseService implements ManageExpenseUseCase {
                     if (expense.getSourceType() == Expense.SourceType.AUTO) {
                         return Mono.error(BudgetException.expenseDeleteForbidden(id));
                     }
-                    // Une dépense approuvée compte dans le budget du mois : il doit être
-                    // recalculé après sa suppression (il restait gonflé jusqu'ici).
-                    boolean wasApproved = expense.getStatus() == Expense.ExpenseStatus.APPROVED;
-                    return expensePersistence.deleteById(id)
-                            .doOnSuccess(v -> {
-                                if (wasApproved) {
-                                    triggerBudgetUpdate(expense.getFleetId(), expense.getVehicleId(),
-                                            expense.getExpenseDate());
-                                }
-                            });
+                    // Une dépense approuvée fait partie des comptes du mois (budget consommé).
+                    if (expense.getStatus() == Expense.ExpenseStatus.APPROVED) {
+                        return Mono.error(BudgetException.approvedNotDeletable());
+                    }
+                    return expensePersistence.deleteById(id);
                 });
     }
 
@@ -342,26 +549,21 @@ public class ExpenseService implements ManageExpenseUseCase {
     }
 
     /**
-     * Déclenche la mise à jour asynchrone des budgets actifs (fire & forget).
-     * Met à jour le budget flotte ET le budget véhicule si ils existent.
+     * Recalcule (dans la même chaîne, donc la même transaction) le budget flotte et le budget
+     * véhicule du mois de la dépense. Avant, ce recalcul partait « en arrière-plan » sans garantie :
+     * des budgets affichaient 255 000 consommés pour 2 500 réellement dépensés.
      */
-    private void triggerBudgetUpdate(UUID fleetId, UUID vehicleId, LocalDateTime expenseDate) {
-        if (fleetId == null || expenseDate == null) return;
+    private Mono<Void> refreshBudgets(UUID fleetId, UUID vehicleId, LocalDateTime expenseDate) {
+        if (fleetId == null || expenseDate == null) return Mono.empty();
         LocalDate month = expenseDate.toLocalDate().withDayOfMonth(1);
-
-        // Budget flotte
-        budgetPersistence.findByEntityAndMonth(Budget.BudgetScope.FLEET, fleetId, month)
+        Mono<Void> fleet = budgetPersistence.findByEntityAndMonth(Budget.BudgetScope.FLEET, fleetId, month)
                 .flatMap(budget -> recalcAndSaveBudget(budget, fleetId, null, month))
-                .doOnError(e -> log.warn("⚠️ Erreur recalcul budget flotte {}: {}", fleetId, e.getMessage()))
-                .subscribe();
-
-        // Budget véhicule (si vehicleId fourni)
-        if (vehicleId != null) {
-            budgetPersistence.findByEntityAndMonth(Budget.BudgetScope.VEHICLE, vehicleId, month)
-                    .flatMap(budget -> recalcAndSaveBudget(budget, null, vehicleId, month))
-                    .doOnError(e -> log.warn("⚠️ Erreur recalcul budget véhicule {}: {}", vehicleId, e.getMessage()))
-                    .subscribe();
-        }
+                .then();
+        Mono<Void> vehicle = vehicleId == null ? Mono.empty()
+                : budgetPersistence.findByEntityAndMonth(Budget.BudgetScope.VEHICLE, vehicleId, month)
+                        .flatMap(budget -> recalcAndSaveBudget(budget, null, vehicleId, month))
+                        .then();
+        return fleet.then(vehicle);
     }
 
     private Mono<Budget> recalcAndSaveBudget(Budget budget, UUID fleetId, UUID vehicleId, LocalDate month) {
@@ -374,8 +576,10 @@ public class ExpenseService implements ManageExpenseUseCase {
 
         return totalMono.defaultIfEmpty(BigDecimal.ZERO)
                 .flatMap(total -> {
+                    Budget.AlertLevel previousLevel = budget.getAlertLevel();
                     budget.updateConsumed(total);
                     return budgetPersistence.save(budget)
+                            .flatMap(saved -> budgetJournal.recordLevelChange(saved, previousLevel, null).thenReturn(saved))
                             .doOnSuccess(b -> log.debug(
                                     "Budget {} recalculé — consommé: {} / {} FCFA ({}%)",
                                     b.getId(), b.getConsumed(), b.getAmount(), b.consumptionRate()

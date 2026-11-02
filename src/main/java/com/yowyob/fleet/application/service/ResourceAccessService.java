@@ -2,7 +2,6 @@ package com.yowyob.fleet.application.service;
 
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.AssignmentR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.BudgetR2dbcRepository;
-import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverDocumentR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.ExpenseR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FuelRechargeR2dbcRepository;
@@ -12,7 +11,6 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.MaintenanceR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.ScheduleR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripR2dbcRepository;
-import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleDocumentR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -46,8 +44,6 @@ public class ResourceAccessService {
     private final FuelRechargeR2dbcRepository fuelRepo;
     private final ExpenseR2dbcRepository expenseRepo;
     private final BudgetR2dbcRepository budgetRepo;
-    private final VehicleDocumentR2dbcRepository vehicleDocRepo;
-    private final DriverDocumentR2dbcRepository driverDocRepo;
     private final MaintenancePlanR2dbcRepository planRepo;
     private final MaintenanceAlertR2dbcRepository alertRepo;
 
@@ -147,11 +143,15 @@ public class ResourceAccessService {
 
     // ── Dépenses & budgets ───────────────────────────────────────────────────
 
+    /** Le chauffeur concerné ou l'auteur de la dépense, ou un gestionnaire / l'admin de sa flotte. */
     public Mono<Void> assertExpenseAccess(UUID actorId, UUID expenseId) {
         return expenseRepo.findById(expenseId)
-                .flatMap(e -> e.getVehicleId() != null
-                        ? assertVehicleAccess(actorId, e.getVehicleId())
-                        : accessScope.assertFleetAccess(actorId, e.getFleetId()));
+                .flatMap(e -> accessScope.resolveLocalUserId(actorId).flatMap(localId ->
+                        localId.equals(e.getDriverId()) || localId.equals(e.getCreatedBy())
+                                ? Mono.<Void>empty()
+                                : e.getVehicleId() != null
+                                        ? assertVehicleAccess(actorId, e.getVehicleId())
+                                        : accessScope.assertFleetAccess(actorId, e.getFleetId())));
     }
 
     public Mono<Void> assertBudgetAccess(UUID actorId, UUID budgetId) {
@@ -164,18 +164,6 @@ public class ResourceAccessService {
         return "VEHICLE".equals(scope)
                 ? assertVehicleAccess(actorId, entityId)
                 : accessScope.assertFleetAccess(actorId, entityId);
-    }
-
-    // ── Documents ────────────────────────────────────────────────────────────
-
-    public Mono<Void> assertVehicleDocumentAccess(UUID actorId, UUID documentId) {
-        return vehicleDocRepo.findById(documentId)
-                .flatMap(d -> assertVehicleAccess(actorId, d.getVehicleId()));
-    }
-
-    public Mono<Void> assertDriverDocumentAccess(UUID actorId, UUID documentId) {
-        return driverDocRepo.findById(documentId)
-                .flatMap(d -> assertDriverAccess(actorId, d.getDriverId()));
     }
 
     // ── Maintenance préventive ───────────────────────────────────────────────

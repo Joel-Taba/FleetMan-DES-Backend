@@ -53,7 +53,7 @@ public interface TripR2dbcRepository
 
     @Query(
         "SELECT COUNT(*) > 0 FROM fleet.trips WHERE driver_id = :driverId " +
-            "AND status IN ('SCHEDULED', 'DEPARTED', 'RETURNING')"
+            "AND status IN ('SCHEDULED', 'DEPARTED', 'ARRIVED')"
     )
     Mono<Boolean> existsActiveTripForDriver(UUID driverId);
 
@@ -62,7 +62,7 @@ public interface TripR2dbcRepository
      * Un trajet seulement planifié (SCHEDULED) ne met pas le chauffeur « en course ».
      */
     @Query(
-        "SELECT DISTINCT driver_id FROM fleet.trips WHERE status IN ('DEPARTED', 'RETURNING')"
+        "SELECT DISTINCT driver_id FROM fleet.trips WHERE status IN ('DEPARTED', 'ARRIVED')"
     )
     Flux<UUID> findActiveTripDriverIds();
 
@@ -72,10 +72,10 @@ public interface TripR2dbcRepository
     // ressources au moins jusqu'à :now (retour en retard).
 
     String SLOT_START = "(t.start_date + COALESCE(t.start_time, TIME '00:00'))";
-    String SLOT_END = "(CASE WHEN t.status IN ('DEPARTED', 'RETURNING') "
+    String SLOT_END = "(CASE WHEN t.status IN ('DEPARTED', 'ARRIVED') "
             + "THEN GREATEST(COALESCE(t.scheduled_return_datetime, TIMESTAMP '9999-12-31 23:59:59'), :now) "
             + "ELSE COALESCE(t.scheduled_return_datetime, TIMESTAMP '9999-12-31 23:59:59') END)";
-    String OPEN_TRIP = "t.deleted_at IS NULL AND t.status IN ('SCHEDULED', 'DEPARTED', 'RETURNING') "
+    String OPEN_TRIP = "t.deleted_at IS NULL AND t.status IN ('SCHEDULED', 'DEPARTED', 'ARRIVED') "
             + "AND (:excludeTripId IS NULL OR t.id <> :excludeTripId) ";
 
     @Query("SELECT COUNT(*) > 0 FROM fleet.trips t WHERE t.vehicle_id = :vehicleId AND " + OPEN_TRIP
@@ -99,12 +99,12 @@ public interface TripR2dbcRepository
 
     /** Un trajet est-il physiquement en cours (départ enregistré, retour non enregistré) pour ce véhicule ? */
     @Query("SELECT COUNT(*) > 0 FROM fleet.trips t WHERE t.vehicle_id = :vehicleId AND t.deleted_at IS NULL "
-            + "AND t.status IN ('DEPARTED', 'RETURNING') AND (:excludeTripId IS NULL OR t.id <> :excludeTripId)")
+            + "AND t.status IN ('DEPARTED', 'ARRIVED') AND (:excludeTripId IS NULL OR t.id <> :excludeTripId)")
     Mono<Boolean> existsInProgressTripForVehicle(UUID vehicleId, UUID excludeTripId);
 
     /** Trajets physiquement en cours (départ enregistré, retour non enregistré) d'un véhicule. */
     @Query("SELECT t.* FROM fleet.trips t WHERE t.vehicle_id = :vehicleId AND t.deleted_at IS NULL "
-            + "AND t.status IN ('DEPARTED', 'RETURNING')")
+            + "AND t.status IN ('DEPARTED', 'ARRIVED')")
     Flux<TripEntity> findInProgressTripsForVehicle(UUID vehicleId);
 
     /** Trajets planifiés (pas encore partis) d'un véhicule dont le départ prévu n'est pas passé. */
@@ -113,17 +113,17 @@ public interface TripR2dbcRepository
     Mono<Long> countUpcomingScheduledTripsForVehicle(UUID vehicleId, LocalDateTime now);
 
     @Query("SELECT COUNT(*) > 0 FROM fleet.trips t WHERE t.driver_id = :driverId AND t.deleted_at IS NULL "
-            + "AND t.status IN ('DEPARTED', 'RETURNING') AND (:excludeTripId IS NULL OR t.id <> :excludeTripId)")
+            + "AND t.status IN ('DEPARTED', 'ARRIVED') AND (:excludeTripId IS NULL OR t.id <> :excludeTripId)")
     Mono<Boolean> existsInProgressTripForDriver(UUID driverId, UUID excludeTripId);
 
     /** Trajet en cours du chauffeur (aller ou retour). */
     @Query("SELECT t.* FROM fleet.trips t WHERE t.driver_id = :driverId AND t.deleted_at IS NULL "
-            + "AND t.status IN ('DEPARTED', 'RETURNING') ORDER BY t.departure_registered_at DESC NULLS LAST LIMIT 1")
+            + "AND t.status IN ('DEPARTED', 'ARRIVED') ORDER BY t.departure_registered_at DESC NULLS LAST LIMIT 1")
     Mono<TripEntity> findInProgressTripForDriver(UUID driverId);
 
     @Query(
         "SELECT COUNT(*) > 0 FROM fleet.trips WHERE driver_id = :driverId " +
-            "AND status IN ('SCHEDULED', 'DEPARTED', 'RETURNING') AND id != :excludeTripId"
+            "AND status IN ('SCHEDULED', 'DEPARTED', 'ARRIVED') AND id != :excludeTripId"
     )
     Mono<Boolean> existsActiveTripForDriverExcluding(
         UUID driverId,
@@ -132,13 +132,13 @@ public interface TripR2dbcRepository
 
     @Query(
         "SELECT COUNT(*) > 0 FROM fleet.trips WHERE vehicle_id = :vehicleId " +
-            "AND status IN ('SCHEDULED', 'DEPARTED', 'RETURNING')"
+            "AND status IN ('SCHEDULED', 'DEPARTED', 'ARRIVED')"
     )
     Mono<Boolean> existsActiveTripForVehicle(UUID vehicleId);
 
     @Query(
         "SELECT COUNT(*) > 0 FROM fleet.trips WHERE vehicle_id = :vehicleId " +
-            "AND status IN ('SCHEDULED', 'DEPARTED', 'RETURNING') AND id != :excludeTripId"
+            "AND status IN ('SCHEDULED', 'DEPARTED', 'ARRIVED') AND id != :excludeTripId"
     )
     Mono<Boolean> existsActiveTripForVehicleExcluding(
         UUID vehicleId,
@@ -147,7 +147,7 @@ public interface TripR2dbcRepository
 
     @Query(
         "SELECT * FROM fleet.trips WHERE created_by = :createdBy " +
-            "AND status IN ('DEPARTED', 'RETURNING')"
+            "AND status IN ('DEPARTED', 'ARRIVED')"
     )
     Flux<TripEntity> findOpenTripsByCreatedBy(UUID createdBy);
 

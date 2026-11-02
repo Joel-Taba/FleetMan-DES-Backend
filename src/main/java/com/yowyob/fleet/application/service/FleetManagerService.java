@@ -41,6 +41,7 @@ public class FleetManagerService implements ManageFleetManagerUseCase {
     private final AuthPort authPort;
     private final UserLocalR2dbcRepository userRepository;
     private final FleetManagerGalleryImageR2dbcRepository galleryRepository;
+    private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.CompanyR2dbcRepository companyRepository;
 
     // ── Repositories Opérations Terrain (Phase 6) ─────────────────────────────
     private final MaintenanceR2dbcRepository maintenanceRepository;
@@ -78,25 +79,28 @@ public class FleetManagerService implements ManageFleetManagerUseCase {
                 .defaultIfEmpty(new UserLocalEntity()),
             galleryRepository.findByManagerId(remoteUser.id())
                 .map(FleetManagerGalleryImageEntity::getImagePath)
-                .collectList()
+                .collectList(),
+            companyRepository.findForUser(remoteUser.id())
+                .defaultIfEmpty(new com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.CompanyEntity())
         ).map(tuple -> {
             var localEntity = tuple.getT1();
             var fleetCount = tuple.getT2();
             var localUser = tuple.getT3();
             var gallery = tuple.getT4();
+            var company = tuple.getT5();
             return new FleetManagerResponse(
                 remoteUser.id(),
                 nonBlank(remoteUser.firstName(), localUser.getFirstName()),
                 nonBlank(remoteUser.lastName(), localUser.getLastName()),
                 nonBlank(remoteUser.email(), localUser.getEmail()),
                 nonBlank(remoteUser.phone(), localUser.getPhone()),
-                localEntity.getCompanyName(),
+                company.getName() != null ? company.getName() : localEntity.getCompanyName(),
                 "ACTIVE",
                 fleetCount.intValue(),
                 // Logo entreprise (localEntity.logoUrl) distinct de la photo de
                 // profil personnelle (localUser.photoUrl) : on garde ce dernier
                 // en repli seulement si aucun logo dédié n'a encore été défini.
-                nonBlank(localEntity.getLogoUrl(), localUser.getPhotoUrl()),
+                nonBlank(company.getLogoUrl(), nonBlank(localEntity.getLogoUrl(), localUser.getPhotoUrl())),
                 gallery
             );
         });

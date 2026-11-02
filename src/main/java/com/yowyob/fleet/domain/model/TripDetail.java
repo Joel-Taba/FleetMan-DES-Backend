@@ -19,6 +19,7 @@ public class TripDetail {
     private BigDecimal weight;           // En kg, optionnel
     private Integer departureQuantity;   // Quantité au départ
     private Integer returnQuantity;      // Quantité au retour (vérification)
+    private Integer deliveredQuantity;   // Quantité livrée à destination
     private int sortOrder;
 
     public TripDetail(UUID id, UUID tripId, ItemType itemType, String description,
@@ -44,6 +45,8 @@ public class TripDetail {
     public Integer getDepartureQuantity() { return departureQuantity; }
     public Integer getReturnQuantity() { return returnQuantity; }
     public int getSortOrder() { return sortOrder; }
+    public Integer getDeliveredQuantity() { return deliveredQuantity; }
+    public void setDeliveredQuantity(Integer deliveredQuantity) { this.deliveredQuantity = deliveredQuantity; }
 
     public void setId(UUID id) { this.id = id; }
     public void setReturnQuantity(Integer returnQuantity) { this.returnQuantity = returnQuantity; }

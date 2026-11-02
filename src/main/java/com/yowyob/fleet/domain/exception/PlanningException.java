@@ -75,8 +75,14 @@ public class PlanningException extends DomainException {
 
     /** PLN_008 — Véhicule non disponible (en maintenance ou hors service) */
     public static PlanningException vehicleNotAvailable(UUID vehicleId) {
+        return vehicleNotAvailable(vehicleId, null);
+    }
+
+    public static PlanningException vehicleNotAvailable(UUID vehicleId, String status) {
         return new PlanningException(
-                "Le véhicule " + vehicleId + " n'est pas disponible (statut MAINTENANCE ou hors service).",
+                "Ce véhicule n'est pas disponible"
+                        + (status != null ? " (" + com.yowyob.fleet.domain.model.VehicleLifecycle.label(status) + ")" : "")
+                        + " : il ne peut pas être affecté.",
                 HttpStatus.UNPROCESSABLE_ENTITY, "PLN_008");
     }
 
@@ -128,6 +134,26 @@ public class PlanningException extends DomainException {
         return new PlanningException(
                 "Le véhicule " + vehicleId + " n'appartient pas à la flotte de l'affectation.",
                 HttpStatus.UNPROCESSABLE_ENTITY, "PLN_016");
+    }
+
+    /** PLN_017 — Démarrage et fin d'un poste sont automatiques */
+    public static PlanningException manualStatusNotAllowed(String status) {
+        return new PlanningException(
+                "Le statut " + status + " ne se pose pas à la main : le poste démarre au premier départ d'un "
+                        + "trajet et se termine à son heure de fin. Seuls NO_SHOW et CANCELLED sont manuels.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "PLN_017");
+    }
+
+    /** PLN_018 — Un trajet du poste est en cours */
+    public static PlanningException shiftHasTripInProgress(UUID id) {
+        return new PlanningException(
+                "Un trajet rattaché au poste " + id + " est en cours : enregistrez son retour avant d'annuler le poste.",
+                HttpStatus.CONFLICT, "PLN_018");
+    }
+
+    /** PLN_019 — Transition de statut impossible */
+    public static PlanningException invalidStatusTransition(String reason) {
+        return new PlanningException(reason, HttpStatus.CONFLICT, "PLN_019");
     }
 
     /** PLN_012 — Conducteur introuvable pour l'affectation */

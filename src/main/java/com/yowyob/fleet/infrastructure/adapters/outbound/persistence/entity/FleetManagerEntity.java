@@ -31,6 +31,16 @@ public class FleetManagerEntity implements Persistable<UUID> {
     @Column("created_by_admin_id")
     private UUID createdByAdminId;
 
+    /** ACTIVE, SUSPENDED ou CLOSED (écrit par AdminService). */
+    @Column("account_status")
+    private String accountStatus;
+
+    @Column("suspension_reason")
+    private String suspensionReason;
+
+    @Column("status_changed_at")
+    private java.time.Instant statusChangedAt;
+
     @Transient // Ce champ n'est pas en base, il sert à la logique R2DBC
     private boolean isNew = false;
 

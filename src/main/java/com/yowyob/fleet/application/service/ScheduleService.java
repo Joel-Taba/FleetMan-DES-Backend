@@ -22,6 +22,7 @@ public class ScheduleService implements ManageScheduleUseCase {
 
     private final SchedulePersistencePort schedulePersistencePort;
     private final AssignmentPersistencePort assignmentPersistencePort;
+    private final org.springframework.r2dbc.core.DatabaseClient db;
 
     @Override
     public Mono<Schedule> createSchedule(CreateScheduleCommand cmd) {
@@ -91,7 +92,29 @@ public class ScheduleService implements ManageScheduleUseCase {
                     schedule.publish();
                     return schedulePersistencePort.save(schedule);
                 })
+                .flatMap(saved -> notifyDrivers(saved.getId()).thenReturn(saved))
                 .doOnSuccess(s -> log.info("Planning publié : {}", s.getId()));
+    }
+
+    /** Publication : chaque chauffeur du programme reçoit une notification avec ses postes. */
+    private Mono<Long> notifyDrivers(UUID scheduleId) {
+        return db.sql("""
+                INSERT INTO fleet.notifications (id, user_id, title, message, type, is_read, created_at, data, tenant_id)
+                SELECT gen_random_uuid(), x.driver_id, 'Programme publié',
+                       'Le programme « ' || s.title || ' » est publié : ' || x.n || ' poste(s) vous sont attribués, '
+                           || 'premier poste le ' || to_char(x.first_start, 'DD/MM/YYYY à HH24:MI') || '.',
+                       'INFO', FALSE, :now,
+                       json_build_object('type', 'SCHEDULE_PUBLISHED', 'scheduleId', s.id)::text, s.tenant_id
+                FROM (SELECT driver_id, COUNT(*) AS n, MIN(start_datetime) AS first_start
+                      FROM fleet.assignments
+                      WHERE schedule_id = :scheduleId AND status IN ('PENDING', 'IN_PROGRESS')
+                      GROUP BY driver_id) x
+                JOIN fleet.schedules s ON s.id = :scheduleId
+                JOIN fleet.users u ON u.id = x.driver_id
+                """)
+                .bind("scheduleId", scheduleId)
+                .bind("now", java.time.LocalDateTime.now())
+                .fetch().rowsUpdated();
     }
 
     @Override

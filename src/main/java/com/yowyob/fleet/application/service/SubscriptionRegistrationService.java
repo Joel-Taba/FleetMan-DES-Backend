@@ -8,7 +8,6 @@ import com.yowyob.fleet.domain.ports.out.MailPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.KycDocumentVerificationResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SubscriptionDocumentResponse;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.SubscriptionDocumentEntity;
-import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetManagerR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.SubscriptionDocumentR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
 import lombok.RequiredArgsConstructor;
@@ -33,13 +32,13 @@ public class SubscriptionRegistrationService {
 
     private final AuthUseCase authUseCase;
     private final UserLocalR2dbcRepository userRepo;
-    private final FleetManagerR2dbcRepository managerRepo;
     private final SubscriptionDocumentR2dbcRepository documentRepo;
     private final DatabaseClient db;
     private final MailPort mailPort;
     private final ExternalKycPort kycPort;
     private final ExternalFilePort filePort;
     private final LocalFileStorageService localFileStorageService;
+    private final CompanyService companyService;
 
     public record DocumentInput(
             String docType,
@@ -62,6 +61,7 @@ public class SubscriptionRegistrationService {
             String lastName,
             String companyName,
             UUID requestedPlanId,
+            com.yowyob.fleet.domain.model.BillingCycle requestedBillingCycle,
             List<DocumentInput> documents
     ) {}
 
@@ -86,7 +86,9 @@ public class SubscriptionRegistrationService {
                 cmd.phone(),
                 cmd.firstName(),
                 cmd.lastName(),
-                List.of("FLEET_MANAGER"),
+                // L'inscription crée l'administrateur de l'entreprise ; le rôle FLEET_ADMIN lui est
+                // attribué dans le Kernel à l'approbation (SubscriptionPlanService.approveSubscription).
+                List.of("FLEET_ADMIN"),
                 null
         );
 
@@ -99,36 +101,14 @@ public class SubscriptionRegistrationService {
                             user.setNewRecord(false);
                             return userRepo.save(user).map(saved -> saved.getId());
                         }))
-                .flatMap(localUserId -> updateManagerProfile(localUserId, cmd.companyName(), cmd.requestedPlanId())
+                .flatMap(localUserId -> companyService.createPending(localUserId, cmd.companyName(),
+                                cmd.requestedPlanId(), cmd.requestedBillingCycle())
                         .then(saveDocuments(localUserId, cmd.documents()))
                         .thenReturn(java.util.Map.<String, Object>of(
                                 "id", localUserId.toString(),
                                 "status", "PENDING",
                                 "message", "Demande enregistrée. Vous serez notifié après validation."
                         )));
-    }
-
-    private Mono<Void> updateManagerProfile(UUID userId, String companyName, UUID requestedPlanId) {
-        return managerRepo.findById(userId)
-                .flatMap(mgr -> {
-                    if (companyName != null && !companyName.isBlank()) {
-                        mgr.setCompanyName(companyName);
-                    }
-                    mgr.setNew(false);
-                    return managerRepo.save(mgr);
-                })
-                .then(requestedPlanId != null
-                        ? db.sql("""
-                                UPDATE fleet.fleet_managers
-                                SET requested_plan_id = :planId
-                                WHERE user_id = :userId
-                                """)
-                                .bind("planId", requestedPlanId)
-                                .bind("userId", userId)
-                                .fetch()
-                                .rowsUpdated()
-                                .then()
-                        : Mono.empty());
     }
 
     private Mono<Void> saveDocuments(UUID userId, List<DocumentInput> documents) {

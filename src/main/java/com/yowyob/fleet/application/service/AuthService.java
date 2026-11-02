@@ -550,7 +550,16 @@ public class AuthService implements AuthUseCase {
     private Mono<Void> checkUserAccessByLocalId(UUID localUserId) {
         return userRepo.findById(localUserId).flatMap(u -> {
             if (u.getDeletedAt() != null) return Mono.error(AuthException.accountDeleted());
-            if (!u.isActive()) return Mono.error(AuthException.accountLocked());
+            if (!u.isActive()) {
+                // Gestionnaire suspendu ou clôturé par l'admin de son entreprise : motif explicite.
+                return managerRepo.findById(localUserId)
+                        .flatMap(m -> "CLOSED".equals(m.getAccountStatus())
+                                ? Mono.<Void>error(AuthException.managerClosed())
+                                : "SUSPENDED".equals(m.getAccountStatus())
+                                        ? Mono.<Void>error(AuthException.managerSuspended(m.getSuspensionReason()))
+                                        : Mono.<Void>error(AuthException.accountLocked()))
+                        .switchIfEmpty(Mono.error(AuthException.accountLocked()));
+            }
             return Mono.empty();
         });
     }

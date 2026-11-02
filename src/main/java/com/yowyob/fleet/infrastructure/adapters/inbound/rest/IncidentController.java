@@ -63,14 +63,21 @@ public class IncidentController {
                         request.type(),
                         request.description(),
                         request.severity(),
-                        request.cost(),
+                        request.occurredAt(),
+                        request.vehicleDrivable(),
                         request.longitude(),
                         request.latitude(),
                         request.witnessName(),
                         request.witnessContact(),
                         request.reportedBy(),
                         request.vehicleId(),
-                        request.driverId()
+                        request.driverId(),
+                        getUserId(auth),
+                        new com.yowyob.fleet.application.service.IncidentCaseService.CaseDetails(
+                                request.locationLabel(), request.estimatedCost(), request.injuries(), request.injuriesCount(),
+                                request.thirdPartyInvolved(), request.thirdPartyName(), request.thirdPartyPlate(),
+                                request.thirdPartyInsurer(), request.thirdPartyContact(), null, null, null, null, null, null, null,
+                                null, null, null)
                 );
         // Un chauffeur ne déclare que pour le véhicule qu'il conduit (il pouvait viser
         // n'importe quel véhicule, y compris d'une autre entreprise).
@@ -201,7 +208,6 @@ public class IncidentController {
                         id,
                         request.description(),
                         request.severity(),
-                        request.cost(),
                         request.report(),
                         request.witnessName(),
                         request.witnessContact(),
@@ -213,28 +219,4 @@ public class IncidentController {
                 .map(IncidentResponse::from);
     }
 
-    @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
-    @Operation(summary = "Changer le statut d'un incident",
-               description = "Fait avancer l'incident dans son cycle de vie : REPORTED → UNDER_INVESTIGATION → RESOLVED → CLOSED.")
-    public Mono<IncidentResponse> updateStatus(
-            @Parameter(description = "ID de l'incident") @PathVariable UUID id,
-            @Valid @RequestBody IncidentStatusRequest request,
-            Authentication auth) {
-        return requireIncidentAccess(id, auth)
-                .then(incidentUseCase.updateStatus(id, request.status()))
-                .map(IncidentResponse::from);
-    }
-
-    // ── SUPPRESSION ───────────────────────────────────────────────────────────
-
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
-    @Operation(summary = "Supprimer un incident")
-    public Mono<Void> delete(
-            @Parameter(description = "ID de l'incident") @PathVariable UUID id,
-            Authentication auth) {
-        return requireIncidentAccess(id, auth).then(incidentUseCase.delete(id));
-    }
 }

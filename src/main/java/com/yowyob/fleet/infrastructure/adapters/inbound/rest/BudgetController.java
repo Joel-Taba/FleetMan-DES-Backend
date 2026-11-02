@@ -32,18 +32,45 @@ public class BudgetController {
 
     private final ManageBudgetUseCase budgetUseCase;
     private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
+    private final com.yowyob.fleet.application.service.CompanyScopeService companyScope;
+    private final com.yowyob.fleet.application.service.BudgetTrackingService tracking;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
+    }
+
+    // ── SUIVI ────────────────────────────────────────────────────────────────
+
+    @GetMapping("/tracking")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
+    @Operation(summary = "Suivi consolidé d'un mois",
+               description = "Utilisation des budgets par niveau (périmètre, flotte, véhicule), par type, chauffeur et origine "
+                       + "de dépense, tendance sur 6 mois, consommé jour par jour, projection de fin de mois, coût au kilomètre.")
+    public Mono<com.yowyob.fleet.domain.model.BudgetTracking.Overview> tracking(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate month,
+            @RequestParam(required = false) UUID fleetId,
+            Authentication auth) {
+        return tracking.overview(getUserId(auth), month, fleetId);
+    }
+
+    @GetMapping("/{id}/ledger")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
+    @Operation(summary = "Grand livre d'un budget",
+               description = "Chaque mouvement avec le solde après coup : création, changements de montant, seuils, dépenses "
+                       + "approuvées (auteur, validateur, véhicule, chauffeur, justificatif), plus les dépenses en attente et rejetées.")
+    public Mono<com.yowyob.fleet.application.service.BudgetTrackingService.Ledger> ledger(
+            @PathVariable UUID id, Authentication auth) {
+        return tracking.ledger(getUserId(auth), id);
     }
 
     // ── CRÉATION ─────────────────────────────────────────────────────────────
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Créer un budget mensuel",
-               description = "Crée un budget mensuel pour une flotte (scope=FLEET) ou un véhicule (scope=VEHICLE). " +
+               description = "Enveloppe de flotte (scope=FLEET) : administrateur uniquement. Budget de véhicule (scope=VEHICLE) : " +
+                             "gestionnaire ou administrateur, dans la limite de l'enveloppe de la flotte. Mois écoulés clos. " +
                              "Un seul budget par entité par mois est autorisé. " +
                              "Le montant consommé est calculé automatiquement depuis les dépenses existantes.")
     public Mono<BudgetResponse> create(
@@ -68,15 +95,27 @@ public class BudgetController {
     // ── LECTURE ───────────────────────────────────────────────────────────────
 
     @GetMapping
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Lister mes budgets",
                description = "Retourne tous les budgets créés par le manager connecté, triés par mois décroissant.")
     public Flux<BudgetResponse> listAll(Authentication auth) {
         return budgetUseCase.getAllByManager(getUserId(auth)).map(BudgetResponse::from);
     }
 
+    @GetMapping("/company")
+    @PreAuthorize("hasRole('FLEET_ADMIN')")
+    @Operation(summary = "Budgets de l'entreprise pour un mois",
+               description = "Enveloppes des flottes et budgets des véhicules de toute l'entreprise (mois en cours par défaut).")
+    public Flux<BudgetResponse> listCompany(
+            @RequestParam(required = false) LocalDate month,
+            Authentication auth) {
+        return companyScope.requireOwnCompany(getUserId(auth))
+                .flatMapMany(companyId -> budgetUseCase.getAllByCompany(companyId, month))
+                .map(BudgetResponse::from);
+    }
+
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Détail d'un budget",
                description = "Retourne le détail complet du budget avec taux de consommation, montant restant et niveau d'alerte.")
     public Mono<BudgetResponse> getById(
@@ -87,7 +126,7 @@ public class BudgetController {
     }
 
     @GetMapping("/fleet/{fleetId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Budgets d'une flotte",
                description = "Retourne l'historique des budgets mensuels pour une flotte donnée.")
     public Flux<BudgetResponse> getByFleet(
@@ -98,7 +137,7 @@ public class BudgetController {
     }
 
     @GetMapping("/vehicle/{vehicleId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Budgets d'un véhicule")
     public Flux<BudgetResponse> getByVehicle(
             @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
@@ -108,7 +147,7 @@ public class BudgetController {
     }
 
     @GetMapping("/current/fleet/{fleetId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Budget actuel d'une flotte",
                description = "Retourne le budget du mois en cours pour une flotte. Retourne 404 si aucun budget n'existe pour ce mois.")
     public Mono<BudgetResponse> getCurrentByFleet(
@@ -120,7 +159,7 @@ public class BudgetController {
     }
 
     @GetMapping("/current/vehicle/{vehicleId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Budget actuel d'un véhicule")
     public Mono<BudgetResponse> getCurrentByVehicle(
             @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
@@ -131,7 +170,7 @@ public class BudgetController {
     }
 
     @GetMapping("/month")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Budget d'une entité pour un mois donné",
                description = "Récupère le budget d'une flotte ou véhicule pour un mois spécifique.")
     public Mono<BudgetResponse> getBudgetForMonth(
@@ -149,7 +188,7 @@ public class BudgetController {
     // ── STATUS (résumé enrichi) ────────────────────────────────────────────────
 
     @GetMapping("/{id}/status")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Statut détaillé d'un budget",
                description = "Retourne le statut enrichi avec taux de consommation, montant restant et indicateur de dépassement.")
     public Mono<ManageBudgetUseCase.BudgetStatusDto> getStatus(
@@ -163,7 +202,7 @@ public class BudgetController {
     // ── RECALCUL ──────────────────────────────────────────────────────────────
 
     @PostMapping("/{id}/recalculate")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Recalculer le budget",
                description = "Force le recalcul du montant consommé depuis les dépenses approuvées. " +
                              "Utile après une correction manuelle ou une synchronisation.")
@@ -177,7 +216,7 @@ public class BudgetController {
     // ── MISE À JOUR ───────────────────────────────────────────────────────────
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Mettre à jour un budget",
                description = "Met à jour le montant plafond ou les notes d'un budget existant.")
     public Mono<BudgetResponse> update(
@@ -192,19 +231,19 @@ public class BudgetController {
                         request.notes()
                 );
         return resourceAccess.assertBudgetAccess(getUserId(auth), id)
-                .then(budgetUseCase.update(cmd)).map(BudgetResponse::from);
+                .then(budgetUseCase.update(cmd, getUserId(auth))).map(BudgetResponse::from);
     }
 
     // ── SUPPRESSION ───────────────────────────────────────────────────────────
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Supprimer un budget")
     public Mono<Void> delete(
             @Parameter(description = "ID du budget") @PathVariable UUID id,
             Authentication auth) {
         return resourceAccess.assertBudgetAccess(getUserId(auth), id)
-                .then(budgetUseCase.delete(id));
+                .then(budgetUseCase.delete(id, getUserId(auth)));
     }
 }

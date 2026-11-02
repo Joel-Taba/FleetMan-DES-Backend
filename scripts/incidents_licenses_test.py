@@ -64,19 +64,34 @@ driver_id = driver.get("userId") or driver.get("id")
 other_vehicle = next(v for v in vehicles if v["fleetId"] == truck["fleetId"] and v["id"] != truck["id"])
 day = (datetime.date.today() + datetime.timedelta(days=5)).isoformat()
 created_trips = []
-saved_categories = sql(f"select string_agg(id || '=' || coalesce(license_categories,''), ';') "
-                       f"from fleet.driver_documents where driver_id='{driver_id}' and doc_type='DRIVING_LICENSE'")
+# Les entreprises démarrent sur l'offre gratuite (migration 056), sans déclaration d'incident :
+# plan Pro le temps de l'essai, restauré à la fin.
+COMPANY = sql(f"select company_id from fleet.fleets where id='{truck['fleetId']}'")
+saved_plan = sql(f"select plan_id||'|'||subscription_status from fleet.companies where id='{COMPANY}'")
+sql(f"update fleet.companies set plan_id=(select id from fleet.subscription_plans where name='Pro' and is_active), "
+    f"subscription_status='ACTIVE' where id='{COMPANY}'")
+sql(f"insert into fleet.documents (id, target_type, target_id, doc_type, doc_number, license_categories, expiry_date, file_url, "
+    f"review_status, is_current, created_at, updated_at) values (gen_random_uuid(), 'DRIVER', '{driver_id}', 'DRIVING_LICENSE', "
+    f"'TEST-INC-LIC', 'B', current_date + 400, '/api/v1/files/test-inc.pdf', 'APPROVED', TRUE, now(), now())")
+
+# Depuis la migration 055, un véhicule doit être en règle (assurance, visite technique,
+# carte grise) pour partir : pièces de test temporaires, supprimées à la fin.
+for vid in {truck["id"], other_vehicle["id"]}:
+    for doc in ("INSURANCE", "TECHNICAL_CONTROL", "REGISTRATION"):
+        sql(f"insert into fleet.documents (id, target_type, target_id, doc_type, doc_number, expiry_date, file_url, review_status, "
+            f"is_current, created_at, updated_at) values (gen_random_uuid(), 'VEHICLE', '{vid}', '{doc}', 'TEST-INC-{doc}', "
+            f"current_date + 400, '/api/v1/files/test-inc.pdf', 'APPROVED', TRUE, now(), now())")
 
 try:
     print("1. Permis de conduire")
-    sql(f"update fleet.driver_documents set license_categories='B' "
-        f"where driver_id='{driver_id}' and doc_type='DRIVING_LICENSE'")
+    sql(f"update fleet.documents set license_categories='B' "
+        f"where target_id='{driver_id}' and doc_type='DRIVING_LICENSE'")
     body = {"vehicleId": truck["id"], "driverId": driver_id, "startDate": day, "startTime": "08:00:00",
-            "scheduledReturnDatetime": f"{day}T12:00:00", "departureKmIndex": 1000, "departureFuelIndex": 30}
+            "scheduledReturnDatetime": f"{day}T12:00:00", "departureKmIndex": 1000, "departureFuelIndex": 30, "destinationLocation": "Essai"}
     s, r = call("POST", "/api/v1/trips", body)
     check("permis B seul sur un camion → refusé", s == 422 and r.get("code") == "DRV_011", f"({s} {r.get('code')})")
-    sql(f"update fleet.driver_documents set license_categories='B,C' "
-        f"where driver_id='{driver_id}' and doc_type='DRIVING_LICENSE'")
+    sql(f"update fleet.documents set license_categories='B,C' "
+        f"where target_id='{driver_id}' and doc_type='DRIVING_LICENSE'")
     s, r = call("POST", "/api/v1/trips", body)
     if check("permis B,C sur un camion → accepté", s in (200, 201), f"({s})"):
         created_trips.append(r["id"])
@@ -87,7 +102,7 @@ try:
         "vehicleId": truck["id"], "driverId": driver_id,
         "startDate": now.date().isoformat(), "startTime": now.strftime("%H:%M:%S"),
         "scheduledReturnDatetime": (now + datetime.timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%S"),
-        "departureKmIndex": 1000, "departureFuelIndex": 30})
+        "departureKmIndex": 1000, "departureFuelIndex": 30, "destinationLocation": "Essai"})
     check("trajet créé", s in (200, 201), f"({s} {trip.get('code') if s >= 400 else ''})")
     created_trips.append(trip["id"])
     s, trip = call("POST", f"/api/v1/trips/{trip['id']}/start")
@@ -96,7 +111,10 @@ try:
     s, incident = call("POST", "/api/v1/operations/incidents", {
         "type": "ACCIDENT", "severity": "CRITICAL", "description": "Essai automatisé",
         "vehicleId": truck["id"], "driverId": driver_id, "cost": 0})
-    check("incident CRITICAL déclaré", s in (200, 201), f"({s})")
+    if s in (200, 201):
+        _, c = call("GET", f"/api/v1/operations/incidents/{incident['id']}/case")
+        check("trajet en cours rattaché au dossier", c.get("tripCode") == trip.get("tripCode"), f"({c.get('tripCode')})")
+    check("incident CRITICAL déclaré", s in (200, 201), f"({s} {incident.get('code') or ''} {incident.get('message') or ''})")
     status = sql(f"select status from fleet.vehicles where id='{truck['id']}'")
     check("véhicule immobilisé", status == "MAINTENANCE", f"({status})")
     _, t = call("GET", f"/api/v1/trips/{trip['id']}")
@@ -106,25 +124,29 @@ try:
     s, r = call("PATCH", f"/api/v1/vehicles/{truck['id']}", {"status": "AVAILABLE"})
     check("remise en service manuelle refusée", s == 409 and r.get("code") == "VHC_012", f"({s} {r.get('code')})")
 
-    sql(f"update fleet.driver_documents set license_categories='B,C,D' "
-        f"where driver_id='{driver_id}' and doc_type='DRIVING_LICENSE'")
+    sql(f"update fleet.documents set license_categories='B,C,D' "
+        f"where target_id='{driver_id}' and doc_type='DRIVING_LICENSE'")
     s, t = call("PATCH", f"/api/v1/trips/{trip['id']}/vehicle", {"newVehicleId": other_vehicle["id"]})
     check("véhicule de remplacement → mission reprise", s == 200 and not t.get("interrupted")
           and t.get("resumedAt"), f"({s} {t.get('code') if s >= 400 else ''})")
 
-    s, r = call("PATCH", f"/api/v1/operations/incidents/{incident['id']}/status", {"status": "RESOLVED"})
+    for step in ("ACKNOWLEDGED", "UNDER_INVESTIGATION", "RESOLVED"):
+        s, r = call("POST", f"/api/v1/operations/incidents/{incident['id']}/transition", {"status": step})
     check("incident résolu", s == 200, f"({s})")
     status = sql(f"select status from fleet.vehicles where id='{truck['id']}'")
     check("véhicule d'origine de nouveau disponible", status == "AVAILABLE", f"({status})")
 finally:
+    sql("delete from fleet.documents where doc_number like 'TEST-INC-%'")
     # Remise en état : trajets, incident d'essai, dépenses auto, permis et statuts.
     for trip_id in created_trips:
         sql(f"delete from fleet.trips where id='{trip_id}'")
     sql("delete from fleet.expenses where source_id in "
         "(select id from fleet.incidents where description='Essai automatisé')")
+    sql("delete from fleet.notifications where title like 'Suivi d%' and data like '%INCIDENT%' and exists "
+        "(select 1 from fleet.incidents i where i.description='Essai automatisé' and fleet.notifications.data like '%' || i.id || '%')")
+    sql("delete from fleet.alert_events where source_entity_id in (select id from fleet.incidents where description='Essai automatisé')")
     sql("delete from fleet.incidents where description='Essai automatisé'")
-    for pair in filter(None, (saved_categories or "").split(";")):
-        doc_id, cats = pair.split("=", 1)
-        sql(f"update fleet.driver_documents set license_categories=nullif('{cats}','') where id='{doc_id}'")
     sql(f"update fleet.vehicles set status='AVAILABLE' where id in ('{truck['id']}','{other_vehicle['id']}')")
+    plan_id, plan_status = saved_plan.split("|")
+    sql(f"update fleet.companies set plan_id='{plan_id}', subscription_status='{plan_status}' where id='{COMPANY}'")
     print("  ↺ données d'essai supprimées")

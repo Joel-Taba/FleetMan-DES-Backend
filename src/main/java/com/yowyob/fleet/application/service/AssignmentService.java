@@ -34,6 +34,7 @@ public class AssignmentService implements ManageAssignmentUseCase {
     private final SchedulePersistencePort schedulePersistencePort;
     private final TripR2dbcRepository tripRepository;
     private final ResourceAvailabilityService availability;
+    private final org.springframework.r2dbc.core.DatabaseClient db;
 
     @Override
     @Transactional
@@ -52,9 +53,10 @@ public class AssignmentService implements ManageAssignmentUseCase {
                     }
                     // 3. Conducteur existant et actif — 4. planning compatible —
                     // 5. créneau libre (affectations ET trajets)
-                    return requireActiveDriver(cmd.driverId())
+                    return availability.assertFleetOperable(fleetId)
+                            .then(requireActiveDriver(cmd.driverId()))
                             .then(checkSchedule(cmd.scheduleId(), fleetId, cmd.startDatetime(), cmd.endDatetime()))
-                            .then(availability.assertDriverLicensed(
+                            .then(availability.assertCrewQualified(
                                     cmd.driverId(), cmd.vehicleId(), cmd.startDatetime(), cmd.endDatetime()))
                             .then(availability.assertAssignmentSlotFree(
                                     cmd.vehicleId(), cmd.driverId(),
@@ -67,13 +69,9 @@ public class AssignmentService implements ManageAssignmentUseCase {
                                         fleetId,
                                         cmd.vehicleId(),
                                         cmd.driverId(),
-                                        cmd.missionId(),
                                         cmd.startDatetime(),
                                         cmd.endDatetime(),
                                         Assignment.Status.PENDING,
-                                        cmd.startLocation(),
-                                        cmd.endLocation(),
-                                        cmd.estimatedKm(),
                                         null,
                                         cmd.notes(),
                                         null
@@ -172,20 +170,58 @@ public class AssignmentService implements ManageAssignmentUseCase {
     }
 
     @Override
+    @Transactional
     public Mono<Assignment> updateStatus(UUID id, Assignment.Status newStatus, BigDecimal actualKm) {
+        if (newStatus != Assignment.Status.CANCELLED && newStatus != Assignment.Status.NO_SHOW) {
+            return Mono.error(PlanningException.manualStatusNotAllowed(String.valueOf(newStatus)));
+        }
         return assignmentPersistencePort.findById(id)
                 .switchIfEmpty(Mono.error(PlanningException.assignmentNotFound(id)))
-                .flatMap(assignment -> {
-                    switch (newStatus) {
-                        case IN_PROGRESS -> assignment.start();
-                        case COMPLETED   -> assignment.complete(actualKm);
-                        case CANCELLED   -> assignment.cancel(null);
-                        case NO_SHOW     -> assignment.markNoShow();
-                        default -> throw new IllegalArgumentException(
-                                "Transition vers " + newStatus + " non supportée via cet endpoint.");
-                    }
-                    return assignmentPersistencePort.save(assignment);
-                });
+                .flatMap(assignment -> countTrips(id, "('DEPARTED', 'ARRIVED')")
+                        .flatMap(inProgress -> {
+                            if (inProgress > 0) {
+                                return Mono.<Assignment>error(PlanningException.shiftHasTripInProgress(id));
+                            }
+                            try {
+                                if (newStatus == Assignment.Status.CANCELLED) {
+                                    assignment.cancel(null);
+                                } else {
+                                    assignment.markNoShow();
+                                }
+                            } catch (IllegalStateException e) {
+                                return Mono.<Assignment>error(PlanningException.invalidStatusTransition(e.getMessage()));
+                            }
+                            // Les trajets planifiés du poste restent planifiés mais n'y sont plus rattachés.
+                            return db.sql("UPDATE fleet.trips SET assignment_id = NULL "
+                                            + "WHERE assignment_id = :id AND status = 'SCHEDULED'")
+                                    .bind("id", id)
+                                    .fetch().rowsUpdated()
+                                    .then(assignmentPersistencePort.save(assignment));
+                        }));
+    }
+
+    @Override
+    public Mono<Long> countLinkedTrips(UUID assignmentId) {
+        return countTrips(assignmentId, null);
+    }
+
+    private Mono<Long> countTrips(UUID assignmentId, String statuses) {
+        String sql = "SELECT COUNT(*) AS n FROM fleet.trips WHERE assignment_id = :id AND deleted_at IS NULL"
+                + (statuses != null ? " AND status IN " + statuses : "");
+        return db.sql(sql).bind("id", assignmentId)
+                .map(row -> row.get("n", Long.class))
+                .one()
+                .defaultIfEmpty(0L);
+    }
+
+    @Override
+    public Mono<Boolean> isVisibleToDriver(Assignment assignment) {
+        if (assignment.getScheduleId() == null) {
+            return Mono.just(true);
+        }
+        return schedulePersistencePort.findById(assignment.getScheduleId())
+                .map(s -> !s.isDraft())
+                .defaultIfEmpty(true);
     }
 
     @Override
@@ -207,7 +243,7 @@ public class AssignmentService implements ManageAssignmentUseCase {
                                 }
                                 return requireActiveDriver(nextDriver);
                             })
-                            .then(availability.assertDriverLicensed(
+                            .then(availability.assertCrewQualified(
                                     nextDriver, nextVehicle, existing.getStartDatetime(), existing.getEndDatetime()))
                             .then(availability.assertAssignmentSlotFree(
                                     nextVehicle, nextDriver,
@@ -219,13 +255,9 @@ public class AssignmentService implements ManageAssignmentUseCase {
                                         existing.getFleetId(),
                                         nextVehicle,
                                         nextDriver,
-                                        existing.getMissionId(),
                                         existing.getStartDatetime(),
                                         existing.getEndDatetime(),
                                         existing.getStatus(),
-                                        existing.getStartLocation(),
-                                        existing.getEndLocation(),
-                                        existing.getEstimatedKm(),
                                         existing.getActualKm(),
                                         existing.getNotes(),
                                         existing.getCreatedAt()
@@ -256,12 +288,12 @@ public class AssignmentService implements ManageAssignmentUseCase {
         return vehicleRepository.findById(vehicleId)
                 .filter(v -> v.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(PlanningException.vehicleNotFound(vehicleId)))
-                .flatMap(v -> "MAINTENANCE".equals(v.getStatus())
-                        ? Mono.<VehicleLocalEntity>error(PlanningException.vehicleNotAvailable(vehicleId))
+                .flatMap(v -> !com.yowyob.fleet.domain.model.VehicleLifecycle.isDispatchable(v.getStatus())
+                        ? Mono.<VehicleLocalEntity>error(PlanningException.vehicleNotAvailable(vehicleId, v.getStatus()))
                         : Mono.just(v));
     }
 
-    /** Conducteur actif (un conducteur supprimé est INACTIVE) et rattaché à une flotte. */
+    /** Conducteur dans les effectifs (pas LEFT) et rattaché à une flotte. */
     private Mono<Void> requireActiveDriver(UUID driverId) {
         return driverPersistencePort.findById(driverId)
                 .switchIfEmpty(Mono.error(PlanningException.driverNotFound(driverId)))

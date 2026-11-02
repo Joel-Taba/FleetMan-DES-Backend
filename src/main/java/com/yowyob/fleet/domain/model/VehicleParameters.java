@@ -34,4 +34,14 @@ public class VehicleParameters {
     ) {}
 
     public record Location(Double latitude, Double longitude) {}
+
+    /** Cycle de vie : motif du statut courant et, pour un véhicule retiré du parc, sa sortie. */
+    public record Lifecycle(
+        String statusReason,
+        java.time.Instant statusChangedAt,
+        LocalDate retiredAt,
+        String retirementType,
+        String retirementReason,
+        java.math.BigDecimal salePrice
+    ) {}
 }

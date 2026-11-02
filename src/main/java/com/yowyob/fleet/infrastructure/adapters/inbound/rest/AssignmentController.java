@@ -41,14 +41,24 @@ public class AssignmentController {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
     }
 
+    private Mono<AssignmentResponse> withTrips(com.yowyob.fleet.domain.model.Assignment a) {
+        return assignmentUseCase.countLinkedTrips(a.getId()).map(AssignmentResponse.from(a)::withTripCount);
+    }
+
+    /** Un programme encore en brouillon n'est pas montré au chauffeur. */
+    private Mono<Boolean> visibleTo(Authentication auth, com.yowyob.fleet.domain.model.Assignment a) {
+        boolean driver = auth.getAuthorities().stream().anyMatch(g -> "ROLE_FLEET_DRIVER".equals(g.getAuthority()));
+        return driver ? assignmentUseCase.isVisibleToDriver(a) : Mono.just(true);
+    }
+
     // ── CRÉATION ─────────────────────────────────────────────────────────────
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Créer une affectation",
-               description = "Affecte un conducteur à un véhicule sur une plage horaire. "
-                       + "Vérifie automatiquement les conflits avant création.")
+               description = "Poste : réserve un binôme chauffeur + véhicule sur un créneau. Les trajets faits pendant "
+                       + "le poste lui sont rattachés ; il démarre au premier départ et se termine à son heure de fin.")
     public Mono<AssignmentResponse> create(
             @Valid @RequestBody AssignmentRequest request,
             Authentication auth) {
@@ -59,12 +69,8 @@ public class AssignmentController {
                         request.fleetId(),
                         request.vehicleId(),
                         request.driverId(),
-                        request.missionId(),
                         request.startDatetime(),
                         request.endDatetime(),
-                        request.startLocation(),
-                        request.endLocation(),
-                        request.estimatedKm(),
                         request.notes()
                 );
         UUID actor = getUserId(auth);
@@ -76,7 +82,7 @@ public class AssignmentController {
                 .then(request.scheduleId() != null
                         ? resourceAccess.assertScheduleAccess(actor, request.scheduleId())
                         : Mono.<Void>empty());
-        return scope.then(assignmentUseCase.createAssignment(cmd)).map(AssignmentResponse::from);
+        return scope.then(assignmentUseCase.createAssignment(cmd)).flatMap(this::withTrips);
     }
 
     // ── LECTURE ───────────────────────────────────────────────────────────────
@@ -92,7 +98,7 @@ public class AssignmentController {
 
         return PageResponse.of(
                 assignmentUseCase.getAllByManager(getUserId(auth))
-                        .map(AssignmentResponse::from),
+                        .concatMap(this::withTrips),
                 page, size
         );
     }
@@ -102,7 +108,7 @@ public class AssignmentController {
     @Operation(summary = "Détail d'une affectation")
     public Mono<AssignmentResponse> getById(@PathVariable UUID id, Authentication auth) {
         return resourceAccess.assertAssignmentAccess(getUserId(auth), id)
-                .then(assignmentUseCase.getById(id)).map(AssignmentResponse::from);
+                .then(assignmentUseCase.getById(id)).flatMap(this::withTrips);
     }
 
     @GetMapping("/schedule/{scheduleId}")
@@ -117,7 +123,7 @@ public class AssignmentController {
         return PageResponse.of(
                 resourceAccess.assertScheduleAccess(getUserId(auth), scheduleId)
                         .thenMany(assignmentUseCase.getAllBySchedule(scheduleId))
-                        .map(AssignmentResponse::from),
+                        .concatMap(this::withTrips),
                 page, size
         );
     }
@@ -133,7 +139,7 @@ public class AssignmentController {
 
         return PageResponse.of(
                 resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
-                        .thenMany(assignmentUseCase.getByVehicle(vehicleId)).map(AssignmentResponse::from),
+                        .thenMany(assignmentUseCase.getByVehicle(vehicleId)).concatMap(this::withTrips),
                 page, size
         );
     }
@@ -149,7 +155,8 @@ public class AssignmentController {
 
         return PageResponse.of(
                 resourceAccess.assertDriverAccess(getUserId(auth), driverId)
-                        .thenMany(assignmentUseCase.getByDriver(driverId)).map(AssignmentResponse::from),
+                        .thenMany(assignmentUseCase.getByDriver(driverId))
+                        .filterWhen(a -> visibleTo(auth, a)).concatMap(this::withTrips),
                 page, size
         );
     }
@@ -167,7 +174,8 @@ public class AssignmentController {
 
         return PageResponse.of(
                 resourceAccess.assertDriverAccess(getUserId(auth), driverId)
-                        .thenMany(assignmentUseCase.getByDriverToday(driverId)).map(AssignmentResponse::from),
+                        .thenMany(assignmentUseCase.getByDriverToday(driverId))
+                        .filterWhen(a -> visibleTo(auth, a)).concatMap(this::withTrips),
                 page, size
         );
     }
@@ -186,7 +194,7 @@ public class AssignmentController {
 
         return PageResponse.of(
                 assignmentUseCase.getByDateRange(getUserId(auth), start, end)
-                        .map(AssignmentResponse::from),
+                        .concatMap(this::withTrips),
                 page, size
         );
     }
@@ -202,7 +210,7 @@ public class AssignmentController {
             @RequestParam(defaultValue = "20") int size) {
 
         return PageResponse.of(
-                assignmentUseCase.getConflicts(getUserId(auth)).map(AssignmentResponse::from),
+                assignmentUseCase.getConflicts(getUserId(auth)).concatMap(this::withTrips),
                 page, size
         );
     }
@@ -241,20 +249,18 @@ public class AssignmentController {
     // ── CHANGEMENT DE STATUT ──────────────────────────────────────────────────
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER','FLEET_DRIVER')")
-    @Operation(summary = "Changer le statut d'une affectation",
-               description = "Fait avancer l'affectation dans son cycle de vie : "
-                       + "PENDING → IN_PROGRESS → COMPLETED. "
-                       + "Le kilométrage réel est requis pour COMPLETED.")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Marquer un poste absent (NO_SHOW) ou l'annuler",
+               description = "Le poste démarre au premier départ d'un trajet et se termine automatiquement à son "
+                       + "heure de fin (km = somme des trajets). Seuls NO_SHOW et CANCELLED sont manuels.")
     public Mono<AssignmentResponse> updateStatus(
             @PathVariable UUID id,
             @Valid @RequestBody AssignmentStatusRequest request,
             Authentication auth) {
 
-        // Le chauffeur ne fait avancer que SES affectations ; le gestionnaire, celles de sa flotte.
         return resourceAccess.assertAssignmentAccess(getUserId(auth), id)
                 .then(assignmentUseCase.updateStatus(id, request.status(), request.actualKm()))
-                .map(AssignmentResponse::from);
+                .flatMap(this::withTrips);
     }
 
     @PatchMapping("/{id}")
@@ -269,7 +275,7 @@ public class AssignmentController {
                 .then(resourceAccess.assertVehicleAccess(actor, request.vehicleId()))
                 .then(resourceAccess.assertDriverAccess(actor, request.driverId()))
                 .then(assignmentUseCase.updateResources(id, request.vehicleId(), request.driverId()))
-                .map(AssignmentResponse::from);
+                .flatMap(this::withTrips);
     }
 
     // ── SUPPRESSION ───────────────────────────────────────────────────────────

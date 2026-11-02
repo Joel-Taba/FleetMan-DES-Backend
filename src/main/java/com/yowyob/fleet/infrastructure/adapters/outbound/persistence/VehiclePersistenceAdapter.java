@@ -28,14 +28,36 @@ public class VehiclePersistenceAdapter implements VehiclePersistencePort {
     private final VehicleIllustrationImageR2dbcRepository galleryRepo;
     private final DriverR2dbcRepository driverRepo;
     private final VehicleLocalMapper mapper;
+    private final OperationalParameterR2dbcRepository operationalRepo;
 
     @Override
     @Transactional
     public Mono<Vehicle> saveLocalData(Vehicle vehicle) {
-        return vehicleRepo.existsById(vehicle.id())
-                .flatMap(exists -> {
+        return vehicleRepo.findById(vehicle.id())
+                .map(java.util.Optional::of)
+                .defaultIfEmpty(java.util.Optional.empty())
+                .flatMap(existing -> {
                     VehicleLocalEntity vEntity = mapper.toVehicleEntity(vehicle);
-                    vEntity.setNew(!exists); 
+                    vEntity.setLicensePlate(com.yowyob.fleet.domain.model.VehicleLifecycle.normalizePlate(vEntity.getLicensePlate()));
+                    existing.ifPresentOrElse(old -> {
+                        // Le cycle de vie n'est écrit que par updateLifecycle : une sauvegarde
+                        // ordinaire (lien chauffeur, photos, flotte…) le conserve tel quel.
+                        vEntity.setStatusReason(old.getStatusReason());
+                        vEntity.setStatusChangedAt(old.getStatusChangedAt());
+                        vEntity.setRetiredAt(old.getRetiredAt());
+                        vEntity.setRetirementType(old.getRetirementType());
+                        vEntity.setRetirementReason(old.getRetirementReason());
+                        vEntity.setSalePrice(old.getSalePrice());
+                        vEntity.setCreatedAt(old.getCreatedAt());
+                        if (com.yowyob.fleet.domain.model.VehicleLifecycle.RETIRED.equals(old.getStatus())) {
+                            vEntity.setStatus(old.getStatus());
+                        }
+                        if (!java.util.Objects.equals(old.getStatus(), vEntity.getStatus())) {
+                            vEntity.setStatusChangedAt(Instant.now());
+                            vEntity.setStatusReason(null);
+                        }
+                    }, () -> vEntity.setStatusChangedAt(Instant.now()));
+                    vEntity.setNew(existing.isEmpty());
                     return vehicleRepo.save(vEntity);
                 })
                 // Correction : On transforme l'erreur technique SQL en erreur métier explicite (409)
@@ -80,8 +102,28 @@ public class VehiclePersistenceAdapter implements VehiclePersistencePort {
                 vehicleRepo.findById(id),
                 financialRepo.findByVehicleId(id).defaultIfEmpty(new FinancialParameterEntity()),
                 maintenanceRepo.findByVehicleId(id).defaultIfEmpty(new MaintenanceParameterEntity()),
-                galleryRepo.findByVehicleId(id).map(VehicleIllustrationImageEntity::getImagePath).collectList().defaultIfEmpty(List.of())
-        ).map(tuple -> mapper.toDomain(tuple.getT1(), tuple.getT2(), tuple.getT3(), tuple.getT4()));
+                galleryRepo.findByVehicleId(id).map(VehicleIllustrationImageEntity::getImagePath).collectList().defaultIfEmpty(List.of()),
+                operationalRepo.findByVehicleId(id).defaultIfEmpty(new OperationalParameterEntity())
+        ).map(tuple -> mapper.toDomain(tuple.getT1(), tuple.getT2(), tuple.getT3(), tuple.getT4(), tuple.getT5()));
+    }
+
+    @Override
+    public Mono<Vehicle> updateLifecycle(UUID id, String status, String statusReason, java.time.LocalDate retiredAt,
+                                         String retirementType, String retirementReason, java.math.BigDecimal salePrice) {
+        return vehicleRepo.findById(id)
+                .switchIfEmpty(Mono.error(VehicleException.notFound(id)))
+                .flatMap(entity -> {
+                    entity.setStatus(status);
+                    entity.setStatusReason(statusReason);
+                    entity.setStatusChangedAt(Instant.now());
+                    entity.setRetiredAt(retiredAt);
+                    entity.setRetirementType(retirementType);
+                    entity.setRetirementReason(retirementReason);
+                    entity.setSalePrice(salePrice);
+                    entity.setNew(false);
+                    return vehicleRepo.save(entity);
+                })
+                .then(getLocalDataById(id));
     }
 
     @Override

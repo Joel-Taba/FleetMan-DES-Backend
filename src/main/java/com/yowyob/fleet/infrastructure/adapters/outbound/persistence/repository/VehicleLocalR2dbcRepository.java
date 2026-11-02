@@ -20,7 +20,9 @@ public interface VehicleLocalR2dbcRepository extends ReactiveCrudRepository<Vehi
             SELECT v.* FROM fleet.vehicles v
             WHERE v.deleted_at IS NULL
               AND (
-                v.manager_id = :managerId
+                -- Un véhicule en flotte appartient au gestionnaire de sa flotte ; manager_id
+                -- ne fait foi que pour un véhicule hors flotte.
+                (v.fleet_id IS NULL AND v.manager_id = :managerId)
                 OR v.fleet_id IN (
                     SELECT f.id FROM fleet.fleets f
                     WHERE f.manager_id = :managerId AND f.deleted_at IS NULL
@@ -28,6 +30,11 @@ public interface VehicleLocalR2dbcRepository extends ReactiveCrudRepository<Vehi
               )
             """)
     Flux<VehicleLocalEntity> findAllInAssignedFleets(UUID managerId);
+
+    /** Les véhicules d'une flotte suivent son gestionnaire (réattribution par un administrateur). */
+    @org.springframework.data.r2dbc.repository.Modifying
+    @Query("UPDATE fleet.vehicles SET manager_id = :managerId WHERE fleet_id = :fleetId AND manager_id <> :managerId")
+    Mono<Integer> reassignManagerForFleet(UUID fleetId, UUID managerId);
     Flux<VehicleLocalEntity> findByStatus(String status);
 
     Flux<VehicleLocalEntity> findByCurrentDriverId(UUID currentDriverId);
@@ -35,9 +42,9 @@ public interface VehicleLocalR2dbcRepository extends ReactiveCrudRepository<Vehi
     // le quota du plan : sans ce filtre, supprimer un véhicule ne libérait aucune place.
     @Query("SELECT COUNT(*) FROM fleet.vehicles WHERE fleet_id = :fleetId AND status = :status AND deleted_at IS NULL")
     Mono<Long> countByFleetIdAndStatus(UUID fleetId, String status);
-    @Query("SELECT COUNT(*) FROM fleet.vehicles WHERE fleet_id = :fleetId AND deleted_at IS NULL")
+    @Query("SELECT COUNT(*) FROM fleet.vehicles WHERE fleet_id = :fleetId AND deleted_at IS NULL AND status <> 'RETIRED'")
     Mono<Long> countByFleetId(UUID fleetId);
-    @Query("SELECT COUNT(*) FROM fleet.vehicles WHERE manager_id = :managerId AND deleted_at IS NULL")
+    @Query("SELECT COUNT(*) FROM fleet.vehicles WHERE manager_id = :managerId AND deleted_at IS NULL AND status <> 'RETIRED'")
     Mono<Long> countByManagerId(UUID managerId);
     // --- AJOUT POUR LES KPIS ---
     // Compte les véhicules d'un manager ayant un statut spécifique (ex: 'ON_TRIP')
@@ -89,6 +96,7 @@ public interface VehicleLocalR2dbcRepository extends ReactiveCrudRepository<Vehi
             JOIN fleet.fleet_managers fm ON v.manager_id = fm.user_id
             WHERE fm.created_by_admin_id = :adminId
               AND v.deleted_at IS NULL
+              AND v.status <> 'RETIRED'
             """)
     Mono<Long> countByOrganizationAdminId(UUID adminId);
 

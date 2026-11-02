@@ -196,6 +196,7 @@ def main():
                 "startDate": today,
                 "startTime": "08:00",
                 "departureLocation": "Yaounde",
+                "destinationLocation": "Douala",
             })
             record(results, "manager", "create_trip", s, p)
             if 200 <= s < 300:
@@ -234,9 +235,6 @@ def main():
                 "driverId": driver_id,
                 "startDatetime": start_dt,
                 "endDatetime": end_dt,
-                "startLocation": "A",
-                "endLocation": "B",
-                "estimatedKm": 120,
             })
             record(results, "manager", "create_assignment", s, p)
             if 200 <= s < 300:
@@ -259,7 +257,7 @@ def main():
                 incident_id = data_of(p).get("id")
 
             if incident_id:
-                s, p = req("PATCH", f"/api/v1/operations/incidents/{incident_id}/status", tok_mgr, {"status": "RESOLVED"})
+                s, p = req("POST", f"/api/v1/operations/incidents/{incident_id}/transition", tok_mgr, {"status": "ACKNOWLEDGED"})
                 record(results, "manager", "update_incident_status", s, p)
 
             s, p = req("POST", "/api/v1/operations/maintenances", tok_mgr, {

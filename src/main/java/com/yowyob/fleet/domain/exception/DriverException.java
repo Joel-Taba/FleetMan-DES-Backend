@@ -61,4 +61,62 @@ public class DriverException extends DomainException {
                         + " exigée pour ce type de véhicule.",
                 HttpStatus.UNPROCESSABLE_ENTITY, "DRV_011");
     }
+
+    public static DriverException absent(String type, java.time.LocalDate from, java.time.LocalDate to) {
+        String what = switch (type) {
+            case "SUSPENSION" -> "suspendu";
+            case "SICK_LEAVE" -> "en arrêt maladie";
+            default -> "en congé";
+        };
+        String period = to == null ? "depuis le " + from + " (sans date de fin)" : "du " + from + " au " + to;
+        return new DriverException("Ce chauffeur est " + what + " " + period + " : il ne peut pas être engagé sur ce créneau.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "DRV_012");
+    }
+
+    public static DriverException absenceOverlapsCommitments() {
+        return new DriverException(
+                "Ce chauffeur a des trajets ou des affectations prévus pendant cette absence : réaffectez-les ou annulez-les d'abord.",
+                HttpStatus.CONFLICT, "DRV_013");
+    }
+
+    public static DriverException invalidAbsence(String detail) {
+        return new DriverException("Absence invalide : " + detail, HttpStatus.BAD_REQUEST, "DRV_014");
+    }
+
+    public static DriverException absenceOverlap() {
+        return new DriverException("Une autre absence est déjà enregistrée sur ces dates.", HttpStatus.CONFLICT, "DRV_015");
+    }
+
+    public static DriverException left() {
+        return new DriverException(
+                "Ce chauffeur a quitté l'entreprise : réintégrez-le avant de l'engager ou de le modifier.",
+                HttpStatus.CONFLICT, "DRV_016");
+    }
+
+    public static DriverException phoneRequired() {
+        return new DriverException(
+                "Le téléphone du chauffeur est obligatoire : c'est le moyen de le joindre pendant une mission.",
+                HttpStatus.BAD_REQUEST, "DRV_017");
+    }
+
+    public static DriverException notFound() {
+        return new DriverException("Chauffeur introuvable.", HttpStatus.NOT_FOUND, "DRV_018");
+    }
+
+    public static DriverException invalidDeparture(String detail) {
+        return new DriverException("Départ invalide : " + detail, HttpStatus.BAD_REQUEST, "DRV_019");
+    }
+
+    public static DriverException hasHistory() {
+        return new DriverException(
+                "Ce chauffeur a déjà un historique (trajets, affectations, dépenses…) : enregistrez son départ de l'entreprise au lieu de le supprimer.",
+                HttpStatus.CONFLICT, "DRV_020");
+    }
+
+    /** Pièces rendues obligatoires par l'entreprise, manquantes ou expirées. */
+    public static DriverException documentsNotCompliant(String gaps) {
+        return new DriverException(
+                "Dossier du chauffeur incomplet pour ce créneau : " + gaps + ". Déposez ou renouvelez ces pièces.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "DRV_021");
+    }
 }

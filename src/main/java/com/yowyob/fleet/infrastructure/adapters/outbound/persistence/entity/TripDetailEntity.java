@@ -42,6 +42,10 @@ public class TripDetailEntity implements Persistable<UUID> {
     @Column("return_quantity")
     private Integer returnQuantity;
 
+    /** Quantité effectivement livrée à destination (étape d'arrivée). */
+    @Column("delivered_quantity")
+    private Integer deliveredQuantity;
+
     @Column("sort_order")
     private int sortOrder;
 

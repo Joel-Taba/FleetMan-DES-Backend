@@ -16,6 +16,11 @@ import org.mapstruct.Mapping;
 public interface DriverMapper {
 
     @Mapping(target = "new", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
+    @Mapping(target = "hireDate", ignore = true)
+    @Mapping(target = "leftAt", ignore = true)
+    @Mapping(target = "leftReason", ignore = true)
     DriverEntity toEntity(Driver domain);
 
     Driver toDomain(DriverEntity entity);

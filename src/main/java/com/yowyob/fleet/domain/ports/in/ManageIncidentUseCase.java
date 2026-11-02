@@ -20,21 +20,23 @@ public interface ManageIncidentUseCase {
             Incident.Type type,
             String description,
             Incident.Severity severity,     // optionnel — défaut MEDIUM
-            BigDecimal cost,                // optionnel — peut être estimé plus tard
+            java.time.LocalDateTime occurredAt, // optionnel — défaut maintenant
+            Boolean vehicleDrivable,        // optionnel — défaut oui
             Double longitude,
             Double latitude,
             String witnessName,             // optionnel
             String witnessContact,          // optionnel
             String reportedBy,
             UUID vehicleId,
-            UUID driverId                   // optionnel
+            UUID driverId,                  // optionnel
+            UUID reporterId,
+            com.yowyob.fleet.application.service.IncidentCaseService.CaseDetails details
     ) {}
 
     record UpdateIncidentCommand(
             UUID incidentId,
             String description,
             Incident.Severity severity,
-            BigDecimal cost,
             String report,
             String witnessName,
             String witnessContact,
@@ -104,10 +106,6 @@ public interface ManageIncidentUseCase {
      */
     Mono<Incident> update(UpdateIncidentCommand command);
 
-    /**
-     * Met à jour uniquement le statut d'un incident (transition dans la machine à états).
-     */
-    Mono<Incident> updateStatus(UUID id, Incident.Status newStatus);
 
     /**
      * Compte le nombre total d'incidents pour un véhicule.
@@ -126,8 +124,4 @@ public interface ManageIncidentUseCase {
      */
     Mono<BigDecimal> getTotalCostByDriverId(UUID driverId);
 
-    /**
-     * Supprime un incident.
-     */
-    Mono<Void> delete(UUID id);
 }

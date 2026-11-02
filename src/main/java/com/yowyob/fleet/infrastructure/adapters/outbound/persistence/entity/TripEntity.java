@@ -38,9 +38,6 @@ public class TripEntity implements Persistable<UUID> {
     @Column("fleet_id")
     private UUID fleetId;
 
-    @Column("vehicle_type_id")
-    private UUID vehicleTypeId;
-
     @Column("created_by")
     private UUID createdBy;
 
@@ -156,6 +153,33 @@ public class TripEntity implements Persistable<UUID> {
     }
 
     // ── R2DBC Persistable ─────────────────────────────────────────────────────
+    @Column("destination_location")
+    private String destinationLocation;
+
+    @Column("destination_lat")
+    private BigDecimal destinationLat;
+
+    @Column("destination_lng")
+    private BigDecimal destinationLng;
+
+    @Column("arrived_at")
+    private LocalDateTime arrivedAt;
+
+    @Column("arrival_location")
+    private String arrivalLocation;
+
+    @Column("arrival_lat")
+    private BigDecimal arrivalLat;
+
+    @Column("arrival_lng")
+    private BigDecimal arrivalLng;
+
+    @Column("arrival_notes")
+    private String arrivalNotes;
+
+    @Column("assignment_id")
+    private UUID assignmentId;
+
     @Transient
     private boolean isNew = false;
 

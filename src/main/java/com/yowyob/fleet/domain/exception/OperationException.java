@@ -107,4 +107,27 @@ public class OperationException extends DomainException {
             HttpStatus.NOT_FOUND, "OPR_012"
         );
     }
+
+    public static OperationException incidentInvalidTransition(String from, String to) {
+        return new OperationException("Ce dossier ne peut pas passer de " + from + " à " + to + " : traitez les étapes dans l'ordre.",
+                org.springframework.http.HttpStatus.CONFLICT, "OPS_INC_101");
+    }
+
+    public static OperationException incidentCaseIncomplete(String gaps) {
+        return new OperationException("Dossier incomplet pour la clôture : il manque " + gaps + ".",
+                org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "OPS_INC_102");
+    }
+
+    public static OperationException incidentReasonRequired() {
+        return new OperationException("Indiquez le motif.", org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "OPS_INC_103");
+    }
+
+    public static OperationException incidentFileRequired() {
+        return new OperationException("Joignez un fichier (photo ou PDF).", org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "OPS_INC_104");
+    }
+
+    public static OperationException incidentDateInFuture() {
+        return new OperationException("La date de l'incident ne peut pas être dans le futur.",
+                org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "OPS_INC_105");
+    }
 }

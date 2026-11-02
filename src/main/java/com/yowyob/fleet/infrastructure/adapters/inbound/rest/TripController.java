@@ -4,6 +4,7 @@ import com.yowyob.fleet.domain.model.Trip;
 import com.yowyob.fleet.domain.ports.in.ManageTripUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.TelemetryRequest;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.TripMissionSubmissionEntity;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -60,9 +61,9 @@ public class TripController {
         BigDecimal departureKmIndex,
         @PositiveOrZero(message = "L'index carburant (L) ne peut pas être négatif.") BigDecimal departureFuelIndex,
         String missionObject,
-        BigDecimal missionCost,
-        String missionCostCurrency,
-        String rateType,
+        @NotBlank(message = "La destination est obligatoire.") String destinationLocation,
+        BigDecimal destinationLat,
+        BigDecimal destinationLng,
         LocalDateTime scheduledReturnDatetime,
         List<TripDetailInputDto> details
     ) {}
@@ -96,11 +97,14 @@ public class TripController {
         BigDecimal departureKmIndex,
         @PositiveOrZero(message = "L'index carburant (L) ne peut pas être négatif.") BigDecimal departureFuelIndex,
         String missionObject,
-        BigDecimal missionCost,
-        String missionCostCurrency
+        String destinationLocation,
+        BigDecimal destinationLat,
+        BigDecimal destinationLng
     ) {}
 
     public record MissionSubmissionRequest(
+        String changeType,
+        UUID detailId,
         @NotBlank String itemType,
         String description,
         Integer quantity,
@@ -152,9 +156,9 @@ public class TripController {
                 req.departureKmIndex(),
                 req.departureFuelIndex(),
                 req.missionObject(),
-                req.missionCost(),
-                req.missionCostCurrency() != null ? req.missionCostCurrency() : "XAF",
-                req.rateType(),
+                req.destinationLocation(),
+                req.destinationLat(),
+                req.destinationLng(),
                 req.scheduledReturnDatetime(),
                 details
             )
@@ -164,9 +168,63 @@ public class TripController {
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @PostMapping("/{id}/start")
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
-    @Operation(summary = "Lancer un trajet créé — capture la date/heure réelle de départ")
-    public Mono<Trip> startTrip(@PathVariable UUID id, Authentication auth) {
-        return tripUseCase.startTrip(id, getUserId(auth));
+    @Operation(summary = "Lancer un trajet planifié — date/heure réelles et relevés (km, carburant) au départ")
+    public Mono<Trip> startTrip(
+        @PathVariable UUID id,
+        @RequestBody(required = false) StartTripRequest req,
+        Authentication auth
+    ) {
+        return tripUseCase.startTrip(
+            id,
+            req != null ? new ManageTripUseCase.StartTripCommand(req.departureKmIndex(), req.departureFuelIndex()) : null,
+            getUserId(auth)
+        );
+    }
+
+    public record StartTripRequest(
+        @PositiveOrZero BigDecimal departureKmIndex,
+        @PositiveOrZero BigDecimal departureFuelIndex
+    ) {}
+
+    @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
+    @PostMapping("/{id}/arrive")
+    @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Arrivée à destination : lieu, heure et quantités livrées par ligne du manifeste")
+    public Mono<Trip> registerArrival(
+        @PathVariable UUID id,
+        @Valid @RequestBody ArrivalRequest req,
+        Authentication auth
+    ) {
+        List<ManageTripUseCase.DeliveredDetailInput> delivered = req.delivered() != null
+            ? req.delivered().stream()
+                .map(d -> new ManageTripUseCase.DeliveredDetailInput(d.detailId(), d.deliveredQuantity()))
+                .toList()
+            : List.of();
+        return tripUseCase.registerArrival(
+            id,
+            new ManageTripUseCase.ArrivalCommand(
+                req.arrivedAt(), req.arrivalLocation(), req.arrivalLat(), req.arrivalLng(), req.notes(), delivered),
+            getUserId(auth)
+        );
+    }
+
+    public record ArrivalRequest(
+        LocalDateTime arrivedAt,
+        String arrivalLocation,
+        BigDecimal arrivalLat,
+        BigDecimal arrivalLng,
+        String notes,
+        List<DeliveredDetailRequest> delivered
+    ) {}
+
+    public record DeliveredDetailRequest(@NotNull UUID detailId, @NotNull @PositiveOrZero Integer deliveredQuantity) {}
+
+    @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
+    @GetMapping("/{id}/submissions")
+    @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Compléments de chargement d'un trajet")
+    public Flux<TripMissionSubmissionEntity> listSubmissions(@PathVariable UUID id, Authentication auth) {
+        return tripUseCase.listSubmissions(id, getUserId(auth));
     }
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
@@ -246,8 +304,9 @@ public class TripController {
                 req.departureKmIndex(),
                 req.departureFuelIndex(),
                 req.missionObject(),
-                req.missionCost(),
-                req.missionCostCurrency()
+                req.destinationLocation(),
+                req.destinationLat(),
+                req.destinationLng()
             )
         );
     }
@@ -345,6 +404,8 @@ public class TripController {
             id,
             getUserId(auth),
             new ManageTripUseCase.MissionSubmissionInput(
+                req.changeType(),
+                req.detailId(),
                 req.itemType(),
                 req.description(),
                 req.quantity(),
@@ -374,13 +435,17 @@ public class TripController {
     @Operation(summary = "Rejeter un complément conducteur")
     public Mono<Void> rejectSubmission(
         @PathVariable UUID submissionId,
+        @RequestBody(required = false) RejectSubmissionRequest req,
         Authentication auth
     ) {
         return tripUseCase.rejectMissionSubmission(
             submissionId,
+            req != null ? req.reason() : null,
             getUserId(auth)
         );
     }
+
+    public record RejectSubmissionRequest(String reason) {}
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
     @PostMapping("/{id}/telemetry")

@@ -11,33 +11,57 @@ import java.util.UUID;
  * Représente un événement imprévu survenu sur un véhicule
  * (accident, panne, vol, vandalisme, infraction, autre).
  *
- * Implémente une machine à états : REPORTED → UNDER_INVESTIGATION → RESOLVED → CLOSED.
+ * Machine à états : REPORTED → ACKNOWLEDGED → UNDER_INVESTIGATION → RESOLVED → CLOSED, ou CANCELLED (IncidentRules).
  */
 public class Incident {
 
     // ── Enums du domaine ─────────────────────────────────────────────────────
 
     public enum Type {
-        ACCIDENT,
-        BREAKDOWN,
-        THEFT,
-        VANDALISM,
-        TRAFFIC_VIOLATION,
-        OTHER
+        ACCIDENT("Accident"),
+        BREAKDOWN("Panne"),
+        THEFT("Vol"),
+        VANDALISM("Vandalisme"),
+        TRAFFIC_VIOLATION("Infraction routière"),
+        OTHER("Autre");
+
+        private final String label;
+
+        Type(String label) {
+            this.label = label;
+        }
+
+        /** Libellé lisible (notifications, emails), à la place du code technique. */
+        public String label() {
+            return label;
+        }
     }
 
     public enum Severity {
-        LOW,
-        MEDIUM,
-        HIGH,
-        CRITICAL
+        LOW("faible"),
+        MEDIUM("moyenne"),
+        HIGH("élevée"),
+        CRITICAL("critique");
+
+        private final String label;
+
+        Severity(String label) {
+            this.label = label;
+        }
+
+        /** Libellé lisible (notifications, emails), à la place du code technique. */
+        public String label() {
+            return label;
+        }
     }
 
     public enum Status {
         REPORTED,
+        ACKNOWLEDGED,
         UNDER_INVESTIGATION,
         RESOLVED,
-        CLOSED
+        CLOSED,
+        CANCELLED
     }
 
     // ── Champs ───────────────────────────────────────────────────────────────
@@ -65,6 +89,12 @@ public class Incident {
     /** Statut courant dans le cycle de vie */
     private Status status;
     private boolean vehicleImmobilized;
+
+    /** Le véhicule peut-il rouler ? Déclaré au signalement. */
+    private boolean vehicleDrivable = true;
+
+    /** Décision motivée du gestionnaire ; sinon l'immobilisation suit la règle automatique. */
+    private Boolean immobilizationOverride;
 
     /** Rapport de résolution */
     private String report;
@@ -203,15 +233,37 @@ public class Incident {
      * Indique si l'incident est encore ouvert (non résolu, non clôturé).
      */
     public boolean isOpen() {
-        return this.status == Status.REPORTED || this.status == Status.UNDER_INVESTIGATION;
+        return this.status == Status.REPORTED || this.status == Status.ACKNOWLEDGED
+                || this.status == Status.UNDER_INVESTIGATION;
     }
 
     /**
-     * Un incident grave (HIGH/CRITICAL) encore ouvert rend le véhicule indisponible
-     * jusqu'à sa résolution ; un incident LOW/MEDIUM est seulement enregistré.
+     * Un incident ouvert rend le véhicule indisponible s'il est grave (HIGH/CRITICAL), si c'est un
+     * vol ou si le véhicule ne roule plus, sauf décision contraire du gestionnaire.
      */
     public boolean immobilizesVehicle() {
-        return isCritical() && isOpen();
+        if (!isOpen()) {
+            return false;
+        }
+        return immobilizationOverride != null
+                ? immobilizationOverride
+                : isCritical() || type == Type.THEFT || !vehicleDrivable;
+    }
+
+    public boolean isVehicleDrivable()       { return vehicleDrivable; }
+    public void setVehicleDrivable(boolean drivable) { this.vehicleDrivable = drivable; }
+    public Boolean getImmobilizationOverride() { return immobilizationOverride; }
+    public void setImmobilizationOverride(Boolean override) { this.immobilizationOverride = override; }
+
+    /** Annulation motivée : le dossier reste dans l'historique. */
+    public void cancel() {
+        this.status = Status.CANCELLED;
+    }
+
+    /** Relecture depuis la base : ne recalcule rien (la date de résolution était écrasée à chaque lecture). */
+    public void restoreStatus(Status status, LocalDateTime resolvedAt) {
+        this.status = status;
+        this.resolvedAt = resolvedAt;
     }
 
     /** true si c'est (aussi) cet incident qui maintient le véhicule immobilisé. */

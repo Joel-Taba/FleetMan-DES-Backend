@@ -39,6 +39,7 @@ public class DriverController {
 
     private final ManageDriverUseCase driverUseCase;
     private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
+    private final com.yowyob.fleet.application.service.DriverAbsenceService absenceService;
 
     private UUID getUserId(Authentication auth) { return ((AuthPort.UserDetail) auth.getPrincipal()).id(); }
     private String getToken(String header) { return header.startsWith("Bearer ") ? header.substring(7) : header; }
@@ -68,7 +69,7 @@ public class DriverController {
     @DeleteMapping("/drivers/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
-    @Operation(summary = "Supprimer un chauffeur", description = "Suppression logique (deleted_at). Admin : toute l'organisation.")
+    @Operation(summary = "Supprimer un chauffeur", description = "Réservé à une fiche créée par erreur (aucun trajet, affectation, dépense ni incident) ; sinon enregistrer son départ.")
     public Mono<Void> deleteDriver(@PathVariable UUID userId, Authentication auth) {
         return driverUseCase.deleteDriverForManager(userId, getUserId(auth));
     }
@@ -128,6 +129,69 @@ public class DriverController {
         return resourceAccess.assertDriverAccess(getUserId(auth), userId)
                 .then(driverUseCase.unassignVehicle(userId, getUserId(auth)));
     }
+
+    // ── Contrat ──────────────────────────────────────────────────────────────
+
+    @PostMapping("/drivers/{userId}/leave")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Départ de l'entreprise",
+            description = "Le chauffeur sort des effectifs (historique conservé, véhicule attitré libéré, place du plan rendue). "
+                    + "Refusé s'il a des trajets ou affectations non terminés.")
+    public Mono<DriverResponse> leave(@PathVariable UUID userId, @RequestBody(required = false) LeaveRequest req,
+                                      Authentication auth) {
+        return driverUseCase.leaveCompany(userId, req != null ? req.leftAt() : null,
+                req != null ? req.reason() : null, getUserId(auth));
+    }
+
+    @PostMapping("/drivers/{userId}/reinstate")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Réintégrer un chauffeur parti", description = "Consomme à nouveau une place du plan.")
+    public Mono<DriverResponse> reinstate(@PathVariable UUID userId, Authentication auth) {
+        return driverUseCase.reinstate(userId, getUserId(auth));
+    }
+
+    // ── Absences datées ──────────────────────────────────────────────────────
+
+    @GetMapping("/drivers/{userId}/absences")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Absences d'un chauffeur (congés, arrêts maladie, suspensions)")
+    public Flux<com.yowyob.fleet.domain.model.DriverAbsence> absences(@PathVariable UUID userId, Authentication auth) {
+        return absenceService.list(userId, getUserId(auth));
+    }
+
+    @PostMapping("/drivers/{userId}/absences")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Déclarer une absence",
+            description = "type : LEAVE (congé), SICK_LEAVE (arrêt maladie) ou SUSPENSION (fin facultative, motif obligatoire). "
+                    + "Refusée si des trajets ou affectations sont prévus sur ces jours.")
+    public Mono<com.yowyob.fleet.domain.model.DriverAbsence> declareAbsence(
+            @PathVariable UUID userId,
+            @RequestBody com.yowyob.fleet.application.service.DriverAbsenceService.DeclareAbsenceCommand req,
+            Authentication auth) {
+        return absenceService.declare(userId, req, getUserId(auth));
+    }
+
+    @PostMapping("/drivers/{userId}/absences/{absenceId}/end")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Fixer ou avancer la fin d'une absence (reprise anticipée, levée de suspension)")
+    public Mono<com.yowyob.fleet.domain.model.DriverAbsence> endAbsence(
+            @PathVariable UUID userId, @PathVariable UUID absenceId, @RequestBody EndAbsenceRequest req,
+            Authentication auth) {
+        return absenceService.end(userId, absenceId, req.endDate(), getUserId(auth));
+    }
+
+    @PostMapping("/drivers/{userId}/absences/{absenceId}/cancel")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Annuler une absence saisie par erreur")
+    public Mono<com.yowyob.fleet.domain.model.DriverAbsence> cancelAbsence(
+            @PathVariable UUID userId, @PathVariable UUID absenceId, Authentication auth) {
+        return absenceService.cancel(userId, absenceId, getUserId(auth));
+    }
+
+    public record LeaveRequest(java.time.LocalDate leftAt, String reason) {}
+
+    public record EndAbsenceRequest(java.time.LocalDate endDate) {}
 
     private Mono<AuthUseCase.FileContent> processFile(Part fp) {
         if (fp == null) return Mono.empty();

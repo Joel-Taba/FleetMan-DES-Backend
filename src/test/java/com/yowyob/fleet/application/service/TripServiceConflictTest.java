@@ -73,7 +73,8 @@ class TripServiceConflictTest {
         fleetId = UUID.randomUUID();
         when(accessScope.assertTripFleetAccess(any(), any())).thenReturn(Mono.empty());
         when(availability.assertDriverEngageable(any(), any(), any())).thenReturn(Mono.empty());
-        when(availability.assertDriverLicensed(any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(availability.assertCrewQualified(any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(availability.assertFleetOperable(any())).thenReturn(Mono.empty());
         when(driverPersistence.findById(driverId)).thenReturn(Mono.just(sampleDriver()));
     }
 
@@ -142,7 +143,7 @@ class TripServiceConflictTest {
                 vehicleId, driverId, tripFleetId, UUID.randomUUID(),
                 LocalDate.now().plusDays(1), LocalTime.of(8, 0),
                 "Yaoundé", null, null, null, null,
-                "Livraison", null, "XAF", null,
+                "Livraison", "Douala", null, null,
                 scheduledReturn, List.of());
     }
 

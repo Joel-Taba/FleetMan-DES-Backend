@@ -1,6 +1,10 @@
 package com.yowyob.fleet.application.service;
 
+import com.yowyob.fleet.domain.exception.SubscriptionException;
+import com.yowyob.fleet.domain.model.BillingCycle;
+import com.yowyob.fleet.domain.model.PlanFeature;
 import com.yowyob.fleet.domain.model.SubscriptionPlan;
+import com.yowyob.fleet.domain.model.SubscriptionPlanRules;
 import com.yowyob.fleet.domain.ports.in.ManageSubscriptionPlanUseCase;
 import com.yowyob.fleet.domain.ports.out.ExternalActorPort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.SubscriptionPlanEntity;
@@ -8,7 +12,10 @@ import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ActiveSubscript
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.PendingSubscriptionDto;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SubscriptionHistoryDto;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.PlanFeatureEntity;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetManagerR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.PlanFeatureR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.SubscriptionPlanR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.UserLocalR2dbcRepository;
@@ -42,79 +49,214 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
     private final DatabaseClient db;
     private final SubscriptionRegistrationService registrationService;
     private final ExternalActorPort externalActorPort;
+    private final PlanLimitGuard planLimitGuard;
 
     @Override
+    @Transactional
     public Mono<SubscriptionPlan> createPlan(CreatePlanCommand cmd) {
-        SubscriptionPlanEntity e = new SubscriptionPlanEntity();
-        e.setId(UUID.randomUUID());
-        e.setName(cmd.name()); e.setDescription(cmd.description());
-        e.setMaxFleets(cmd.maxFleets()); e.setMaxVehicles(cmd.maxVehicles()); e.setMaxDrivers(cmd.maxDrivers());
-        e.setMonthlyPrice(cmd.monthlyPrice()); e.setAnnualPrice(cmd.annualPrice());
-        e.setCurrency(cmd.currency() != null ? cmd.currency() : "XAF");
-        e.setFeatures(cmd.features()); e.setActive(true);
-        e.setCreatedAt(Instant.now()); e.setUpdatedAt(Instant.now());
-        e.setNew(true);
-        return planRepo.save(e).map(this::toDomain);
+        String currency = normalizeCurrency(cmd.currency());
+        return Mono.fromRunnable(() -> SubscriptionPlanRules.validate(cmd.name(), cmd.maxFleets(),
+                        cmd.maxVehicles(), cmd.maxDrivers(), cmd.monthlyPrice(), cmd.annualPrice(), currency))
+                .then(assertNameAvailable(cmd.name(), null))
+                .then(Mono.defer(() -> {
+                    SubscriptionPlanEntity e = new SubscriptionPlanEntity();
+                    e.setId(UUID.randomUUID());
+                    applyCommand(e, cmd.name(), cmd.description(), cmd.maxFleets(), cmd.maxVehicles(),
+                            cmd.maxDrivers(), cmd.monthlyPrice(), cmd.annualPrice(), currency,
+                            cmd.sortOrder(), cmd.recommended());
+                    e.setActive(true);
+                    e.setCreatedAt(Instant.now());
+                    e.setNew(true);
+                    return planRepo.save(e);
+                }))
+                .flatMap(saved -> saveFeatures(saved, cmd.technicalFeatures()))
+                .flatMap(this::withFeatures);
     }
 
     @Override
     public Flux<SubscriptionPlan> listPlans() {
-        return planRepo.findAll().map(this::toDomain);
+        return planRepo.findAll()
+                .flatMap(this::withFeatures)
+                .sort(java.util.Comparator.comparing(SubscriptionPlan::getSortOrder)
+                        .thenComparing(p -> p.getMonthlyPrice() != null ? p.getMonthlyPrice() : java.math.BigDecimal.ZERO));
     }
 
     @Override
     public Mono<SubscriptionPlan> getPlan(UUID id) {
         return planRepo.findById(id)
-            .switchIfEmpty(Mono.error(new RuntimeException("Plan introuvable: " + id)))
-            .map(this::toDomain);
+            .switchIfEmpty(Mono.error(SubscriptionException.planNotFound()))
+            .flatMap(this::withFeatures);
     }
 
     @Override
+    @Transactional
     public Mono<SubscriptionPlan> updatePlan(UUID id, UpdatePlanCommand cmd) {
         return planRepo.findById(id)
-            .switchIfEmpty(Mono.error(new RuntimeException("Plan introuvable: " + id)))
+            .switchIfEmpty(Mono.error(SubscriptionException.planNotFound()))
             .flatMap(e -> {
-                e.setName(cmd.name()); e.setDescription(cmd.description());
-                e.setMaxFleets(cmd.maxFleets()); e.setMaxVehicles(cmd.maxVehicles()); e.setMaxDrivers(cmd.maxDrivers());
-                e.setMonthlyPrice(cmd.monthlyPrice()); e.setAnnualPrice(cmd.annualPrice());
-                e.setFeatures(cmd.features()); e.setUpdatedAt(Instant.now());
-                e.setNew(false);
-                return planRepo.save(e);
-            }).map(this::toDomain);
+                String currency = cmd.currency() != null ? normalizeCurrency(cmd.currency()) : e.getCurrency();
+                SubscriptionPlanRules.validate(cmd.name(), cmd.maxFleets(), cmd.maxVehicles(), cmd.maxDrivers(),
+                        cmd.monthlyPrice(), cmd.annualPrice(), currency);
+                return assertNameAvailable(cmd.name(), id).then(Mono.defer(() -> {
+                    applyCommand(e, cmd.name(), cmd.description(), cmd.maxFleets(), cmd.maxVehicles(),
+                            cmd.maxDrivers(), cmd.monthlyPrice(), cmd.annualPrice(), currency,
+                            cmd.sortOrder() != null ? cmd.sortOrder() : e.getSortOrder(),
+                            cmd.recommended() != null ? cmd.recommended() : e.isRecommended());
+                    e.setNew(false);
+                    return planRepo.save(e);
+                }));
+            })
+            .flatMap(saved -> saveFeatures(saved, cmd.technicalFeatures()))
+            .flatMap(this::withFeatures);
     }
 
     @Override
     public Mono<Void> deactivatePlan(UUID id) {
         return planRepo.findById(id)
+            .switchIfEmpty(Mono.error(SubscriptionException.planNotFound()))
             .flatMap(e -> { e.setActive(false); e.setUpdatedAt(Instant.now()); e.setNew(false); return planRepo.save(e); })
             .then();
     }
 
+    /**
+     * Affectation directe par l'administration (sans paiement) : le plan doit être proposé et
+     * couvrir l'usage actuel du gestionnaire ; la durée dépend du cycle (plan gratuit : sans fin).
+     */
     @Override
-    public Mono<Void> assignPlanToManager(UUID managerId, UUID planId) {
-        LocalDate start = LocalDate.now();
-        LocalDate end = start.plusYears(1);
-        return db.sql("""
-                UPDATE fleet.fleet_managers
+    public Mono<Void> assignPlanToManager(UUID managerId, UUID planId, BillingCycle billingCycle) {
+        return planRepo.findById(planId)
+                .switchIfEmpty(Mono.error(SubscriptionException.planNotFound()))
+                .flatMap(plan -> {
+                    if (!plan.isActive()) {
+                        return Mono.error(SubscriptionException.planInactive(plan.getName()));
+                    }
+                    BillingCycle cycle = billingCycle != null ? billingCycle : BillingCycle.MONTHLY;
+                    if (SubscriptionPlanRules.priceFor(plan.getMonthlyPrice(), plan.getAnnualPrice(), cycle) == null) {
+                        return Mono.error(SubscriptionException.billingCycleUnavailable(plan.getName()));
+                    }
+                    return assertUsageFits(managerId, plan)
+                            .then(activateSubscription(managerId, plan, cycle, LocalDate.now()))
+                            .then();
+                });
+    }
+
+    /** Refuse un plan dont les limites sont inférieures à l'usage actuel de l'entreprise. */
+    public Mono<Void> assertUsageFits(UUID companyId, SubscriptionPlanEntity plan) {
+        return planLimitGuard.getCompanySubscription(companyId)
+                .flatMap(c -> {
+                    List<String> overflows = SubscriptionPlanRules.usageOverflows(plan.getMaxFleets(),
+                            plan.getMaxVehicles(), plan.getMaxDrivers(),
+                            c.currentFleets(), c.currentVehicles(), c.currentDrivers());
+                    return overflows.isEmpty()
+                            ? Mono.<Void>empty()
+                            : Mono.error(SubscriptionException.usageExceedsPlan(plan.getName(), String.join(", ", overflows)));
+                });
+    }
+
+    /**
+     * Active (ou prolonge) l'abonnement : plan gratuit → sans date de fin ni cycle ; plan
+     * payant → période d'un mois ou d'un an à partir de {@code start}. Réactive le compte.
+     *
+     * @return la fin de période appliquée (null pour un plan gratuit)
+     */
+    public Mono<LocalDate> activateSubscription(UUID managerId, SubscriptionPlanEntity plan,
+                                                BillingCycle cycle, LocalDate start) {
+        boolean free = plan.getMonthlyPrice() == null || plan.getMonthlyPrice().signum() == 0;
+        LocalDate end = free ? null : cycle.periodEnd(start);
+        var spec = db.sql("""
+                UPDATE fleet.companies
                 SET plan_id = :planId,
                     subscription_status = 'ACTIVE',
                     subscription_start = :start,
-                    subscription_end = :end
-                WHERE user_id = :managerId
+                    subscription_end = :end,
+                    billing_cycle = :cycle,
+                    updated_at = NOW()
+                WHERE id = :managerId
                 """)
-                .bind("planId", planId)
+                .bind("planId", plan.getId())
                 .bind("start", start)
-                .bind("end", end)
-                .bind("managerId", managerId)
-                .fetch()
-                .rowsUpdated()
+                .bind("managerId", managerId);
+        spec = end != null ? spec.bind("end", end) : spec.bindNull("end", LocalDate.class);
+        spec = free ? spec.bindNull("cycle", String.class) : spec.bind("cycle", cycle.name());
+        return spec.fetch().rowsUpdated()
                 .then(userRepo.findById(managerId)
                         .flatMap(u -> {
                             u.setActive(true);
                             u.setNewRecord(false);
                             return userRepo.save(u);
                         })
-                        .then());
+                        .then())
+                .then(Mono.justOrEmpty(end));
+    }
+
+    private Mono<Void> assertNameAvailable(String name, UUID currentId) {
+        return planRepo.findAll()
+                .filter(p -> p.getName() != null && p.getName().trim().equalsIgnoreCase(name.trim()))
+                .filter(p -> !p.getId().equals(currentId))
+                .hasElements()
+                .flatMap(taken -> Boolean.TRUE.equals(taken)
+                        ? Mono.<Void>error(SubscriptionException.planNameTaken(name.trim()))
+                        : Mono.<Void>empty());
+    }
+
+    private static void applyCommand(SubscriptionPlanEntity e, String name, String description,
+                                     int maxFleets, int maxVehicles, int maxDrivers,
+                                     java.math.BigDecimal monthlyPrice, java.math.BigDecimal annualPrice,
+                                     String currency, Integer sortOrder, Boolean recommended) {
+        java.math.BigDecimal monthly = monthlyPrice != null ? monthlyPrice : java.math.BigDecimal.ZERO;
+        e.setName(name.trim());
+        e.setDescription(description != null && !description.isBlank() ? description.trim() : null);
+        e.setMaxFleets(maxFleets);
+        e.setMaxVehicles(maxVehicles);
+        e.setMaxDrivers(maxDrivers);
+        e.setMonthlyPrice(monthly);
+        e.setAnnualPrice(monthly.signum() == 0 ? null : annualPrice);
+        e.setCurrency(currency);
+        e.setSortOrder(sortOrder != null ? sortOrder : 0);
+        e.setRecommended(Boolean.TRUE.equals(recommended));
+        e.setUpdatedAt(Instant.now());
+    }
+
+    private static String normalizeCurrency(String currency) {
+        return currency == null || currency.isBlank() ? "XAF" : currency.trim().toUpperCase();
+    }
+
+    /**
+     * Enregistre les fonctionnalités (si fournies) et aligne le libellé marketing du plan sur
+     * celles qui sont réellement activées : une seule source de vérité pour l'affichage et l'accès.
+     */
+    private Mono<SubscriptionPlanEntity> saveFeatures(SubscriptionPlanEntity plan,
+                                                      List<ManageSubscriptionPlanUseCase.PlanFeatureCommand> features) {
+        Mono<Void> replace = features == null || features.isEmpty()
+                ? Mono.empty()
+                : replacePlanFeatures(plan.getId(), features.stream()
+                        .filter(f -> f.key() != null && PlanFeature.fromKey(f.key()).isPresent())
+                        .map(f -> new ManageSubscriptionPlanUseCase.PlanFeatureCommand(
+                                f.key(), PlanFeature.labelOf(f.key()), f.enabled()))
+                        .toList());
+        return replace
+                .then(featureRepo.findByPlanId(plan.getId())
+                        .filter(PlanFeatureEntity::isEnabled)
+                        .map(f -> PlanFeature.labelOf(f.getFeatureKey()))
+                        .sort()
+                        .collectList())
+                .flatMap(labels -> {
+                    plan.setFeatures(labels.isEmpty() ? null : String.join(", ", labels));
+                    plan.setNew(false);
+                    return planRepo.save(plan);
+                });
+    }
+
+    private Mono<SubscriptionPlan> withFeatures(SubscriptionPlanEntity e) {
+        return featureRepo.findByPlanId(e.getId())
+                .filter(PlanFeatureEntity::isEnabled)
+                .map(PlanFeatureEntity::getFeatureKey)
+                .collectList()
+                .map(keys -> {
+                    SubscriptionPlan plan = toDomain(e);
+                    plan.setIncludedFeatures(keys);
+                    return plan;
+                });
     }
 
     // ── Workflow approbation B3 ───────────────────────────────────────────────
@@ -123,10 +265,10 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
     public Flux<PendingSubscriptionDto> listPendingSubscriptions() {
         return db.sql("""
                 SELECT u.id, u.username, u.email, u.first_name, u.last_name,
-                       fm.company_name, fm.requested_plan_id AS plan_id,
-                       COALESCE(u.approved_at, NOW()) AS created_at
+                       c.name AS company_name, c.requested_plan_id AS plan_id,
+                       COALESCE(c.created_at, NOW()) AS created_at
                 FROM fleet.users u
-                LEFT JOIN fleet.fleet_managers fm ON fm.user_id = u.id
+                JOIN fleet.companies c ON c.id = u.id
                 WHERE u.approval_status = 'PENDING'
                 ORDER BY u.username
                 """)
@@ -148,13 +290,13 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
     public Flux<SubscriptionHistoryDto> listSubscriptionHistory() {
         return db.sql("""
                 SELECT u.id, u.username, u.email, u.first_name, u.last_name,
-                       fm.company_name, u.approved_at AS processed_at,
+                       c.name AS company_name, u.approved_at AS processed_at,
                        u.approval_status AS status, sp.name AS plan_name,
                        u.rejection_reason,
                        COALESCE(approver.username, approver.email) AS processed_by
                 FROM fleet.users u
-                LEFT JOIN fleet.fleet_managers fm ON fm.user_id = u.id
-                LEFT JOIN fleet.subscription_plans sp ON sp.id = fm.plan_id
+                JOIN fleet.companies c ON c.id = u.id
+                LEFT JOIN fleet.subscription_plans sp ON sp.id = c.plan_id
                 LEFT JOIN fleet.users approver ON approver.id = u.approved_by
                 WHERE u.approval_status IN ('APPROVED', 'REJECTED')
                   AND u.approved_at IS NOT NULL
@@ -206,15 +348,18 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
                 u.setNewRecord(false);
                 return userRepo.save(u);
             })
-            .then(cmd.planId() != null ? assignPlanToManager(cmd.managerId(), cmd.planId()) : Mono.empty())
-            // Le gestionnaire s'est inscrit via /public/register-manager, qui crée le compte
-            // Kernel mais ne lui attribue aucun rôle (pas de scope organisation à ce stade).
-            // Sans cette assignation, le compte approuvé ne peut pas se connecter avec les
-            // permissions manager (JWT sans ROLE_FLEET_MANAGER). Best-effort : ne doit pas
-            // faire échouer l'approbation en base si le Kernel est indisponible.
-            .then(externalActorPort.assignPlatformRole(cmd.managerId(), "FLEET_MANAGER")
+            // Plan attribué : celui choisi, sinon celui demandé à l'inscription, sinon le premier
+            // plan gratuit actif. Un compte approuvé sans plan aurait un accès illimité gratuit.
+            .then(resolveApprovalPlan(cmd.managerId(), cmd.planId())
+                    .flatMap(planId -> requestedBillingCycle(cmd.managerId())
+                            .flatMap(requested -> assignPlanToManager(cmd.managerId(), planId,
+                                    cmd.billingCycle() != null ? cmd.billingCycle() : requested))))
+            // L'inscription publique crée le compte Kernel de l'administrateur de l'entreprise sans
+            // rôle : il reçoit FLEET_ADMIN à l'approbation, puis crée ses gestionnaires. Best-effort :
+            // ne doit pas faire échouer l'approbation en base si le Kernel est indisponible.
+            .then(externalActorPort.assignPlatformRole(cmd.managerId(), "FLEET_ADMIN")
                     .onErrorResume(e -> {
-                        log.warn("⚠️ Assignation rôle FLEET_MANAGER ignorée pour {} : {}",
+                        log.warn("⚠️ Assignation rôle FLEET_ADMIN ignorée pour {} : {}",
                                 cmd.managerId(), e.getMessage());
                         return Mono.empty();
                     }));
@@ -296,13 +441,13 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
     @Override
     public Flux<ActiveSubscriptionDto> listActiveSubscriptions() {
         return db.sql("""
-                SELECT fm.user_id, fm.company_name, u.email, sp.name AS plan_name,
-                       fm.subscription_status, fm.subscription_start, fm.subscription_end
-                FROM fleet.fleet_managers fm
-                JOIN fleet.users u ON u.id = fm.user_id
-                LEFT JOIN fleet.subscription_plans sp ON sp.id = fm.plan_id
-                WHERE fm.subscription_status IN ('ACTIVE', 'EXPIRED')
-                ORDER BY fm.subscription_end ASC NULLS LAST
+                SELECT c.id AS user_id, c.name AS company_name, u.email, sp.name AS plan_name,
+                       c.subscription_status, c.subscription_start, c.subscription_end
+                FROM fleet.companies c
+                JOIN fleet.users u ON u.id = c.id
+                LEFT JOIN fleet.subscription_plans sp ON sp.id = c.plan_id
+                WHERE c.subscription_status IN ('ACTIVE', 'EXPIRED') AND u.deleted_at IS NULL
+                ORDER BY c.subscription_end ASC NULLS LAST
                 """)
                 .fetch()
                 .all()
@@ -325,9 +470,41 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
     }
 
     private SubscriptionPlan toDomain(SubscriptionPlanEntity e) {
-        return new SubscriptionPlan(e.getId(), e.getName(), e.getDescription(),
+        SubscriptionPlan plan = new SubscriptionPlan(e.getId(), e.getName(), e.getDescription(),
             e.getMaxFleets(), e.getMaxVehicles(), e.getMaxDrivers(),
             e.getMonthlyPrice(), e.getAnnualPrice(), e.getCurrency(),
             e.getFeatures(), e.isActive(), e.getCreatedAt(), e.getUpdatedAt());
+        plan.setSortOrder(e.getSortOrder());
+        plan.setRecommended(e.isRecommended());
+        return plan;
+    }
+
+    private Mono<UUID> resolveApprovalPlan(UUID managerId, UUID chosenPlanId) {
+        if (chosenPlanId != null) {
+            return Mono.just(chosenPlanId);
+        }
+        Mono<UUID> requested = db.sql("SELECT requested_plan_id FROM fleet.companies WHERE id = :id")
+                .bind("id", managerId)
+                .map((row, meta) -> java.util.Optional.ofNullable(row.get("requested_plan_id", UUID.class)))
+                .one()
+                .flatMap(Mono::justOrEmpty)
+                .filterWhen(id -> planRepo.findById(id).map(SubscriptionPlanEntity::isActive).defaultIfEmpty(false));
+        Mono<UUID> firstFree = planRepo.findAll()
+                .filter(SubscriptionPlanEntity::isActive)
+                .filter(p -> p.getMonthlyPrice() == null || p.getMonthlyPrice().signum() == 0)
+                .sort(java.util.Comparator.comparingInt(SubscriptionPlanEntity::getSortOrder))
+                .next()
+                .map(SubscriptionPlanEntity::getId);
+        return requested.switchIfEmpty(firstFree);
+    }
+
+    /** Cycle demandé à l'inscription (mensuel par défaut). */
+    private Mono<BillingCycle> requestedBillingCycle(UUID managerId) {
+        return db.sql("SELECT requested_billing_cycle FROM fleet.companies WHERE id = :id")
+                .bind("id", managerId)
+                .map((row, meta) -> java.util.Optional.ofNullable(row.get("requested_billing_cycle", String.class)))
+                .one()
+                .map(v -> BillingCycle.parseOrDefault(v.orElse(null), BillingCycle.MONTHLY))
+                .defaultIfEmpty(BillingCycle.MONTHLY);
     }
 }

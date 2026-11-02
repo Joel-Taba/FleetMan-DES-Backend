@@ -3,10 +3,7 @@ package com.yowyob.fleet.application.service;
 import com.yowyob.fleet.domain.exception.SubscriptionException;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerSubscriptionResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerSubscriptionResponse.PlanFeatureDto;
-import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverR2dbcRepository;
-import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FleetR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.PlanFeatureR2dbcRepository;
-import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,10 +25,8 @@ import static org.mockito.Mockito.doReturn;
 class PlanLimitGuardTest {
 
     @Mock DatabaseClient db;
-    @Mock FleetR2dbcRepository fleetRepo;
-    @Mock VehicleLocalR2dbcRepository vehicleRepo;
-    @Mock DriverR2dbcRepository driverRepo;
     @Mock PlanFeatureR2dbcRepository featureRepo;
+    @Mock CompanyScopeService companyScope;
 
     @Spy
     @InjectMocks
@@ -60,8 +55,8 @@ class PlanLimitGuardTest {
                 1,
                 5,
                 3,
-                List.of(new PlanFeatureDto("TRIPS", "Trajets", true))
-        );
+                List.of(new PlanFeatureDto("TRIPS", "Trajets", true)),
+                null);
     }
 
     @Test
@@ -95,8 +90,8 @@ class PlanLimitGuardTest {
                 1,
                 4,
                 3,
-                starterAtVehicleLimit.features()
-        );
+                starterAtVehicleLimit.features(),
+                null);
         doReturn(Mono.just(belowLimit)).when(planLimitGuard).getSubscription(managerId);
 
         StepVerifier.create(planLimitGuard.assertCanCreateVehicle(managerId))
@@ -122,8 +117,8 @@ class PlanLimitGuardTest {
                 1,
                 3,
                 2,
-                starterAtVehicleLimit.features()
-        );
+                starterAtVehicleLimit.features(),
+                null);
         doReturn(Mono.just(expired)).when(planLimitGuard).getSubscription(managerId);
 
         StepVerifier.create(planLimitGuard.assertActiveAccess(managerId))
@@ -135,33 +130,66 @@ class PlanLimitGuardTest {
     }
 
     @Test
-    void assertFeature_blocksDisabledFeature() {
-        var noKpi = new ManagerSubscriptionResponse(
-                managerId,
-                starterAtVehicleLimit.planId(),
-                "Starter",
-                "ACTIVE",
-                starterAtVehicleLimit.subscriptionStart(),
-                starterAtVehicleLimit.subscriptionEnd(),
-                7,
-                300,
-                false,
-                true,
-                1,
-                5,
-                10,
-                1,
-                2,
-                2,
-                List.of(new PlanFeatureDto("KPI_REPORTS", "KPI & Rapports", false))
-        );
-        doReturn(Mono.just(noKpi)).when(planLimitGuard).getSubscription(managerId);
+    @SuppressWarnings("unchecked")
+    void assertFeature_blocksDisabledFeature_withReadableMessage() {
+        UUID planId = starterAtVehicleLimit.planId();
+        stubAccessRow(planId, "ACTIVE", LocalDate.now().plusMonths(3));
+        var kpiDisabled = new com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.PlanFeatureEntity();
+        kpiDisabled.setPlanId(planId);
+        kpiDisabled.setFeatureKey("KPI_REPORTS");
+        kpiDisabled.setEnabled(false);
+        org.mockito.Mockito.when(featureRepo.findByPlanId(planId)).thenReturn(reactor.core.publisher.Flux.just(kpiDisabled));
 
         StepVerifier.create(planLimitGuard.assertFeature(managerId, "KPI_REPORTS"))
                 .expectErrorSatisfies(err -> {
                     assert err instanceof SubscriptionException;
                     assert "SUB_006".equals(((SubscriptionException) err).getBusinessCode());
+                    assert err.getMessage().contains("KPI & Rapports");
                 })
                 .verify();
+    }
+
+    @Test
+    void assertAccess_blocksExpiredSubscription_beyondGracePeriod() {
+        stubAccessRow(starterAtVehicleLimit.planId(), "ACTIVE", LocalDate.now().minusDays(30));
+
+        StepVerifier.create(planLimitGuard.assertAccess(managerId, null))
+                .expectErrorSatisfies(err -> {
+                    assert "SUB_001".equals(((SubscriptionException) err).getBusinessCode());
+                })
+                .verify();
+    }
+
+    @Test
+    void assertAccess_allowsCompanyWithoutPlan() {
+        stubAccessRow(null, "ACTIVE", null);
+        StepVerifier.create(planLimitGuard.assertAccess(managerId, "KPI_REPORTS")).verifyComplete();
+    }
+
+    @Test
+    void assertAccess_blocksCompanyAwaitingApproval() {
+        stubAccessRow(null, "PENDING", null);
+        StepVerifier.create(planLimitGuard.assertAccess(managerId, null))
+                .expectErrorSatisfies(err -> {
+                    assert "SUB_001".equals(((SubscriptionException) err).getBusinessCode());
+                })
+                .verify();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void stubAccessRow(UUID planId, String status, LocalDate end) {
+        // L'abonnement est celui de l'entreprise de l'acteur.
+        org.mockito.Mockito.when(companyScope.resolveCompanyId(managerId)).thenReturn(Mono.just(managerId));
+        java.util.Map<String, Object> row = new java.util.HashMap<>();
+        row.put("plan_id", planId);
+        row.put("subscription_status", status);
+        row.put("subscription_end", end);
+        row.put("grace_days", 7);
+        var spec = org.mockito.Mockito.mock(DatabaseClient.GenericExecuteSpec.class);
+        var fetch = org.mockito.Mockito.mock(org.springframework.r2dbc.core.FetchSpec.class);
+        org.mockito.Mockito.when(db.sql(org.mockito.ArgumentMatchers.anyString())).thenReturn(spec);
+        org.mockito.Mockito.when(spec.bind(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any())).thenReturn(spec);
+        org.mockito.Mockito.when(spec.fetch()).thenReturn(fetch);
+        org.mockito.Mockito.when(fetch.one()).thenReturn(Mono.just(row));
     }
 }

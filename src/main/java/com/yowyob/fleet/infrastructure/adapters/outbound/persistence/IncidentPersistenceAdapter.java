@@ -91,6 +91,11 @@ public class IncidentPersistenceAdapter implements IncidentPersistencePort {
     }
 
     @Override
+    public Mono<Long> countDriverResponsible(UUID driverId) {
+        return repository.countDriverResponsible(driverId);
+    }
+
+    @Override
     public Mono<Long> countByDriverId(UUID driverId) {
         return repository.countByDriverId(driverId);
     }
@@ -139,7 +144,7 @@ public class IncidentPersistenceAdapter implements IncidentPersistencePort {
 
         // Restauration de l'état complet depuis la base
         if (e.getStatus() != null) {
-            incident.updateStatus(Incident.Status.valueOf(e.getStatus()));
+            incident.restoreStatus(Incident.Status.valueOf(e.getStatus()), e.getResolvedAt());
         }
         if (e.getReport() != null)               incident.setReport(e.getReport());
         if (e.getPoliceReportNumber() != null)   incident.setPoliceReportNumber(e.getPoliceReportNumber());
@@ -148,6 +153,8 @@ public class IncidentPersistenceAdapter implements IncidentPersistencePort {
             incident.addWitness(e.getWitnessName(), e.getWitnessContact());
         }
         incident.setVehicleImmobilized(e.isVehicleImmobilized());
+        incident.setVehicleDrivable(e.isVehicleDrivable());
+        incident.setImmobilizationOverride(e.getImmobilizationOverride());
 
         return incident;
     }
@@ -175,6 +182,8 @@ public class IncidentPersistenceAdapter implements IncidentPersistencePort {
         entity.setDriverId(i.getDriverId());
         entity.setDriverFullName(i.getDriverFullName());
         entity.setVehicleImmobilized(i.isVehicleImmobilized());
+        entity.setVehicleDrivable(i.isVehicleDrivable());
+        entity.setImmobilizationOverride(i.getImmobilizationOverride());
 
         if (i.getLocation() != null) {
             entity.setLongitude(i.getLocation().longitude());

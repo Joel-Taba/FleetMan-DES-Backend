@@ -24,13 +24,9 @@ public class AssignmentEntity implements Persistable<UUID> {
     private UUID fleetId;
     private UUID vehicleId;
     private UUID driverId;
-    private UUID missionId;
     private LocalDateTime startDatetime;
     private LocalDateTime endDatetime;
     private String status;
-    private String startLocation;
-    private String endLocation;
-    private BigDecimal estimatedKm;
     private BigDecimal actualKm;
     private String notes;
     private LocalDateTime createdAt;

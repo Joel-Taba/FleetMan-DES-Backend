@@ -32,13 +32,13 @@ public interface DriverR2dbcRepository extends ReactiveCrudRepository<DriverEnti
 
     Mono<DriverEntity> findByKernelActorId(UUID kernelActorId);
     // --- AJOUT TÂCHE 6.2 ---
-    @Query("SELECT COUNT(*) FROM fleet.drivers WHERE fleet_id = :fleetId AND deleted_at IS NULL")
+    @Query("SELECT COUNT(*) FROM fleet.drivers WHERE fleet_id = :fleetId AND deleted_at IS NULL AND status <> 'LEFT'")
     Mono<Long> countByFleetId(UUID fleetId);
 
     // --- CORRECTIF TÂCHE 7.2 : Compter les chauffeurs par Manager ---
     @Query("SELECT COUNT(d.*) FROM fleet.drivers d " +
            "JOIN fleet.fleets f ON d.fleet_id = f.id " +
-           "WHERE f.manager_id = :managerId AND d.deleted_at IS NULL")
+           "WHERE f.manager_id = :managerId AND d.deleted_at IS NULL AND d.status <> 'LEFT'")
     Mono<Long> countByManagerId(UUID managerId);
 
     @Query("""
@@ -82,6 +82,11 @@ public interface DriverR2dbcRepository extends ReactiveCrudRepository<DriverEnti
             JOIN fleet.fleet_managers fm ON f.manager_id = fm.user_id
             WHERE fm.created_by_admin_id = :adminId
               AND d.deleted_at IS NULL
+              AND d.status <> 'LEFT'
             """)
     Mono<Long> countByOrganizationAdminId(UUID adminId);
+
+    /** Numéro de permis déjà pris (comparaison sans casse ni espaces). */
+    @Query("SELECT * FROM fleet.drivers WHERE UPPER(REPLACE(licence_number, ' ', '')) = UPPER(REPLACE(:licenceNumber, ' ', '')) LIMIT 1")
+    Mono<DriverEntity> findByLicenceNumberNormalized(String licenceNumber);
 }

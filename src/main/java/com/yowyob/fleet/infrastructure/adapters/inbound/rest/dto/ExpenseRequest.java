@@ -34,5 +34,12 @@ public record ExpenseRequest(
         UUID vehicleId,
 
         @Schema(description = "ID du chauffeur impliqué (optionnel)")
-        UUID driverId
+        UUID driverId,
+
+        @Schema(description = "Justificatif déjà téléversé (URL /api/v1/files/...) — exigé pour approuver, ajoutable ensuite")
+        String receiptUrl,
+
+        String receiptName,
+
+        String receiptMime
 ) {}

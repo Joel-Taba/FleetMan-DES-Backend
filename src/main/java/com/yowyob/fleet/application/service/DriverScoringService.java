@@ -6,7 +6,7 @@ import com.yowyob.fleet.domain.model.DriverScore;
 import com.yowyob.fleet.domain.ports.in.ComputeDriverScoreUseCase;
 import com.yowyob.fleet.domain.ports.out.*;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.AssignmentR2dbcRepository;
-import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverDocumentR2dbcRepository;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DocumentR2dbcRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,7 +33,7 @@ public class DriverScoringService implements ComputeDriverScoreUseCase {
     private final IncidentPersistencePort incidentPort;
     private final MaintenancePersistencePort maintenancePort;
     private final AssignmentR2dbcRepository assignmentRepo;
-    private final DriverDocumentR2dbcRepository driverDocRepo;
+    private final DocumentR2dbcRepository documentRepo;
 
     // ── Lecture ───────────────────────────────────────────────────────────────
 
@@ -117,7 +117,7 @@ public class DriverScoringService implements ComputeDriverScoreUseCase {
                                          LocalDateTime dtStart,
                                          LocalDateTime dtEnd) {
 
-        Mono<Long> incidentsMono    = incidentPort.countByDriverId(driverId).defaultIfEmpty(0L);
+        Mono<Long> incidentsMono    = incidentPort.countDriverResponsible(driverId).defaultIfEmpty(0L);
         Mono<Long> maintenancesMono = maintenancePort.countByDriverId(driverId).defaultIfEmpty(0L);
 
         Mono<List<String>> statusesMono = assignmentRepo.findByDriverId(driverId)
@@ -128,12 +128,14 @@ public class DriverScoringService implements ComputeDriverScoreUseCase {
                 .map(a -> a.getStatus())
                 .collectList();
 
-        Mono<BigDecimal> complianceMono = driverDocRepo.findByDriverId(driverId)
+        Mono<BigDecimal> complianceMono = documentRepo.findActive("DRIVER", driverId)
+                .filter(d -> d.isCurrent())
                 .collectList()
                 .map(docs -> {
                     if (docs.isEmpty()) return BigDecimal.valueOf(100);
+                    LocalDate today = LocalDate.now();
                     long valid = docs.stream()
-                            .filter(d -> "VALID".equals(d.getStatus()))
+                            .filter(d -> !"EXPIRED".equals(d.effectiveStatus(today)))
                             .count();
                     return BigDecimal.valueOf(valid)
                             .multiply(BigDecimal.valueOf(100))

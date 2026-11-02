@@ -36,6 +36,8 @@ public class SubscriptionPlanEntity implements Persistable<UUID> {
     @Column("is_active")  private boolean isActive;
     @Column("created_at") private Instant createdAt;
     @Column("updated_at") private Instant updatedAt;
+    @Column("sort_order") private int sortOrder;
+    private boolean recommended;
 
     @Transient private boolean isNew = false;
     @Override public boolean isNew() { return isNew || id == null; }

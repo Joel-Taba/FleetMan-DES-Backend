@@ -44,28 +44,46 @@ public record Vehicle(
     VehicleParameters.Maintenance maintenanceParameters,
     VehicleParameters.Operational operationalParameters,
     String geofenceRemoteId,
-    UUID kernelResourceId
+    UUID kernelResourceId,
+    VehicleParameters.Lifecycle lifecycle
 ) {
+    /** Constructeur historique (sans cycle de vie) : le cycle de vie n'est jamais écrasé à la sauvegarde. */
+    public Vehicle(UUID id, UUID fleetId, UUID managerId, UUID currentDriverId, UUID vehicleTypeId,
+                   String licensePlate, String vehicleSerialNumber, String brand, String model,
+                   Integer manufacturingYear, String transmissionType, String fuelType, Double tankCapacity,
+                   Integer totalSeatNumber, Double averageFuelConsumption, String color, String status,
+                   String photoUrl, String serialNumberPhotoUrl, String registrationPhotoUrl,
+                   List<String> illustrationImages, VehicleParameters.Financial financialParameters,
+                   VehicleParameters.Maintenance maintenanceParameters,
+                   VehicleParameters.Operational operationalParameters, String geofenceRemoteId,
+                   UUID kernelResourceId) {
+        this(id, fleetId, managerId, currentDriverId, vehicleTypeId, licensePlate, vehicleSerialNumber,
+            brand, model, manufacturingYear, transmissionType, fuelType, tankCapacity, totalSeatNumber,
+            averageFuelConsumption, color, status, photoUrl, serialNumberPhotoUrl, registrationPhotoUrl,
+            illustrationImages, financialParameters, maintenanceParameters, operationalParameters,
+            geofenceRemoteId, kernelResourceId, null);
+    }
+
     // Helper pour ajouter des images de galerie
     public Vehicle withGallery(List<String> images) {
         return new Vehicle(id, fleetId, managerId, currentDriverId, vehicleTypeId, licensePlate, 
             vehicleSerialNumber, brand, model, manufacturingYear, transmissionType, fuelType, 
             tankCapacity, totalSeatNumber, averageFuelConsumption, color, status, photoUrl, 
             serialNumberPhotoUrl, registrationPhotoUrl, images, financialParameters, 
-            maintenanceParameters, operationalParameters, geofenceRemoteId, kernelResourceId);
+            maintenanceParameters, operationalParameters, geofenceRemoteId, kernelResourceId, lifecycle);
     }
     public Vehicle withGeofenceRemoteId(String newRemoteId) {
         return new Vehicle(id, fleetId, managerId, currentDriverId, vehicleTypeId, licensePlate, 
             vehicleSerialNumber, brand, model, manufacturingYear, transmissionType, fuelType, 
             tankCapacity, totalSeatNumber, averageFuelConsumption, color, status, photoUrl, 
             serialNumberPhotoUrl, registrationPhotoUrl, illustrationImages, financialParameters, 
-            maintenanceParameters, operationalParameters, newRemoteId, kernelResourceId);
+            maintenanceParameters, operationalParameters, newRemoteId, kernelResourceId, lifecycle);
     }
     public Vehicle withKernelResourceId(UUID kernelResourceId) {
         return new Vehicle(id, fleetId, managerId, currentDriverId, vehicleTypeId, licensePlate,
             vehicleSerialNumber, brand, model, manufacturingYear, transmissionType, fuelType,
             tankCapacity, totalSeatNumber, averageFuelConsumption, color, status, photoUrl,
             serialNumberPhotoUrl, registrationPhotoUrl, illustrationImages, financialParameters,
-            maintenanceParameters, operationalParameters, geofenceRemoteId, kernelResourceId);
+            maintenanceParameters, operationalParameters, geofenceRemoteId, kernelResourceId, lifecycle);
     }
 }

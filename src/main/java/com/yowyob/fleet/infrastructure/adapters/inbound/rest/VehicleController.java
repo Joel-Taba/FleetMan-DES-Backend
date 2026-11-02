@@ -229,10 +229,23 @@ public class VehicleController {
     @DeleteMapping("/vehicles/{vehicleId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
-    @Operation(summary = "Supprimer un véhicule", description = "Suppression logique (deleted_at). Admin : toute l'organisation.")
+    @Operation(summary = "Supprimer un véhicule", description = "Réservé à une fiche créée par erreur (aucun trajet, carburant, dépense, maintenance ni incident) ; sinon utiliser « Retirer du parc ».")
     public Mono<Void> delete(@PathVariable UUID vehicleId, Authentication auth) {
         return requireVehicleAccess(vehicleId, auth)
                 .then(vehicleUseCase.removeVehicle(vehicleId, extractToken(auth)));
+    }
+
+    @Tag(name = OpenApiConfig.TAG_VHC_PARC)
+    @PostMapping("/vehicles/{vehicleId}/retire")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Retirer du parc",
+            description = "Vente, réforme, vol, perte totale ou restitution : le véhicule et son historique sont conservés, "
+                    + "il n'est plus engageable et libère sa place dans le plan.")
+    public Mono<Vehicle> retire(@PathVariable UUID vehicleId,
+                                @RequestBody com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehicleRetireRequest request,
+                                Authentication auth) {
+        return requireVehicleAccess(vehicleId, auth)
+                .then(vehicleUseCase.retireVehicle(vehicleId, request));
     }
 
     // ========================================================================

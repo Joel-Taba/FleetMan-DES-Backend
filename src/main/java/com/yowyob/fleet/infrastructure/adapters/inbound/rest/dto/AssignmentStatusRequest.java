@@ -11,7 +11,7 @@ public record AssignmentStatusRequest(
 
         @NotNull(message = "Le statut est obligatoire")
         @Schema(description = "Nouveau statut",
-                allowableValues = {"IN_PROGRESS","COMPLETED","CANCELLED","NO_SHOW"})
+                allowableValues = {"CANCELLED","NO_SHOW"})
         Assignment.Status status,
 
         @Schema(description = "Kilométrage réel (obligatoire si statut = COMPLETED)",

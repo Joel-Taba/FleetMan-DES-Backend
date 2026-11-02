@@ -16,10 +16,6 @@ public record IncidentUpdateRequest(
                 allowableValues = {"LOW", "MEDIUM", "HIGH", "CRITICAL"})
         Incident.Severity severity,
 
-        @PositiveOrZero(message = "Le coût ne peut pas être négatif.")
-        @Schema(description = "Coût réel mis à jour en FCFA", example = "250000.00")
-        BigDecimal cost,
-
         @Schema(description = "Rapport de résolution ou d'investigation", example = "Véhicule remorqué au garage. Réparation estimée à 3 jours.")
         String report,
 

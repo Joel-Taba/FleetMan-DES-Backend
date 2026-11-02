@@ -21,7 +21,9 @@ public record ManagerSubscriptionResponse(
         int currentFleets,
         int currentVehicles,
         int currentDrivers,
-        List<PlanFeatureDto> features
+        List<PlanFeatureDto> features,
+        /** MONTHLY, ANNUAL, ou null pour un plan gratuit (sans date de fin). Limites : 0 = illimité. */
+        String billingCycle
 ) {
     public record PlanFeatureDto(String key, String label, boolean enabled) {}
 }

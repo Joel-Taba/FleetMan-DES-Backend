@@ -44,4 +44,20 @@ public class AdminException extends DomainException {
                 "Accès refusé à cette organisation.",
                 HttpStatus.FORBIDDEN, "ADMN_008");
     }
+
+    public static AdminException suspensionReasonRequired() {
+        return new AdminException("Indiquez le motif de la suspension.", HttpStatus.BAD_REQUEST, "ADMN_020");
+    }
+
+    public static AdminException managerClosed() {
+        return new AdminException("Ce compte gestionnaire est clôturé : il est conservé pour l'historique.",
+                HttpStatus.CONFLICT, "ADMN_021");
+    }
+
+    public static AdminException managerStillHasFleets(long count) {
+        return new AdminException(
+                "Ce gestionnaire a encore " + count + " flotte(s) : transférez-les à un autre gestionnaire avant de clôturer son compte.",
+                HttpStatus.CONFLICT, "ADMN_022");
+    }
 }
+

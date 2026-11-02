@@ -24,6 +24,10 @@ public class FleetEntity implements Persistable<UUID> {
     @Column("manager_id")
     private UUID managerId;
 
+    /** Entreprise propriétaire (= administrateur, fleet.companies.id). */
+    @Column("company_id")
+    private UUID companyId;
+
     private String name;
 
     @Column("phone_number")

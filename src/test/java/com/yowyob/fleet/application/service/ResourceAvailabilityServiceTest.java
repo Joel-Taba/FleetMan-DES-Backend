@@ -9,12 +9,13 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.Trip
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.TripR2dbcRepository;
 import com.yowyob.fleet.domain.ports.out.ResourceLockPort;
 import com.yowyob.fleet.domain.exception.DriverException;
-import com.yowyob.fleet.domain.model.DriverDocument;
+import com.yowyob.fleet.domain.model.DocumentCatalog.TargetType;
+import com.yowyob.fleet.domain.model.DocumentRules;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.DocumentEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.VehicleTypeEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.VehicleLocalEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleTypeR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
-import com.yowyob.fleet.domain.ports.out.DocumentPersistencePort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,9 +44,10 @@ class ResourceAvailabilityServiceTest {
     @Mock AssignmentPersistencePort assignmentPort;
     @Mock AccessScopeService accessScope;
     @Mock ResourceLockPort resourceLock;
-    @Mock DocumentPersistencePort documentPort;
+    @Mock DocumentComplianceService documentCompliance;
     @Mock VehicleLocalR2dbcRepository vehicleRepository;
     @Mock VehicleTypeR2dbcRepository vehicleTypeRepository;
+    @Mock com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverAbsenceR2dbcRepository absenceRepository;
 
     private ResourceAvailabilityService service;
     private final UUID vehicle = UUID.randomUUID();
@@ -57,8 +59,11 @@ class ResourceAvailabilityServiceTest {
     @BeforeEach
     void setUp() {
         service = new ResourceAvailabilityService(tripRepository, assignmentPort, accessScope, resourceLock,
-                documentPort, vehicleRepository, vehicleTypeRepository);
+                documentCompliance, vehicleRepository, vehicleTypeRepository, absenceRepository, null);
         when(resourceLock.lock(any(), any())).thenReturn(Mono.empty());
+        when(documentCompliance.gaps(any(), any(), any())).thenReturn(Mono.just(java.util.List.of()));
+        when(documentCompliance.licensesInForce(any())).thenReturn(Flux.empty());
+        when(absenceRepository.findOverlapping(any(), any(), any())).thenReturn(Flux.empty());
         when(tripRepository.existsOverlappingTripForVehicle(any(), any(), any(), any(), any())).thenReturn(Mono.just(false));
         when(tripRepository.existsOverlappingTripForDriver(any(), any(), any(), any(), any())).thenReturn(Mono.just(false));
         when(tripRepository.findOverlappingTripsForResources(any(), any(), any(), any(), any(), any())).thenReturn(Flux.empty());
@@ -112,7 +117,7 @@ class ResourceAvailabilityServiceTest {
 
     @Test
     void inactiveOrFleetlessDriver_isNotEngageable() {
-        Driver inactive = new Driver(driver, fleet, "L1", "INACTIVE", null, null, null);
+        Driver inactive = new Driver(driver, fleet, "L1", "LEFT", null, null, null);
         Driver fleetless = new Driver(driver, null, "L1", "ACTIVE", null, null, null);
         StepVerifier.create(service.assertDriverEngageable(UUID.randomUUID(), inactive, TripException::driverInactive))
                 .expectError(TripException.class).verify();
@@ -121,9 +126,9 @@ class ResourceAvailabilityServiceTest {
     }
 
     private Assignment assignment(UUID vehicleId, UUID driverId) {
-        return new Assignment(UUID.randomUUID(), null, fleet, vehicleId, driverId, null,
+        return new Assignment(UUID.randomUUID(), null, fleet, vehicleId, driverId,
                 start.minusHours(1), end.plusHours(1), Assignment.Status.PENDING,
-                null, null, null, null, null, null);
+                null, null, null);
     }
 
     @Test
@@ -159,10 +164,14 @@ class ResourceAvailabilityServiceTest {
         when(vehicleTypeRepository.findById(typeId)).thenReturn(Mono.just(type));
     }
 
-    private DriverDocument license(UUID driverId, String categories, java.time.LocalDate expiry) {
-        return new DriverDocument(UUID.randomUUID(), driverId, DriverDocument.DocType.DRIVING_LICENSE,
-                "P-1", categories, "MINTRANS", null, expiry, null, null, null, null,
-                DriverDocument.Status.VALID, null, LocalDateTime.now(), LocalDateTime.now());
+    private DocumentEntity license(String categories, java.time.LocalDate expiry) {
+        DocumentEntity d = new DocumentEntity();
+        d.setDocType("DRIVING_LICENSE");
+        d.setReviewStatus("APPROVED");
+        d.setCurrent(true);
+        d.setLicenseCategories(categories);
+        d.setExpiryDate(expiry);
+        return d;
     }
 
     private void assertLicenseError(UUID driverId, UUID vehicleId, String code) {
@@ -179,7 +188,7 @@ class ResourceAvailabilityServiceTest {
     void license_missing_isRejected() {
         UUID driverId = UUID.randomUUID(), vehicleId = UUID.randomUUID();
         vehicleOfType(vehicleId, "B");
-        when(documentPort.findDriverDocsByDriverId(driverId)).thenReturn(Flux.empty());
+        when(documentCompliance.licensesInForce(driverId)).thenReturn(Flux.empty());
         assertLicenseError(driverId, vehicleId, "DRV_009");
     }
 
@@ -187,8 +196,8 @@ class ResourceAvailabilityServiceTest {
     void license_expiredBeforeSlotEnd_isRejected() {
         UUID driverId = UUID.randomUUID(), vehicleId = UUID.randomUUID();
         vehicleOfType(vehicleId, "B");
-        when(documentPort.findDriverDocsByDriverId(driverId))
-                .thenReturn(Flux.just(license(driverId, "B", java.time.LocalDate.of(2026, 11, 1))));
+        when(documentCompliance.licensesInForce(driverId))
+                .thenReturn(Flux.just(license("B", java.time.LocalDate.of(2026, 11, 1))));
         assertLicenseError(driverId, vehicleId, "DRV_010");
     }
 
@@ -196,8 +205,8 @@ class ResourceAvailabilityServiceTest {
     void license_withoutRequiredCategory_isRejected() {
         UUID driverId = UUID.randomUUID(), vehicleId = UUID.randomUUID();
         vehicleOfType(vehicleId, "C");
-        when(documentPort.findDriverDocsByDriverId(driverId))
-                .thenReturn(Flux.just(license(driverId, "B", null)));
+        when(documentCompliance.licensesInForce(driverId))
+                .thenReturn(Flux.just(license("B", null)));
         assertLicenseError(driverId, vehicleId, "DRV_011");
     }
 
@@ -205,11 +214,76 @@ class ResourceAvailabilityServiceTest {
     void license_validAndCoveringCategory_isAccepted() {
         UUID driverId = UUID.randomUUID(), vehicleId = UUID.randomUUID();
         vehicleOfType(vehicleId, "C");
-        when(documentPort.findDriverDocsByDriverId(driverId)).thenReturn(Flux.just(
-                license(driverId, "B", java.time.LocalDate.of(2020, 1, 1)),
-                license(driverId, "b; c", java.time.LocalDate.of(2030, 1, 1))));
+        when(documentCompliance.licensesInForce(driverId)).thenReturn(Flux.just(
+                license("B", java.time.LocalDate.of(2020, 1, 1)),
+                license("b; c", java.time.LocalDate.of(2030, 1, 1))));
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 8, 0);
         StepVerifier.create(service.assertDriverLicensed(driverId, vehicleId, start, start.plusHours(4)))
                 .verifyComplete();
+    }
+
+    // ── Équipage qualifié : absences et conformité du véhicule ───────────────
+
+    @Test
+    void vehicle_withoutInsurance_isNotCompliant() {
+        when(documentCompliance.gaps(TargetType.VEHICLE, vehicle, end.toLocalDate()))
+                .thenReturn(Mono.just(java.util.List.of(new DocumentRules.Gap("INSURANCE", true, null))));
+        StepVerifier.create(service.assertVehicleCompliant(vehicle, start, end))
+                .expectErrorSatisfies(e -> {
+                    assertEquals("VHC_013", ((com.yowyob.fleet.domain.exception.VehicleException) e).getBusinessCode());
+                    org.junit.jupiter.api.Assertions.assertTrue(e.getMessage().contains("assurance absente"));
+                })
+                .verify();
+    }
+
+    @Test
+    void vehicle_checkedAtSlotEnd() {
+        LocalDateTime slotEnd = LocalDateTime.of(2026, 11, 5, 18, 0);
+        when(documentCompliance.gaps(TargetType.VEHICLE, vehicle, slotEnd.toLocalDate())).thenReturn(Mono.just(java.util.List.of(
+                new DocumentRules.Gap("TECHNICAL_CONTROL", false, java.time.LocalDate.of(2026, 11, 3)))));
+        StepVerifier.create(service.assertVehicleCompliant(vehicle, start, slotEnd))
+                .expectErrorSatisfies(e -> org.junit.jupiter.api.Assertions.assertTrue(
+                        e.getMessage().contains("visite technique expirée le 2026-11-03")))
+                .verify();
+    }
+
+    @Test
+    void vehicle_withoutGap_isCompliant() {
+        StepVerifier.create(service.assertVehicleCompliant(vehicle, start, end)).verifyComplete();
+    }
+
+    @Test
+    void driver_missingPieceRequiredByCompany_isRejected_licenseHandledSeparately() {
+        UUID driverId = UUID.randomUUID();
+        when(documentCompliance.gaps(TargetType.DRIVER, driverId, end.toLocalDate())).thenReturn(Mono.just(java.util.List.of(
+                new DocumentRules.Gap("DRIVING_LICENSE", true, null),
+                new DocumentRules.Gap("MEDICAL_CERT", true, null))));
+        StepVerifier.create(service.assertDriverFileCompliant(driverId, start, end))
+                .expectErrorSatisfies(e -> {
+                    assertEquals("DRV_021", ((DriverException) e).getBusinessCode());
+                    org.junit.jupiter.api.Assertions.assertTrue(e.getMessage().contains("visite médicale"));
+                    org.junit.jupiter.api.Assertions.assertFalse(e.getMessage().contains("permis"));
+                })
+                .verify();
+    }
+
+    @Test
+    void driver_onLeaveDuringSlot_isRejected() {
+        var leave = new com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.DriverAbsenceEntity(
+                UUID.randomUUID(), driver, "LEAVE", java.time.LocalDate.of(2026, 11, 1), java.time.LocalDate.of(2026, 11, 15),
+                null, null, null, null, null, false);
+        when(absenceRepository.findOverlapping(eq(driver), eq(java.time.LocalDate.of(2026, 11, 2)), eq(java.time.LocalDate.of(2026, 11, 2))))
+                .thenReturn(Flux.just(leave));
+        StepVerifier.create(service.assertDriverPresent(driver, start, end))
+                .expectErrorSatisfies(e -> {
+                    assertEquals("DRV_012", ((DriverException) e).getBusinessCode());
+                    org.junit.jupiter.api.Assertions.assertTrue(e.getMessage().contains("en congé du 2026-11-01 au 2026-11-15"));
+                })
+                .verify();
+    }
+
+    @Test
+    void driver_withoutAbsence_isPresent() {
+        StepVerifier.create(service.assertDriverPresent(driver, start, end)).verifyComplete();
     }
 }

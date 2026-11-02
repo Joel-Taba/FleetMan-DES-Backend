@@ -17,6 +17,7 @@ public class FleetManagerPersistenceAdapter implements FleetManagerPersistencePo
 
     private final FleetManagerR2dbcRepository repository;
     private final PlatformAdminR2dbcRepository platformAdminRepo;
+    private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.CompanyR2dbcRepository companyRepo;
 
     @Override
     public Mono<Void> createProfile(UUID userId, String companyName, UUID createdByAdminId) {
@@ -61,8 +62,11 @@ public class FleetManagerPersistenceAdapter implements FleetManagerPersistencePo
     }
 
     @Override
+    /** Nom de l'entreprise de l'utilisateur (admin ou gestionnaire). */
     public Mono<String> getCompanyName(UUID userId) {
-        return repository.findById(userId)
-                .map(entity -> entity.getCompanyName() != null ? entity.getCompanyName() : "");
+        return companyRepo.findForUser(userId)
+                .map(c -> c.getName() != null ? c.getName() : "")
+                .switchIfEmpty(repository.findById(userId)
+                        .map(entity -> entity.getCompanyName() != null ? entity.getCompanyName() : ""));
     }
 }

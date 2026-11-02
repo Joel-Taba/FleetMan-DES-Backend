@@ -20,6 +20,12 @@ public class SubscriptionPlan {
     private boolean isActive;
     private Instant createdAt;
     private Instant updatedAt;
+    /** Ordre d'affichage (croissant) dans le catalogue. */
+    private int sortOrder;
+    /** Plan mis en avant (« recommandé ») sur les pages de choix. */
+    private boolean recommended;
+    /** Clés des fonctionnalités activées (source de vérité : fleet.plan_features). */
+    private java.util.List<String> includedFeatures = java.util.List.of();
 
     public SubscriptionPlan(UUID id, String name, String description,
                             int maxFleets, int maxVehicles, int maxDrivers,
@@ -57,4 +63,15 @@ public class SubscriptionPlan {
     public void setAnnualPrice(BigDecimal annualPrice) { this.annualPrice = annualPrice; }
     public void setFeatures(String features) { this.features = features; }
     public void setActive(boolean active) { isActive = active; }
+
+    public int getSortOrder() { return sortOrder; }
+    public void setSortOrder(int sortOrder) { this.sortOrder = sortOrder; }
+    public boolean isRecommended() { return recommended; }
+    public void setRecommended(boolean recommended) { this.recommended = recommended; }
+    public java.util.List<String> getIncludedFeatures() { return includedFeatures; }
+    public void setIncludedFeatures(java.util.List<String> includedFeatures) { this.includedFeatures = includedFeatures; }
+
+    /** Plan gratuit : aucun paiement, abonnement sans date de fin. */
+    @JsonProperty("free")
+    public boolean isFree() { return monthlyPrice == null || monthlyPrice.signum() == 0; }
 }

@@ -62,7 +62,23 @@ public record ExpenseResponse(
         String driverFullName,
 
         @Schema(description = "Date de création")
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+
+        @Schema(description = "Auteur de la saisie (personne ne valide sa propre dépense)")
+        UUID createdBy,
+
+        @Schema(description = "Niveau de validation exigé : MANAGER ou ADMIN")
+        String approvalLevel,
+
+        @Schema(description = "La dépense fait (ou ferait) dépasser un budget du mois")
+        boolean overBudget,
+
+        @Schema(description = "Justificatif (exigé pour approuver une dépense manuelle)")
+        String receiptUrl,
+
+        String receiptName,
+
+        String receiptMime
 ) {
 
     /**
@@ -87,7 +103,13 @@ public record ExpenseResponse(
                 e.getManagerId(),
                 e.getDriverId(),
                 e.getDriverFullName(),
-                e.getCreatedAt()
+                e.getCreatedAt(),
+                e.getCreatedBy(),
+                e.getApprovalLevel() != null ? e.getApprovalLevel().name() : "MANAGER",
+                e.isOverBudget(),
+                e.getReceiptUrl(),
+                e.getReceiptName(),
+                e.getReceiptMime()
         );
     }
 }

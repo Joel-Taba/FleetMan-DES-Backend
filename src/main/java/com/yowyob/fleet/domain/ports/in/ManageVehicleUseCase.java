@@ -22,6 +22,9 @@ public interface ManageVehicleUseCase {
     Mono<Vehicle> updateMaintenanceParameters(UUID vehicleId, VehicleParameters.Maintenance params, String token);
     Mono<Void> removeVehicle(UUID vehicleId, String token);
 
+    /** Sortie définitive du parc (vente, réforme, vol…) : historique conservé, place du plan libérée. */
+    Mono<Vehicle> retireVehicle(UUID vehicleId, com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.VehicleRetireRequest request);
+
     default Flux<Vehicle> getVehicles(UUID requesterId, boolean isAdmin, String token, UUID fleetId) {
         Flux<Vehicle> base = getVehicles(requesterId, isAdmin, token);
         if (fleetId == null) return base;

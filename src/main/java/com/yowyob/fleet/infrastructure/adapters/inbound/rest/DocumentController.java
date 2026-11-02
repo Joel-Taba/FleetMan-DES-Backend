@@ -1,271 +1,209 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
-import com.yowyob.fleet.domain.ports.in.ManageDocumentUseCase;
+import com.yowyob.fleet.application.service.DocumentService;
+import com.yowyob.fleet.domain.model.DocumentCatalog.TargetType;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
-import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.*;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DocumentResponse;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.UUID;
-
+/**
+ * Dossiers documentaires des véhicules, chauffeurs et gestionnaires. Les droits fins (qui lit,
+ * dépose, contrôle) sont dans DocumentAccessService.
+ */
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
+@Tag(name = "17. Documents")
 public class DocumentController {
 
-    private final ManageDocumentUseCase documentUseCase;
-    private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
+    private static final String KIND = "{kind:vehicles|drivers|managers}";
+    private static final String ANY_ROLE = "hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')";
+    private static final String STAFF = "hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')";
 
-    private UUID getUserId(Authentication auth) {
+    private final DocumentService documents;
+
+    public record DocumentRequest(
+            String docType, String docNumber, String licenseCategories, String issuer, LocalDate issueDate,
+            LocalDate expiryDate, String fileUrl, String fileOriginalName, String fileMimeType, Long fileSizeBytes,
+            UUID kernelFileId, String notes) {
+
+        DocumentService.SubmitCommand toCommand() {
+            return new DocumentService.SubmitCommand(docType, docNumber, licenseCategories, issuer, issueDate, expiryDate,
+                    fileUrl, fileOriginalName, fileMimeType, fileSizeBytes, kernelFileId, notes);
+        }
+    }
+
+    public record ApproveRequest(LocalDate expiryDate, String licenseCategories, String notes) {
+    }
+
+    public record RejectRequest(@NotBlank(message = "Indiquez le motif du rejet.") String reason) {
+    }
+
+    public record PolicyRequest(@NotNull Boolean mandatory) {
+    }
+
+    private static UUID userId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // TAG 17 — DOCUMENTS VÉHICULES
-    // ═══════════════════════════════════════════════════════════════════════
+    private static TargetType targetType(String kind) {
+        return switch (kind) {
+            case "vehicles" -> TargetType.VEHICLE;
+            case "drivers" -> TargetType.DRIVER;
+            default -> TargetType.MANAGER;
+        };
+    }
 
-    @Tag(name = "17. Documents | Véhicules")
-    @PostMapping("/vehicles/{vehicleId}/documents")
+    // ── Dossier d'une cible ──────────────────────────────────────────────────
+
+    @PostMapping("/" + KIND + "/{targetId}/documents")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Ajouter un document à un véhicule",
-               description = "Enregistre un document légal (assurance, carte grise, visite technique...). "
-                       + "Le statut est calculé automatiquement selon la date d'expiration.")
-    public Mono<VehicleDocumentResponse> addVehicleDoc(
-            @PathVariable UUID vehicleId,
-            @Valid @RequestBody VehicleDocumentRequest request,
-            Authentication auth) {
-
-        ManageDocumentUseCase.AddVehicleDocumentCommand cmd =
-                new ManageDocumentUseCase.AddVehicleDocumentCommand(
-                        vehicleId, request.docType(), request.docNumber(),
-                        request.issuer(), request.issueDate(), request.expiryDate(),
-                        request.fileUrl(), request.fileOriginalName(),
-                        request.fileMimeType(), request.fileSizeBytes(),
-                        request.notes()
-                );
-        return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
-                .then(documentUseCase.addVehicleDocument(cmd).map(VehicleDocumentResponse::from));
+    @PreAuthorize(ANY_ROLE)
+    @Operation(summary = "Déposer une pièce (nouvelle ou renouvellement)",
+               description = "Le fichier est obligatoire. La pièce reste en attente jusqu'au contrôle ; "
+                       + "la version précédente reste en vigueur jusqu'à l'approbation.")
+    public Mono<DocumentResponse> submit(@PathVariable String kind, @PathVariable UUID targetId,
+                                         @RequestBody DocumentRequest request, Authentication auth) {
+        return documents.submit(userId(auth), targetType(kind), targetId, request.toCommand()).map(DocumentResponse::from);
     }
 
-    @Tag(name = "17. Documents | Véhicules")
-    @GetMapping("/vehicles/{vehicleId}/documents")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Documents d'un véhicule",
-               description = "Retourne tous les documents légaux d'un véhicule.")
-    public Mono<PageResponse<VehicleDocumentResponse>> getVehicleDocs(
-            @PathVariable UUID vehicleId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            Authentication auth) {
-
-        return PageResponse.of(
-                resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
-                        .thenMany(documentUseCase.getVehicleDocuments(vehicleId))
-                        .map(VehicleDocumentResponse::from),
-                page, size
-        );
+    @GetMapping("/" + KIND + "/{targetId}/documents")
+    @PreAuthorize(ANY_ROLE)
+    @Operation(summary = "Dossier en cours (ni archivé, ni remplacé)")
+    public Mono<PageResponse<DocumentResponse>> list(@PathVariable String kind, @PathVariable UUID targetId, Authentication auth,
+                                                     @RequestParam(defaultValue = "0") int page,
+                                                     @RequestParam(defaultValue = "50") int size) {
+        return PageResponse.of(documents.listActive(userId(auth), targetType(kind), targetId).map(DocumentResponse::from), page, size);
     }
 
-    @Tag(name = "17. Documents | Véhicules")
-    @GetMapping("/vehicles/{vehicleId}/documents/{docId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Détail d'un document véhicule")
-    public Mono<VehicleDocumentResponse> getVehicleDocById(
-            @PathVariable UUID vehicleId,
-            @PathVariable UUID docId,
-            Authentication auth) {
-        return resourceAccess.assertVehicleDocumentAccess(getUserId(auth), docId)
-                .then(documentUseCase.getVehicleDocById(docId).map(VehicleDocumentResponse::from));
+    @GetMapping("/" + KIND + "/{targetId}/documents/history")
+    @PreAuthorize(ANY_ROLE)
+    @Operation(summary = "Toutes les versions, archives comprises")
+    public Flux<DocumentResponse> history(@PathVariable String kind, @PathVariable UUID targetId, Authentication auth) {
+        return documents.history(userId(auth), targetType(kind), targetId).map(DocumentResponse::from);
     }
 
-    @Tag(name = "17. Documents | Véhicules")
-    @PutMapping("/vehicles/{vehicleId}/documents/{docId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Mettre à jour un document véhicule",
-               description = "Met à jour le fichier, le statut ou les notes d'un document.")
-    public Mono<VehicleDocumentResponse> updateVehicleDoc(
-            @PathVariable UUID vehicleId,
-            @PathVariable UUID docId,
-            @RequestBody VehicleDocumentRequest request,
-            Authentication auth) {
-
-        ManageDocumentUseCase.UpdateVehicleDocumentCommand cmd =
-                new ManageDocumentUseCase.UpdateVehicleDocumentCommand(
-                        docId, request.docNumber(), request.issuer(),
-                        request.issueDate(), request.expiryDate(),
-                        request.fileUrl(), request.fileOriginalName(),
-                        request.fileMimeType(), request.fileSizeBytes(),
-                        null, request.notes()
-                );
-        return resourceAccess.assertVehicleDocumentAccess(getUserId(auth), docId)
-                .then(documentUseCase.updateVehicleDocument(cmd).map(VehicleDocumentResponse::from));
+    @GetMapping("/" + KIND + "/{targetId}/documents/checklist")
+    @PreAuthorize(ANY_ROLE)
+    @Operation(summary = "Checklist : état de chaque pièce, obligatoire ou non")
+    public Flux<DocumentService.ChecklistItem> checklist(@PathVariable String kind, @PathVariable UUID targetId, Authentication auth) {
+        return documents.checklist(userId(auth), targetType(kind), targetId);
     }
 
-    @Tag(name = "17. Documents | Véhicules")
-    @DeleteMapping("/vehicles/{vehicleId}/documents/{docId}")
+    // ── Une pièce ────────────────────────────────────────────────────────────
+
+    @GetMapping("/documents/{id:[0-9a-fA-F-]{36}}")
+    @PreAuthorize(ANY_ROLE)
+    public Mono<DocumentResponse> get(@PathVariable UUID id, Authentication auth) {
+        return documents.getById(userId(auth), id).map(DocumentResponse::from);
+    }
+
+    @PutMapping("/documents/{id:[0-9a-fA-F-]{36}}")
+    @PreAuthorize(ANY_ROLE)
+    @Operation(summary = "Corriger une pièce encore en attente de contrôle")
+    public Mono<DocumentResponse> update(@PathVariable UUID id, @RequestBody DocumentRequest request, Authentication auth) {
+        return documents.update(userId(auth), id, request.toCommand()).map(DocumentResponse::from);
+    }
+
+    @PostMapping("/documents/{id:[0-9a-fA-F-]{36}}/approve")
+    @PreAuthorize(STAFF)
+    @Operation(summary = "Approuver une pièce", description = "Elle entre en vigueur et remplace la version précédente. "
+            + "Le contrôleur peut corriger l'échéance et les catégories lues sur la pièce.")
+    public Mono<DocumentResponse> approve(@PathVariable UUID id, @RequestBody(required = false) ApproveRequest request, Authentication auth) {
+        DocumentService.ApproveCommand cmd = request != null
+                ? new DocumentService.ApproveCommand(request.expiryDate(), request.licenseCategories(), request.notes())
+                : null;
+        return documents.approve(userId(auth), id, cmd).map(DocumentResponse::from);
+    }
+
+    @PostMapping("/documents/{id:[0-9a-fA-F-]{36}}/reject")
+    @PreAuthorize(STAFF)
+    @Operation(summary = "Rejeter une pièce avec un motif")
+    public Mono<DocumentResponse> reject(@PathVariable UUID id, @Valid @RequestBody RejectRequest request, Authentication auth) {
+        return documents.reject(userId(auth), id, request.reason()).map(DocumentResponse::from);
+    }
+
+    @DeleteMapping("/documents/{id:[0-9a-fA-F-]{36}}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Supprimer un document véhicule")
-    public Mono<Void> deleteVehicleDoc(
-            @PathVariable UUID vehicleId,
-            @PathVariable UUID docId,
-            Authentication auth) {
-        return resourceAccess.assertVehicleDocumentAccess(getUserId(auth), docId)
-                .then(documentUseCase.deleteVehicleDocument(docId));
+    @PreAuthorize(ANY_ROLE)
+    @Operation(summary = "Retirer une pièce du dossier (archivage, jamais d'effacement)",
+               description = "Le motif est obligatoire sauf pour retirer son propre dépôt en attente.")
+    public Mono<Void> archive(@PathVariable UUID id, @RequestParam(required = false) String reason, Authentication auth) {
+        return documents.archive(userId(auth), id, reason);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // TAG 18 — DOCUMENTS CONDUCTEURS
-    // ═══════════════════════════════════════════════════════════════════════
+    // ── Vues transversales ───────────────────────────────────────────────────
 
-    @Tag(name = "18. Documents | Conducteurs")
-    @PostMapping("/drivers/{driverId}/documents")
-    @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Ajouter un document à un conducteur",
-               description = "Enregistre un document légal (permis, visite médicale, carte pro...).")
-    public Mono<DriverDocumentResponse> addDriverDoc(
-            @PathVariable UUID driverId,
-            @Valid @RequestBody DriverDocumentRequest request,
-            Authentication auth) {
-
-        ManageDocumentUseCase.AddDriverDocumentCommand cmd =
-                new ManageDocumentUseCase.AddDriverDocumentCommand(
-                        driverId, request.docType(), request.docNumber(),
-                        request.licenseCategories(), request.issuer(),
-                        request.issueDate(), request.expiryDate(),
-                        request.fileUrl(), request.fileOriginalName(),
-                        request.fileMimeType(), request.fileSizeBytes(),
-                        request.notes()
-                );
-        return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
-                .then(documentUseCase.addDriverDocument(cmd).map(DriverDocumentResponse::from));
+    @GetMapping("/documents/pending")
+    @PreAuthorize(STAFF)
+    @Operation(summary = "File des pièces à contrôler")
+    public Flux<DocumentResponse> pending(Authentication auth) {
+        return documents.pending(userId(auth)).map(e -> DocumentResponse.from(e.getKey()).withTargetName(e.getValue()));
     }
 
-    @Tag(name = "18. Documents | Conducteurs")
-    @GetMapping("/drivers/{driverId}/documents")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Documents d'un conducteur")
-    public Mono<PageResponse<DriverDocumentResponse>> getDriverDocs(
-            @PathVariable UUID driverId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            Authentication auth) {
-
-        return PageResponse.of(
-                resourceAccess.assertDriverAccess(getUserId(auth), driverId)
-                        .thenMany(documentUseCase.getDriverDocuments(driverId))
-                        .map(DriverDocumentResponse::from),
-                page, size
-        );
-    }
-
-    @Tag(name = "18. Documents | Conducteurs")
-    @GetMapping("/drivers/{driverId}/documents/{docId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Détail d'un document conducteur")
-    public Mono<DriverDocumentResponse> getDriverDocById(
-            @PathVariable UUID driverId,
-            @PathVariable UUID docId,
-            Authentication auth) {
-        return resourceAccess.assertDriverDocumentAccess(getUserId(auth), docId)
-                .then(documentUseCase.getDriverDocById(docId).map(DriverDocumentResponse::from));
-    }
-
-    @Tag(name = "18. Documents | Conducteurs")
-    @PutMapping("/drivers/{driverId}/documents/{docId}")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Mettre à jour un document conducteur")
-    public Mono<DriverDocumentResponse> updateDriverDoc(
-            @PathVariable UUID driverId,
-            @PathVariable UUID docId,
-            @RequestBody DriverDocumentRequest request,
-            Authentication auth) {
-
-        ManageDocumentUseCase.UpdateDriverDocumentCommand cmd =
-                new ManageDocumentUseCase.UpdateDriverDocumentCommand(
-                        docId, request.docNumber(), request.licenseCategories(),
-                        request.issuer(), request.issueDate(), request.expiryDate(),
-                        request.fileUrl(), request.fileOriginalName(),
-                        request.fileMimeType(), request.fileSizeBytes(),
-                        null, request.notes()
-                );
-        return resourceAccess.assertDriverDocumentAccess(getUserId(auth), docId)
-                .then(documentUseCase.updateDriverDocument(cmd).map(DriverDocumentResponse::from));
-    }
-
-    @Tag(name = "18. Documents | Conducteurs")
-    @DeleteMapping("/drivers/{driverId}/documents/{docId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Supprimer un document conducteur")
-    public Mono<Void> deleteDriverDoc(
-            @PathVariable UUID driverId,
-            @PathVariable UUID docId,
-            Authentication auth) {
-        return resourceAccess.assertDriverDocumentAccess(getUserId(auth), docId)
-                .then(documentUseCase.deleteDriverDocument(docId));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // TAG 19 — CONFORMITÉ DOCUMENTAIRE (vues transversales)
-    // ═══════════════════════════════════════════════════════════════════════
-
-    @Tag(name = "19. Documents | Conformité")
     @GetMapping("/documents/expiring")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Documents expirant bientôt",
-               description = "Retourne tous les documents (véhicules + conducteurs) "
-                       + "expirant dans les N prochains jours. Défaut : 30 jours.")
-    public Mono<PageResponse<ManageDocumentUseCase.ExpiringDocumentDto>> getExpiring(
-            Authentication auth,
-            @Parameter(description = "Nombre de jours", example = "30")
-            @RequestParam(defaultValue = "30") int withinDays,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
-
-        return PageResponse.of(
-                documentUseCase.getExpiringDocuments(getUserId(auth), withinDays),
-                page, size
-        );
+    @PreAuthorize(STAFF)
+    public Mono<PageResponse<DocumentService.TargetDocument>> expiring(Authentication auth,
+                                                                       @RequestParam(defaultValue = "30") int withinDays,
+                                                                       @RequestParam(defaultValue = "0") int page,
+                                                                       @RequestParam(defaultValue = "50") int size) {
+        return PageResponse.of(documents.expiring(userId(auth), withinDays), page, size);
     }
 
-    @Tag(name = "19. Documents | Conformité")
     @GetMapping("/documents/expired")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Documents expirés",
-               description = "Retourne tous les documents expirés. Action immédiate requise.")
-    public Mono<PageResponse<ManageDocumentUseCase.ExpiringDocumentDto>> getExpired(
-            Authentication auth,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
-
-        return PageResponse.of(
-                documentUseCase.getExpiredDocuments(getUserId(auth)),
-                page, size
-        );
+    @PreAuthorize(STAFF)
+    public Mono<PageResponse<DocumentService.TargetDocument>> expired(Authentication auth,
+                                                                      @RequestParam(defaultValue = "0") int page,
+                                                                      @RequestParam(defaultValue = "50") int size) {
+        return PageResponse.of(documents.expired(userId(auth)), page, size);
     }
 
-    @Tag(name = "19. Documents | Conformité")
+    @GetMapping("/documents/missing")
+    @PreAuthorize(STAFF)
+    @Operation(summary = "Pièces exigées absentes, en attente ou rejetées, par véhicule ou personne")
+    public Flux<DocumentService.MissingPiece> missing(Authentication auth) {
+        return documents.missing(userId(auth));
+    }
+
     @GetMapping("/documents/compliance-report")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Rapport de conformité documentaire",
-               description = "Calcule le taux de conformité documentaire de la flotte : "
-                       + "nombre de documents valides / total. "
-                       + "Un taux < 80% indique un risque légal élevé.")
-    public Mono<ManageDocumentUseCase.ComplianceReportDto> getComplianceReport(
-            Authentication auth) {
-        return documentUseCase.getComplianceReport(getUserId(auth));
+    @PreAuthorize(STAFF)
+    @Operation(summary = "Taux de conformité calculé sur les pièces exigées")
+    public Mono<DocumentService.ComplianceReport> report(Authentication auth) {
+        return documents.report(userId(auth));
+    }
+
+    // ── Catalogue et politique de l'entreprise ───────────────────────────────
+
+    @GetMapping("/documents/catalog")
+    @PreAuthorize(ANY_ROLE)
+    @Operation(summary = "Pièces connues et celles qu'exige l'entreprise")
+    public Mono<List<DocumentService.CatalogEntry>> catalog(Authentication auth) {
+        return documents.catalog(userId(auth)).collectList();
+    }
+
+    @PutMapping("/documents/policies/{targetType}/{docType}")
+    @PreAuthorize("hasRole('FLEET_ADMIN')")
+    @Operation(summary = "Rendre une pièce obligatoire ou non pour l'entreprise (administrateur)")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public Mono<Void> setPolicy(@PathVariable TargetType targetType, @PathVariable String docType,
+                                @Valid @RequestBody PolicyRequest request, Authentication auth) {
+        return documents.setPolicy(userId(auth), targetType, docType, request.mandatory());
     }
 }

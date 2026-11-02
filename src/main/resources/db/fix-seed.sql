@@ -92,12 +92,7 @@ ON CONFLICT (id) DO NOTHING;
 -- ═══════════════════════════════════════════════════════════════
 -- 5. Documents manquants (véhicules c4, c5, c6)
 -- ═══════════════════════════════════════════════════════════════
-INSERT INTO fleet.vehicle_documents (id, vehicle_id, doc_type, doc_number, issuer, issue_date, expiry_date, status, notes) VALUES
-  ('f2000005-0000-4000-8000-000000000005', 'c0000004-0000-4000-8000-000000000004', 'REGISTRATION',      'CE-REG-4411',   'DGTCFM',                  '2023-02-01', '2028-02-01', 'VALID',         NULL),
-  ('f2000007-0000-4000-8000-000000000007', 'c0000005-0000-4000-8000-000000000005', 'INSURANCE',         'ASS-2025-0099', 'Activa Insurance',        '2025-03-10', '2027-03-10', 'VALID',         NULL),
-  ('f2000008-0000-4000-8000-000000000008', 'c0000006-0000-4000-8000-000000000006', 'TRANSPORT_PERMIT',  'TP-2024-0441',  'MINT Cameroun',           '2024-01-01', '2026-05-10', 'EXPIRED',       'Permis de transport expiré !'),
-  ('f2000009-0000-4000-8000-000000000009', 'c0000002-0000-4000-8000-000000000002', 'TAX_STICKER',       'VS-2026-CE456', 'DGI Douala',              '2026-01-01', '2026-12-31', 'VALID',         NULL)
-ON CONFLICT (id) DO NOTHING;
+-- (retiré : les documents passent par le dépôt et le contrôle, migration 059)
 
 -- ═══════════════════════════════════════════════════════════════
 -- 6. Dépenses manquantes
@@ -213,7 +208,6 @@ SELECT table_name, count FROM (
   SELECT 'maintenances',                    count(*)           FROM fleet.maintenances       UNION ALL
   SELECT 'incidents',                       count(*)           FROM fleet.incidents          UNION ALL
   SELECT 'fuel_recharges',                  count(*)           FROM fleet.fuel_recharges     UNION ALL
-  SELECT 'vehicle_documents',               count(*)           FROM fleet.vehicle_documents  UNION ALL
   SELECT 'expenses',                        count(*)           FROM fleet.expenses           UNION ALL
   SELECT 'maintenance_plans',               count(*)           FROM fleet.maintenance_plans  UNION ALL
   SELECT 'maintenance_alerts',              count(*)           FROM fleet.maintenance_alerts UNION ALL

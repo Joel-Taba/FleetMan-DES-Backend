@@ -38,9 +38,9 @@ public interface ManageTripUseCase {
         BigDecimal departureKmIndex,
         BigDecimal departureFuelIndex,
         String missionObject,
-        BigDecimal missionCost,
-        String missionCostCurrency,
-        String rateType,
+        String destinationLocation,
+        BigDecimal destinationLat,
+        BigDecimal destinationLng,
         LocalDateTime scheduledReturnDatetime,
         List<TripDetailInput> details
     ) {}
@@ -57,11 +57,15 @@ public interface ManageTripUseCase {
         BigDecimal departureKmIndex,
         BigDecimal departureFuelIndex,
         String missionObject,
-        BigDecimal missionCost,
-        String missionCostCurrency
+        String destinationLocation,
+        BigDecimal destinationLat,
+        BigDecimal destinationLng
     ) {}
 
+    /** ADD : chargement ajouté en route ; REMOVE : chargement non livré / refusé (detailId requis). */
     record MissionSubmissionInput(
+        String changeType,
+        UUID detailId,
         String itemType,
         String description,
         Integer quantity,
@@ -89,7 +93,10 @@ public interface ManageTripUseCase {
     Mono<Trip> createTrip(CreateTripCommand command);
 
     /** Lance effectivement un trajet planifié (SCHEDULED → DEPARTED). */
-    Mono<Trip> startTrip(UUID tripId, UUID managerId);
+    Mono<Trip> startTrip(UUID tripId, StartTripCommand command, UUID managerId);
+
+    /** Relevés au départ réel (facultatifs : à défaut, ceux de la planification ou le compteur). */
+    record StartTripCommand(BigDecimal departureKmIndex, BigDecimal departureFuelIndex) {}
 
     /** Enregistre le retour d'un trajet à partir de son code (trajet dans le périmètre de l'acteur). */
     Mono<Trip> registerReturn(RegisterReturnCommand command, UUID actorId);
@@ -120,7 +127,19 @@ public interface ManageTripUseCase {
     Mono<Trip> approveMissionSubmission(UUID submissionId, UUID managerId);
 
     /** Rejette un complément conducteur. */
-    Mono<Void> rejectMissionSubmission(UUID submissionId, UUID managerId);
+    Mono<Void> rejectMissionSubmission(UUID submissionId, String reason, UUID managerId);
+
+    /** Compléments de chargement d'un trajet (en attente, validés, rejetés). */
+    reactor.core.publisher.Flux<com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.TripMissionSubmissionEntity> listSubmissions(UUID tripId, UUID actorId);
+
+    /** Arrivée à destination (livraison) : DEPARTED → ARRIVED, quantités livrées par ligne du manifeste. */
+    Mono<Trip> registerArrival(UUID tripId, ArrivalCommand command, UUID actorId);
+
+    /** arrivedAt : heure saisie sur place (synchronisation différée) ; à défaut, l'heure de réception. */
+    record ArrivalCommand(LocalDateTime arrivedAt, String arrivalLocation, BigDecimal arrivalLat, BigDecimal arrivalLng, String notes,
+                          List<DeliveredDetailInput> delivered) {}
+
+    record DeliveredDetailInput(UUID detailId, Integer deliveredQuantity) {}
 
     /** Annule un trajet avec un motif. */
     Mono<Trip> cancelTrip(UUID tripId, String reason, UUID managerId);

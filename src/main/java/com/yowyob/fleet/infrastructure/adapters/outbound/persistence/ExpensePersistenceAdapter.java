@@ -169,6 +169,11 @@ public class ExpensePersistenceAdapter implements ExpensePersistencePort {
         expense.setValidatedAt(e.getValidatedAt());
         expense.setValidatedBy(e.getValidatedBy());
         expense.setRejectionReason(e.getRejectionReason());
+        expense.setCreatedBy(e.getCreatedBy());
+        expense.setApprovalLevel(e.getApprovalLevel() != null
+                ? Expense.ApprovalLevel.valueOf(e.getApprovalLevel()) : Expense.ApprovalLevel.MANAGER);
+        expense.setOverBudget(e.isOverBudget());
+        expense.attachReceipt(e.getReceiptUrl(), e.getReceiptName(), e.getReceiptMime());
 
         return expense;
     }
@@ -193,6 +198,12 @@ public class ExpensePersistenceAdapter implements ExpensePersistencePort {
         entity.setFleetId(e.getFleetId());
         entity.setManagerId(e.getManagerId());
         entity.setDriverId(e.getDriverId());
+        entity.setCreatedBy(e.getCreatedBy());
+        entity.setApprovalLevel(e.getApprovalLevel() != null ? e.getApprovalLevel().name() : "MANAGER");
+        entity.setOverBudget(e.isOverBudget());
+        entity.setReceiptUrl(e.getReceiptUrl());
+        entity.setReceiptName(e.getReceiptName());
+        entity.setReceiptMime(e.getReceiptMime());
         entity.setDriverFullName(e.getDriverFullName());
         entity.setCreatedAt(e.getCreatedAt());
         return entity;

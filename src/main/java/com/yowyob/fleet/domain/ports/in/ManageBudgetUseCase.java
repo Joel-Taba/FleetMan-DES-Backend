@@ -19,7 +19,7 @@ public interface ManageBudgetUseCase {
     record CreateBudgetCommand(
             Budget.BudgetScope scope,
             UUID entityId,          // fleetId ou vehicleId selon scope
-            UUID managerId,
+            UUID managerId,         // Acteur (admin pour une enveloppe de flotte, gestionnaire ou admin pour un véhicule)
             LocalDate budgetMonth,  // Normalisé au 1er du mois
             BigDecimal amount,
             String notes            // Optionnel
@@ -72,12 +72,22 @@ public interface ManageBudgetUseCase {
     /**
      * Met à jour le plafond ou les notes d'un budget existant.
      */
-    Mono<Budget> update(UpdateBudgetCommand command);
+    Mono<Budget> update(UpdateBudgetCommand command, UUID actorId);
 
     /**
      * Supprime un budget.
      */
-    Mono<Void> delete(UUID id);
+    Mono<Void> delete(UUID id, UUID actorId);
+
+    /** Budgets de toutes les flottes et véhicules de l'entreprise pour un mois (vue administrateur). */
+    Flux<Budget> getAllByCompany(UUID companyId, LocalDate month);
+
+    /**
+     * Crée l'enveloppe du mois en cours d'une flotte depuis son enveloppe récurrente
+     * (fleets.monthly_budget) si elle n'existe pas encore, ou l'aligne si elle n'a pas été
+     * personnalisée. Appelée à la modification de l'enveloppe et chaque début de mois.
+     */
+    Mono<Void> ensureFleetEnvelope(UUID fleetId);
 
     // ── Use Cases — Recalcul ──────────────────────────────────────────────────
 

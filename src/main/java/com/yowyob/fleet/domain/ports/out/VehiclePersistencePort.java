@@ -43,4 +43,8 @@ public interface VehiclePersistencePort {
      * Updates the photo URLs for a vehicle.
      */
     Mono<Void> updateVehiclePhotos(UUID vehicleId, String photoUrl, String vinPhotoUrl, String regPhotoUrl);
+
+    /** Change le statut avec son motif (et, pour RETIRED, les informations de sortie du parc). */
+    Mono<Vehicle> updateLifecycle(UUID id, String status, String statusReason, java.time.LocalDate retiredAt,
+                                  String retirementType, String retirementReason, java.math.BigDecimal salePrice);
 }

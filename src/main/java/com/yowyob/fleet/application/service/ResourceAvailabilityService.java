@@ -8,9 +8,9 @@ import com.yowyob.fleet.domain.ports.out.AssignmentPersistencePort;
 import com.yowyob.fleet.domain.ports.out.DriverPersistencePort;
 import com.yowyob.fleet.domain.ports.out.ResourceLockPort;
 import com.yowyob.fleet.domain.exception.DriverException;
-import com.yowyob.fleet.domain.model.DriverDocument;
+import com.yowyob.fleet.domain.model.DocumentCatalog;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.DocumentEntity;
 import com.yowyob.fleet.domain.model.DrivingLicenseRules;
-import com.yowyob.fleet.domain.ports.out.DocumentPersistencePort;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.VehicleTypeEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleLocalR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.VehicleTypeR2dbcRepository;
@@ -52,9 +52,11 @@ public class ResourceAvailabilityService {
     private final AssignmentPersistencePort assignmentPort;
     private final AccessScopeService accessScope;
     private final ResourceLockPort resourceLock;
-    private final DocumentPersistencePort documentPort;
+    private final DocumentComplianceService documentCompliance;
     private final VehicleLocalR2dbcRepository vehicleRepository;
     private final VehicleTypeR2dbcRepository vehicleTypeRepository;
+    private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverAbsenceR2dbcRepository absenceRepository;
+    private final org.springframework.r2dbc.core.DatabaseClient db;
 
     public static LocalDateTime slotStart(LocalDate date, LocalTime time) {
         return LocalDateTime.of(date, time != null ? time : LocalTime.MIDNIGHT);
@@ -125,6 +127,83 @@ public class ResourceAvailabilityService {
         return lock.then(vehicleAssignments).then(driverAssignments).then(crossTrips);
     }
 
+    // ── Flotte opérationnelle ────────────────────────────────────────────────
+
+    /**
+     * Une flotte dont le gestionnaire est suspendu (ou clôturé) est gelée : aucun nouveau trajet,
+     * départ ni affectation tant que l'administrateur ne l'a pas réactivé ou n'a pas transféré la
+     * flotte. Les trajets déjà partis peuvent se terminer (retour non concerné).
+     */
+    public Mono<Void> assertFleetOperable(UUID fleetId) {
+        if (fleetId == null) {
+            return Mono.empty();
+        }
+        return db.sql("""
+                        SELECT f.name, fm.account_status
+                        FROM fleet.fleets f LEFT JOIN fleet.fleet_managers fm ON fm.user_id = f.manager_id
+                        WHERE f.id = :f
+                        """)
+                .bind("f", fleetId)
+                .fetch().one()
+                .flatMap(row -> {
+                    Object status = row.get("account_status");
+                    return status == null || "ACTIVE".equals(status.toString())
+                            ? Mono.<Void>empty()
+                            : Mono.<Void>error(com.yowyob.fleet.domain.exception.FleetException.frozen(
+                                    String.valueOf(row.get("name"))));
+                });
+    }
+
+    // ── Équipage qualifié ────────────────────────────────────────────────────
+
+    /**
+     * Le binôme peut-il partir sur ce créneau ? Chauffeur présent (ni congé, ni arrêt, ni
+     * suspension sur ces jours), permis valide couvrant la catégorie du véhicule, et véhicule
+     * en règle (assurance, visite technique, carte grise valides jusqu'à la fin du créneau).
+     */
+    public Mono<Void> assertCrewQualified(UUID driverId, UUID vehicleId,
+                                          LocalDateTime start, LocalDateTime end) {
+        return assertDriverPresent(driverId, start, end)
+                .then(assertDriverLicensed(driverId, vehicleId, start, end))
+                .then(assertDriverFileCompliant(driverId, start, end))
+                .then(assertVehicleCompliant(vehicleId, start, end));
+    }
+
+    /** Aucune absence (congé, arrêt maladie, suspension) sur les jours du créneau. */
+    public Mono<Void> assertDriverPresent(UUID driverId, LocalDateTime start, LocalDateTime end) {
+        java.time.LocalDate from = start.toLocalDate();
+        java.time.LocalDate to = (end == null || OPEN_END.equals(end) ? start : end).toLocalDate();
+        return absenceRepository.findOverlapping(driverId, from, to)
+                .next()
+                .flatMap(a -> Mono.<Void>error(DriverException.absent(a.getType(), a.getStartDate(), a.getEndDate())));
+    }
+
+    /** Pièces exigées du véhicule (socle légal + entreprise) approuvées et valides jusqu'à la fin du créneau. */
+    public Mono<Void> assertVehicleCompliant(UUID vehicleId, LocalDateTime start, LocalDateTime end) {
+        java.time.LocalDate validOn = (end == null || OPEN_END.equals(end) ? start : end).toLocalDate();
+        return documentCompliance.gaps(DocumentCatalog.TargetType.VEHICLE, vehicleId, validOn)
+                .flatMap(gaps -> gaps.isEmpty()
+                        ? Mono.<Void>empty()
+                        : Mono.<Void>error(com.yowyob.fleet.domain.exception.VehicleException.notCompliant(
+                                gaps.stream()
+                                        .map(g -> DocumentComplianceService.describe(DocumentCatalog.TargetType.VEHICLE, g))
+                                        .collect(java.util.stream.Collectors.joining(", ")))));
+    }
+
+    /** Autres pièces exigées du chauffeur par l'entreprise (visite médicale, carte professionnelle…). */
+    public Mono<Void> assertDriverFileCompliant(UUID driverId, LocalDateTime start, LocalDateTime end) {
+        java.time.LocalDate validOn = (end == null || OPEN_END.equals(end) ? start : end).toLocalDate();
+        return documentCompliance.gaps(DocumentCatalog.TargetType.DRIVER, driverId, validOn)
+                .flatMap(gaps -> {
+                    var others = gaps.stream().filter(g -> !DocumentCatalog.DRIVING_LICENSE.equals(g.docType())).toList();
+                    return others.isEmpty()
+                            ? Mono.<Void>empty()
+                            : Mono.<Void>error(DriverException.documentsNotCompliant(others.stream()
+                                    .map(g -> DocumentComplianceService.describe(DocumentCatalog.TargetType.DRIVER, g))
+                                    .collect(java.util.stream.Collectors.joining(", "))));
+                });
+    }
+
     // ── Permis de conduire ───────────────────────────────────────────────────
 
     /**
@@ -140,9 +219,7 @@ public class ResourceAvailabilityService {
                 .flatMap(v -> vehicleTypeRepository.findById(v.getVehicleTypeId()))
                 .map(VehicleTypeEntity::getRequiredLicenseCategory)
                 .defaultIfEmpty("");
-        Mono<java.util.List<DriverDocument>> licenses = documentPort.findDriverDocsByDriverId(driverId)
-                .filter(d -> d.getDocType() == DriverDocument.DocType.DRIVING_LICENSE)
-                .collectList();
+        Mono<java.util.List<DocumentEntity>> licenses = documentCompliance.licensesInForce(driverId).collectList();
         return Mono.zip(requiredCategory, licenses).flatMap(t -> {
             String required = t.getT1();
             var all = t.getT2();
@@ -164,25 +241,36 @@ public class ResourceAvailabilityService {
     // ── Engagements ouverts ──────────────────────────────────────────────────
 
     /** Trajet non terminé (planifié ou en cours) ou affectation en attente / en cours. */
+    /**
+     * Affectation qui engage encore la ressource : en cours, ou en attente sur une période pas
+     * encore terminée. Une affectation jamais démarrée dont la fin est passée n'engage plus rien
+     * (elle bloquait indéfiniment la vente d'un véhicule ou le départ d'un chauffeur).
+     */
+    static boolean isOpenCommitment(Assignment a) {
+        return a.getStatus() == Assignment.Status.IN_PROGRESS
+                || (a.getStatus() == Assignment.Status.PENDING
+                    && (a.getEndDatetime() == null || a.getEndDatetime().isAfter(LocalDateTime.now())));
+    }
+
     public Mono<Boolean> vehicleHasOpenCommitments(UUID vehicleId) {
         return tripRepository.existsActiveTripForVehicle(vehicleId)
                 .flatMap(hasTrip -> Boolean.TRUE.equals(hasTrip)
                         ? Mono.just(true)
-                        : assignmentPort.findByVehicleId(vehicleId).any(Assignment::isActive));
+                        : assignmentPort.findByVehicleId(vehicleId).any(ResourceAvailabilityService::isOpenCommitment));
     }
 
     public Mono<Boolean> driverHasOpenCommitments(UUID driverId) {
         return tripRepository.existsActiveTripForDriver(driverId)
                 .flatMap(hasTrip -> Boolean.TRUE.equals(hasTrip)
                         ? Mono.just(true)
-                        : assignmentPort.findByDriverId(driverId).any(Assignment::isActive));
+                        : assignmentPort.findByDriverId(driverId).any(ResourceAvailabilityService::isOpenCommitment));
     }
 
     // ── Chauffeur engageable ─────────────────────────────────────────────────
 
     /**
-     * Un chauffeur ne peut être engagé (trajet, affectation, véhicule) que s'il est actif
-     * (un chauffeur supprimé est INACTIVE) et rattaché à une flotte du périmètre de l'acteur.
+     * Un chauffeur ne peut être engagé (trajet, affectation, véhicule) que s'il fait partie des
+     * effectifs (pas LEFT) et est rattaché à une flotte du périmètre de l'acteur.
      */
     public Mono<Void> assertDriverEngageable(UUID actorId, Driver driver,
                                              Supplier<? extends RuntimeException> onInactive) {

@@ -25,9 +25,6 @@ public record AssignmentRequest(
         @Schema(description = "ID du conducteur")
         UUID driverId,
 
-        @Schema(description = "ID de la mission associée (optionnel)")
-        UUID missionId,
-
         @NotNull(message = "La date/heure de début est obligatoire")
         @Schema(description = "Début de l'affectation", example = "2026-06-02T08:00:00")
         LocalDateTime startDatetime,
@@ -35,15 +32,6 @@ public record AssignmentRequest(
         @NotNull(message = "La date/heure de fin est obligatoire")
         @Schema(description = "Fin de l'affectation", example = "2026-06-02T18:00:00")
         LocalDateTime endDatetime,
-
-        @Schema(description = "Lieu de départ", example = "Dépôt Central Yaoundé")
-        String startLocation,
-
-        @Schema(description = "Lieu d'arrivée", example = "Aéroport NSIMALEN")
-        String endLocation,
-
-        @Schema(description = "Kilométrage estimé", example = "45.5")
-        BigDecimal estimatedKm,
 
         @Schema(description = "Notes ou instructions")
         String notes

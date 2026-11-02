@@ -3,6 +3,11 @@ package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 import com.yowyob.fleet.domain.ports.in.ManageFleetManagerUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.application.service.PlanLimitGuard;
+import com.yowyob.fleet.application.service.SubscriptionCheckoutService;
+import com.yowyob.fleet.domain.model.BillingCycle;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SubscriptionOrderResponse;
+import jakarta.validation.constraints.NotNull;
+import reactor.core.publisher.Flux;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.FleetManagerResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerSubscriptionResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerKpiResponse;
@@ -49,7 +54,9 @@ public class FleetManagerController {
 
     @GetMapping("/me/subscription")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Mon abonnement et limites de plan")
+    @Operation(summary = "Abonnement de mon entreprise (lecture)",
+               description = "L'abonnement est porté par l'entreprise : seul son administrateur le modifie "
+                       + "(/api/v1/organization/subscription).")
     public Mono<ManagerSubscriptionResponse> getMySubscription(Authentication auth) {
         return planLimitGuard.getSubscription(getUserId(auth));
     }

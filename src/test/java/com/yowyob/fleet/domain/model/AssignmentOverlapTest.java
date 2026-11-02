@@ -21,14 +21,10 @@ class AssignmentOverlapTest {
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                null,
                 start,
                 end,
                 Assignment.Status.PENDING,
-                null,
-                null,
                 BigDecimal.TEN,
-                null,
                 null,
                 LocalDateTime.now()
         );

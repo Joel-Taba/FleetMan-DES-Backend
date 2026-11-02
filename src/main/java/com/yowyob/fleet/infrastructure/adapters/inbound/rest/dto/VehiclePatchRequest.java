@@ -2,12 +2,14 @@ package com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.util.UUID;
+
 /**
- * DTO pour la mise à jour partielle (PATCH).
- * Seuls les champs non-nulls seront envoyés au service distant.
+ * DTO pour la mise à jour partielle (PATCH) : seuls les champs non nuls sont appliqués.
+ * La sortie du parc passe par POST /vehicles/{id}/retire, le statut « en trajet » par les trajets.
  */
 public record VehiclePatchRequest(
-    
+
     @Schema(description = "Correction de la marque (ex: Toyota)", example = "Toyota")
     String brand,
 
@@ -23,10 +25,26 @@ public record VehiclePatchRequest(
     @Schema(description = "Mise à jour de la couleur", example = "Noir")
     String color,
 
+    UUID vehicleTypeId,
+    Integer manufacturingYear,
+
+    @Schema(allowableValues = {"DIESEL", "GASOLINE", "HYBRID", "ELECTRIC", "LPG"})
+    String fuelType,
+
+    @Schema(allowableValues = {"MANUAL", "AUTOMATIC"})
+    String transmissionType,
+
+    Double tankCapacity,
+    Integer totalSeatNumber,
+    Double averageFuelConsumption,
+
     @Schema(
-        description = "Changement de statut opérationnel", 
+        description = "Changement de statut",
         example = "MAINTENANCE",
-        allowableValues = {"AVAILABLE", "MAINTENANCE"}
+        allowableValues = {"AVAILABLE", "MAINTENANCE", "IMMOBILIZED"}
     )
-    String status
+    String status,
+
+    @Schema(description = "Motif du statut (obligatoire pour IMMOBILIZED)", example = "Assurance expirée")
+    String statusReason
 ) {}

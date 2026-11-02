@@ -119,15 +119,7 @@ VALUES ('f1000003-0000-4000-8000-000000000003', 65, 42250, 'TOTAL', 'c0000001-00
 ON CONFLICT (id) DO NOTHING;
 
 -- 9. Documents
-INSERT INTO fleet.vehicle_documents (id, vehicle_id, doc_type, doc_number, expiry_date, status)
-VALUES
-  ('f2000001-0000-4000-8000-000000000001', 'c0000001-0000-4000-8000-000000000001', 'INSURANCE', 'ASS-2024-8891', '2026-12-15', 'VALID'),
-  ('f2000002-0000-4000-8000-000000000002', 'c0000002-0000-4000-8000-000000000002', 'TECHNICAL_CONTROL', 'VT-2025-112', '2026-06-20', 'EXPIRING_SOON')
-ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO fleet.driver_documents (id, driver_id, doc_type, doc_number, expiry_date, status)
-VALUES ('f2000003-0000-4000-8000-000000000003', '35944e04-43c1-4eba-8acf-13f72a3ca5be', 'DRIVING_LICENSE', 'B1234567CM', '2027-03-10', 'VALID')
-ON CONFLICT (id) DO NOTHING;
 
 -- 10. Plannings & affectations
 INSERT INTO fleet.schedules (id, fleet_id, manager_id, title, period_type, start_date, end_date, status)
@@ -138,14 +130,14 @@ VALUES
    'Brouillon Juillet', 'MONTHLY', '2026-07-01', '2026-07-31', 'DRAFT')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO fleet.assignments (id, schedule_id, fleet_id, vehicle_id, driver_id, start_datetime, end_datetime, status, estimated_km)
+INSERT INTO fleet.assignments (id, schedule_id, fleet_id, vehicle_id, driver_id, start_datetime, end_datetime, status)
 VALUES
   ('f3000003-0000-4000-8000-000000000003', 'f3000001-0000-4000-8000-000000000001', 'b0000001-0000-4000-8000-000000000001',
    'c0000001-0000-4000-8000-000000000001', '35944e04-43c1-4eba-8acf-13f72a3ca5be',
-   '2026-06-04 08:00:00', '2026-06-04 12:00:00', 'IN_PROGRESS', 120),
+   '2026-06-04 08:00:00', '2026-06-04 12:00:00', 'IN_PROGRESS'),
   ('f3000004-0000-4000-8000-000000000004', 'f3000001-0000-4000-8000-000000000001', 'b0000001-0000-4000-8000-000000000001',
    'c0000003-0000-4000-8000-000000000003', '35944e04-43c1-4eba-8acf-13f72a3ca5be',
-   '2026-06-05 14:00:00', '2026-06-05 18:00:00', 'PENDING', 85)
+   '2026-06-05 14:00:00', '2026-06-05 18:00:00', 'PENDING')
 ON CONFLICT (id) DO NOTHING;
 
 -- 11. KPI

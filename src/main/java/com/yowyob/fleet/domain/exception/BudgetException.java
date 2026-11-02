@@ -1,6 +1,7 @@
 package com.yowyob.fleet.domain.exception;
 
 import org.springframework.http.HttpStatus;
+import java.math.BigDecimal;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -125,4 +126,71 @@ public class BudgetException extends DomainException {
                 HttpStatus.BAD_REQUEST, "BDG_015"
         );
     }
+
+    // ── Circuit de validation et enveloppes (057) ────────────────────────────
+
+    public static BudgetException receiptRequired() {
+        return new BudgetException("Joignez le justificatif (photo du ticket, avis d'amende, facture) avant d'approuver cette dépense.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "BDG_016");
+    }
+
+    public static BudgetException selfApproval() {
+        return new BudgetException("Vous ne pouvez pas valider une dépense que vous avez saisie vous-même.",
+                HttpStatus.FORBIDDEN, "BDG_017");
+    }
+
+    public static BudgetException adminApprovalRequired(String reason) {
+        return new BudgetException("Cette dépense doit être validée par l'administrateur de l'entreprise (" + reason + ").",
+                HttpStatus.FORBIDDEN, "BDG_018");
+    }
+
+    public static BudgetException futureExpenseDate() {
+        return new BudgetException("La date de la dépense ne peut pas être dans le futur.", HttpStatus.BAD_REQUEST, "BDG_019");
+    }
+
+    public static BudgetException driverNotInVehicleFleet() {
+        return new BudgetException("Ce chauffeur n'appartient pas à la flotte du véhicule.", HttpStatus.BAD_REQUEST, "BDG_020");
+    }
+
+    public static BudgetException vehicleBudgetsExceedEnvelope(BigDecimal allocated, BigDecimal envelope) {
+        return new BudgetException("Les budgets des véhicules (" + allocated.stripTrailingZeros().toPlainString()
+                + " XAF) dépasseraient l'enveloppe de la flotte (" + envelope.stripTrailingZeros().toPlainString() + " XAF).",
+                HttpStatus.CONFLICT, "BDG_021");
+    }
+
+    public static BudgetException fleetEnvelopeRequired() {
+        return new BudgetException("La flotte n'a pas d'enveloppe pour ce mois : l'administrateur doit d'abord la fixer.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "BDG_022");
+    }
+
+    public static BudgetException monthClosed() {
+        return new BudgetException("Un mois écoulé est clos : ses budgets ne se créent ni ne se modifient plus.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "BDG_023");
+    }
+
+    public static BudgetException fleetEnvelopeAdminOnly() {
+        return new BudgetException("L'enveloppe d'une flotte est fixée par l'administrateur de l'entreprise.",
+                HttpStatus.FORBIDDEN, "BDG_024");
+    }
+
+    public static BudgetException envelopeHasVehicleBudgets() {
+        return new BudgetException("Cette enveloppe est répartie en budgets de véhicules : supprimez-les d'abord.",
+                HttpStatus.CONFLICT, "BDG_025");
+    }
+
+    public static BudgetException descriptionRequired() {
+        return new BudgetException("Décrivez la dépense (nature, lieu) pour une dépense « Autre ».", HttpStatus.BAD_REQUEST, "BDG_026");
+    }
+
+    public static BudgetException approvedNotDeletable() {
+        return new BudgetException("Une dépense approuvée fait partie des comptes : elle ne peut plus être supprimée.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "BDG_027");
+    }
+
+    public static BudgetException automaticTypeNotManual() {
+        return new BudgetException("Carburant, maintenance et incidents sont comptés depuis leur opération : "
+                + "enregistrez le plein, la maintenance ou l'incident (une saisie manuelle les compterait deux fois).",
+                HttpStatus.BAD_REQUEST, "BDG_028");
+    }
 }
+

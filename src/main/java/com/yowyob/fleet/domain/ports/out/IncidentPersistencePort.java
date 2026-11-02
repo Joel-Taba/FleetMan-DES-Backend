@@ -51,6 +51,9 @@ public interface IncidentPersistencePort {
 
     Mono<Long> countByDriverId(UUID driverId);
 
+    /** Incidents dont le chauffeur a été reconnu responsable. */
+    Mono<Long> countDriverResponsible(UUID driverId);
+
     /**
      * Somme des coûts de tous les incidents d'un véhicule.
      */

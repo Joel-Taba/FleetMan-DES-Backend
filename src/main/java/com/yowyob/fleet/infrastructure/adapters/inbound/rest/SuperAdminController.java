@@ -48,9 +48,14 @@ public class SuperAdminController {
     private final ManageSuperAdminUseCase superAdminUseCase;
     private final SuperAdminDashboardService dashboardService;
     private final ManageSubscriptionPlanUseCase planUseCase;
+    private final com.yowyob.fleet.application.service.SubscriptionCheckoutService checkoutService;
     private final com.yowyob.fleet.application.service.AppSettingsService appSettingsService;
     private final com.yowyob.fleet.application.service.SubscriptionRegistrationService registrationService;
 
+    /**
+     * Limites : 0 = illimité. Les fonctionnalités techniques font foi (accès et affichage) ;
+     * le champ « features » (texte libre historique) est ignoré : il est dérivé des fonctionnalités.
+     */
     public record CreatePlanRequest(
         @NotBlank String name,
         String description,
@@ -61,21 +66,28 @@ public class SuperAdminController {
         java.math.BigDecimal annualPrice,
         String currency,
         String features,
+        Integer sortOrder,
+        Boolean recommended,
         java.util.List<ManageSubscriptionPlanUseCase.PlanFeatureCommand> technicalFeatures
     ) {}
 
     public record UpdatePlanRequest(
-        String name,
+        @NotBlank String name,
         String description,
         int maxFleets,
         int maxVehicles,
         int maxDrivers,
         java.math.BigDecimal monthlyPrice,
         java.math.BigDecimal annualPrice,
-        String features
+        String currency,
+        String features,
+        Integer sortOrder,
+        Boolean recommended,
+        java.util.List<ManageSubscriptionPlanUseCase.PlanFeatureCommand> technicalFeatures
     ) {}
 
-    public record AssignPlanRequest(@NotNull UUID planId) {}
+    /** billingCycle : MONTHLY ou ANNUAL (ignoré pour un plan gratuit). */
+    public record AssignPlanRequest(@NotNull UUID planId, com.yowyob.fleet.domain.model.BillingCycle billingCycle) {}
 
     public record RejectRequest(
         @NotBlank String reason,
@@ -235,15 +247,11 @@ public class SuperAdminController {
                 req.monthlyPrice(),
                 req.annualPrice(),
                 req.currency(),
-                req.features()
+                req.sortOrder(),
+                req.recommended(),
+                req.technicalFeatures()
             )
-        ).flatMap(plan -> {
-            if (req.technicalFeatures() == null || req.technicalFeatures().isEmpty()) {
-                return Mono.just(plan);
-            }
-            return planUseCase.replacePlanFeatures(plan.getId(), req.technicalFeatures())
-                    .thenReturn(plan);
-        });
+        );
     }
 
     @GetMapping("/plans")
@@ -268,7 +276,10 @@ public class SuperAdminController {
                 req.maxDrivers(),
                 req.monthlyPrice(),
                 req.annualPrice(),
-                req.features()
+                req.currency(),
+                req.sortOrder(),
+                req.recommended(),
+                req.technicalFeatures()
             )
         );
     }
@@ -284,9 +295,9 @@ public class SuperAdminController {
     @Operation(summary = "Affecter un plan à un gestionnaire")
     public Mono<Void> assignPlan(
         @PathVariable UUID id,
-        @org.springframework.web.bind.annotation.RequestBody AssignPlanRequest req
+        @Valid @org.springframework.web.bind.annotation.RequestBody AssignPlanRequest req
     ) {
-        return planUseCase.assignPlanToManager(id, req.planId());
+        return planUseCase.assignPlanToManager(id, req.planId(), req.billingCycle());
     }
 
     // ── WORKFLOW APPROBATION SOUSCRIPTIONS ───────────────────────────────────
@@ -318,7 +329,8 @@ public class SuperAdminController {
             new ManageSubscriptionPlanUseCase.ApproveSubscriptionCommand(
                 id,
                 currentUserId,
-                planId
+                planId,
+                req != null ? req.billingCycle() : null
             )
         );
     }
@@ -386,6 +398,14 @@ public class SuperAdminController {
     @Operation(summary = "Abonnements actifs et expirés")
     public Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ActiveSubscriptionDto> listActiveSubscriptions() {
         return planUseCase.listActiveSubscriptions();
+    }
+
+    @GetMapping("/subscriptions/orders")
+    @Operation(summary = "Commandes d'abonnement (toutes)")
+    public reactor.core.publisher.Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SubscriptionOrderResponse> listOrders() {
+        boolean simulation = checkoutService.isSimulation();
+        return checkoutService.listAllOrders()
+                .map(o -> com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.SubscriptionOrderResponse.from(o, null, simulation));
     }
 
     @GetMapping("/plans/{id}/features")

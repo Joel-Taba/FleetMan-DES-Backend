@@ -14,16 +14,15 @@ public record AssignmentResponse(
         UUID fleetId,
         UUID vehicleId,
         UUID driverId,
-        UUID missionId,
         LocalDateTime startDatetime,
         LocalDateTime endDatetime,
         String status,
-        String startLocation,
-        String endLocation,
-        BigDecimal estimatedKm,
+        @Schema(description = "Kilomètres parcourus par les trajets du poste")
         BigDecimal actualKm,
         String notes,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        @Schema(description = "Trajets effectués ou prévus pendant le poste")
+        long tripCount
 ) {
     public static AssignmentResponse from(Assignment a) {
         return new AssignmentResponse(
@@ -32,16 +31,18 @@ public record AssignmentResponse(
                 a.getFleetId(),
                 a.getVehicleId(),
                 a.getDriverId(),
-                a.getMissionId(),
                 a.getStartDatetime(),
                 a.getEndDatetime(),
                 a.getStatus().name(),
-                a.getStartLocation(),
-                a.getEndLocation(),
-                a.getEstimatedKm(),
                 a.getActualKm(),
                 a.getNotes(),
-                a.getCreatedAt()
+                a.getCreatedAt(),
+                0
         );
+    }
+
+    public AssignmentResponse withTripCount(long count) {
+        return new AssignmentResponse(id, scheduleId, fleetId, vehicleId, driverId, startDatetime, endDatetime,
+                status, actualKm, notes, createdAt, count);
     }
 }

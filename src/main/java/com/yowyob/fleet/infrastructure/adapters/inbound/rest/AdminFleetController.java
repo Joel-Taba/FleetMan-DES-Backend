@@ -62,9 +62,9 @@ public class AdminFleetController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Créer une flotte", description = "managerId optionnel dans le body via /managers/{id}/fleets pour l'assignation initiale.")
+    @Operation(summary = "Créer une flotte", description = "managerId obligatoire : la flotte est confiée d'emblée à un gestionnaire actif de l'entreprise.")
     public Mono<FleetResponse> create(@Valid @RequestBody FleetRequest request, Authentication auth) {
-        return fleetUseCase.createFleetAsAdmin(mapper.toDomain(request), null, actorId(auth))
+        return fleetUseCase.createFleetAsAdmin(mapper.toDomain(request), request.managerId(), actorId(auth))
                 .map(mapper::toResponse);
     }
 
@@ -77,7 +77,7 @@ public class AdminFleetController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Supprimer une flotte", description = "Suppression logique (deleted_at).")
+    @Operation(summary = "Supprimer une flotte", description = "Uniquement une flotte vide (véhicules en service, chauffeurs dans les effectifs) ; suppression logique.")
     public Mono<Void> delete(@PathVariable UUID id, Authentication auth) {
         return fleetUseCase.deleteFleet(id, actorId(auth), true);
     }

@@ -45,6 +45,7 @@ public class OrganizationService {
 
     private final PlatformAdminR2dbcRepository platformAdminRepo;
     private final FleetManagerR2dbcRepository managerRepo;
+    private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.CompanyR2dbcRepository companyRepo;
     private final UserLocalR2dbcRepository userRepo;
     private final FleetR2dbcRepository fleetRepo;
     private final VehicleLocalR2dbcRepository vehicleRepo;
@@ -133,23 +134,25 @@ public class OrganizationService {
                 .switchIfEmpty(Mono.error(AdminException.createdByMustBeAdmin()))
                 .flatMap(admin -> Mono.zip(
                         summary(adminId),
-                        managerRepo.findByCreatedByAdminId(adminId)
-                                .next()
-                                .defaultIfEmpty(new FleetManagerEntity())
+                        companyRepo.findById(adminId)
+                                .defaultIfEmpty(new com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.CompanyEntity())
                 ).map(t -> toProfile(adminId, admin, t.getT2(), t.getT1())));
     }
 
+    /** Nom et logo de l'entreprise (ils étaient recopiés sur chacun de ses gestionnaires). */
     public Mono<OrganizationDtos.OrganizationProfile> updateProfile(UUID adminId, String organizationName, String logoUrl) {
-        return managerRepo.findByCreatedByAdminId(adminId)
-                .flatMap(manager -> {
+        return companyRepo.findById(adminId)
+                .switchIfEmpty(Mono.error(AdminException.createdByMustBeAdmin()))
+                .flatMap(company -> {
                     if (organizationName != null && !organizationName.isBlank()) {
-                        manager.setCompanyName(organizationName.trim());
+                        company.setName(organizationName.trim());
                     }
                     if (logoUrl != null && !logoUrl.isBlank()) {
-                        manager.setLogoUrl(logoUrl);
+                        company.setLogoUrl(logoUrl);
                     }
-                    manager.setNew(false);
-                    return managerRepo.save(manager);
+                    company.setUpdatedAt(java.time.Instant.now());
+                    company.setNew(false);
+                    return companyRepo.save(company);
                 })
                 .then(profile(adminId));
     }
@@ -163,10 +166,10 @@ public class OrganizationService {
     private static OrganizationDtos.OrganizationProfile toProfile(
             UUID adminId,
             UserLocalEntity admin,
-            FleetManagerEntity org,
+            com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.CompanyEntity org,
             OrganizationDtos.OrganizationSummary summary
     ) {
-        String name = org.getCompanyName();
+        String name = org.getName();
         if (name == null || name.isBlank()) {
             String fallback = ((admin.getFirstName() != null ? admin.getFirstName() : "")
                     + " " + (admin.getLastName() != null ? admin.getLastName() : "")).trim();

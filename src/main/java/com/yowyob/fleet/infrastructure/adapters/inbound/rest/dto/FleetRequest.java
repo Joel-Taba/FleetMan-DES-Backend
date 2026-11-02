@@ -21,5 +21,9 @@ public record FleetRequest(
 
     @DecimalMin(value = "0", inclusive = true, message = "Le budget mensuel doit être positif.")
     @Schema(description = "Budget mensuel alloué à la flotte (FCFA)", example = "500000")
-    BigDecimal monthlyBudget
+    BigDecimal monthlyBudget,
+
+    @Schema(description = "Gestionnaire responsable (obligatoire à la création par l'administrateur ; "
+            + "ensuite, changer de gestionnaire passe par le transfert)")
+    java.util.UUID managerId
 ) {}

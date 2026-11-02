@@ -1,6 +1,7 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
 import com.yowyob.fleet.domain.exception.AuthException;
+import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.domain.ports.out.ExternalFilePort;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -28,11 +29,13 @@ import java.util.UUID;
 public class FileStorageController {
 
     private static final Set<String> PUBLIC_UPLOAD_CATEGORIES = Set.of("subscription");
+    // Le chauffeur dépose aussi : ses propres pièces et ses justificatifs de dépense.
     private static final Set<String> STAFF_ROLES = Set.of(
-            "ROLE_FLEET_MANAGER", "ROLE_FLEET_ADMIN", "ROLE_FLEET_SUPER_ADMIN");
+            "ROLE_FLEET_DRIVER", "ROLE_FLEET_MANAGER", "ROLE_FLEET_ADMIN", "ROLE_FLEET_SUPER_ADMIN");
 
     private final ExternalFilePort filePort;
     private final com.yowyob.fleet.application.service.LocalFileStorageService localStorageService;
+    private final com.yowyob.fleet.application.service.FileAccessService fileAccess;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Uploader un fichier (PDF ou image)",
@@ -77,6 +80,13 @@ public class FileStorageController {
     @Operation(summary = "Télécharger / prévisualiser un fichier",
             description = "UUID → proxy Kernel file-core. Nom fichier → stockage local.")
     public Mono<ResponseEntity<?>> download(@PathVariable String filename, Authentication auth) {
+        boolean superAdmin = auth.getAuthorities().stream()
+                .anyMatch(g -> "ROLE_FLEET_SUPER_ADMIN".equals(g.getAuthority()));
+        return fileAccess.assertCanRead(((AuthPort.UserDetail) auth.getPrincipal()).id(), superAdmin, filename)
+                .then(Mono.defer(() -> serve(filename, auth)));
+    }
+
+    private Mono<ResponseEntity<?>> serve(String filename, Authentication auth) {
         if (isUuid(filename) && filePort.isKernelMode()) {
             return filePort.download(UUID.fromString(filename), extractToken(auth))
                     .map(result -> ResponseEntity.ok()

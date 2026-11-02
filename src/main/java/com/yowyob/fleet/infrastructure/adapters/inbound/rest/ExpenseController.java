@@ -35,6 +35,7 @@ public class ExpenseController {
 
     private final ManageExpenseUseCase expenseUseCase;
     private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
+    private final com.yowyob.fleet.application.service.CompanyScopeService companyScope;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -46,7 +47,9 @@ public class ExpenseController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
     @Operation(summary = "Créer une dépense manuelle",
-               description = "Enregistre une dépense manuelle (amende, péage, autre). La dépense démarre en statut PENDING et nécessite validation du Manager. Les dépenses FUEL, MAINTENANCE, INCIDENT sont générées automatiquement par le système.")
+               description = "Déclarée par un chauffeur (pour lui-même) ou saisie par un gestionnaire ; en attente de validation. "
+                       + "Niveau ADMIN si saisie par un gestionnaire, au-dessus du seuil de l'entreprise ou en dépassement de budget. "
+                       + "Justificatif exigé pour l'approbation. FUEL, MAINTENANCE, INCIDENT : générées depuis leur opération.")
     public Mono<ExpenseResponse> create(
             @Valid @RequestBody ExpenseRequest request,
             Authentication auth) {
@@ -58,10 +61,43 @@ public class ExpenseController {
                         request.description(),
                         request.expenseDate(),
                         request.vehicleId(),
-                        request.driverId()
+                        request.driverId(),
+                        getUserId(auth),
+                        request.receiptUrl(),
+                        request.receiptName(),
+                        request.receiptMime()
                 );
-        return resourceAccess.assertVehicleAccess(getUserId(auth), request.vehicleId())
-                .then(expenseUseCase.createManualExpense(cmd)).map(ExpenseResponse::from);
+        // Un chauffeur déclare des frais sur le véhicule qu'il conduit (affecté ou trajet en cours).
+        Mono<Void> access = com.yowyob.fleet.infrastructure.config.security.AuthPrincipal.isFleetDriver(auth)
+                ? resourceAccess.assertDriverOperatesVehicle(getUserId(auth), request.vehicleId())
+                : resourceAccess.assertVehicleAccess(getUserId(auth), request.vehicleId());
+        return access.then(expenseUseCase.createManualExpense(cmd)).map(ExpenseResponse::from);
+    }
+
+    @PutMapping("/{id}/receipt")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
+    @Operation(summary = "Joindre le justificatif",
+               description = "Ajoute ou remplace le justificatif (fichier déjà téléversé) d'une dépense manuelle en attente.")
+    public Mono<ExpenseResponse> attachReceipt(@PathVariable UUID id, @RequestBody ReceiptRequest request,
+                                               Authentication auth) {
+        return resourceAccess.assertExpenseAccess(getUserId(auth), id)
+                .then(expenseUseCase.attachReceipt(id, request.fileUrl(), request.fileName(), request.mimeType()))
+                .map(ExpenseResponse::from);
+    }
+
+    public record ReceiptRequest(String fileUrl, String fileName, String mimeType) {}
+
+    @GetMapping("/company")
+    @PreAuthorize("hasRole('FLEET_ADMIN')")
+    @Operation(summary = "Dépenses de l'entreprise",
+               description = "Toutes les dépenses des flottes de l'entreprise ; adminOnly=true limite aux dépenses en attente de "
+                       + "validation par l'administrateur.")
+    public Flux<ExpenseResponse> listCompany(@RequestParam(defaultValue = "false") boolean adminOnly, Authentication auth) {
+        return companyScope.requireOwnCompany(getUserId(auth))
+                .flatMapMany(expenseUseCase::getAllByCompany)
+                .filter(e -> !adminOnly || (e.getStatus() == com.yowyob.fleet.domain.model.Expense.ExpenseStatus.PENDING
+                        && e.getApprovalLevel() == com.yowyob.fleet.domain.model.Expense.ApprovalLevel.ADMIN))
+                .map(ExpenseResponse::from);
     }
 
     // ── LECTURE ───────────────────────────────────────────────────────────────
@@ -75,7 +111,7 @@ public class ExpenseController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_DRIVER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_DRIVER')")
     @Operation(summary = "Détail d'une dépense")
     public Mono<ExpenseResponse> getById(
             @Parameter(description = "ID de la dépense") @PathVariable UUID id,
@@ -188,7 +224,7 @@ public class ExpenseController {
     // ── VALIDATION ────────────────────────────────────────────────────────────
 
     @PatchMapping("/{id}/approve")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Approuver une dépense",
                description = "Approuve une dépense manuelle en attente (PENDING → APPROVED). Déclenche la mise à jour du budget correspondant.")
     public Mono<ExpenseResponse> approve(
@@ -199,7 +235,7 @@ public class ExpenseController {
     }
 
     @PatchMapping("/{id}/reject")
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
     @Operation(summary = "Rejeter une dépense",
                description = "Rejette une dépense manuelle en attente avec un motif obligatoire (PENDING → REJECTED).")
     public Mono<ExpenseResponse> reject(

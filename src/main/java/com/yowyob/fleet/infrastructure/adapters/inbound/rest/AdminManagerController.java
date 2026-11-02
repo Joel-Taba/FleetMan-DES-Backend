@@ -10,6 +10,7 @@ import com.yowyob.fleet.infrastructure.config.security.AuthPrincipal;
 import com.yowyob.fleet.infrastructure.mappers.FleetMapper;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -50,9 +51,9 @@ public class AdminManagerController {
     }
 
     @GetMapping("/managers")
-    @Operation(summary = "Lister les Fleet Managers", description = "Admin : uniquement les managers qu'il a créés. Super-admin : tous.")
-    public Flux<AuthPort.UserDetail> list(Authentication auth) {
-        return adminUseCase.listFleetManagers(getUserId(auth), isSuper(auth));
+    @Operation(summary = "Lister les gestionnaires", description = "Admin : les gestionnaires de son entreprise, avec l'état de leur compte. Super-admin : tous.")
+    public Flux<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerAccountResponse> list(Authentication auth) {
+        return adminUseCase.listManagerAccounts(getUserId(auth), isSuper(auth));
     }
 
     @GetMapping("/managers/{id}")
@@ -61,14 +62,30 @@ public class AdminManagerController {
         return adminUseCase.getManagerDetails(id, getUserId(auth), isSuper(auth));
     }
 
+    public record SuspendManagerRequest(@NotBlank String reason) {}
+
+    @PostMapping("/managers/{id}/suspend")
+    @Operation(summary = "Suspendre un gestionnaire",
+            description = "Motif obligatoire. Connexion bloquée ; ses flottes sont gelées (aucun nouveau trajet ni "
+                    + "affectation, les trajets en cours peuvent se terminer) jusqu'à réactivation ou transfert.")
+    public Mono<Void> suspend(@PathVariable UUID id, @Valid @RequestBody SuspendManagerRequest req, Authentication auth) {
+        return adminUseCase.suspendManager(id, req.reason(), getUserId(auth), isSuper(auth));
+    }
+
+    @PostMapping("/managers/{id}/reactivate")
+    @Operation(summary = "Réactiver un gestionnaire suspendu")
+    public Mono<Void> reactivate(@PathVariable UUID id, Authentication auth) {
+        return adminUseCase.reactivateManager(id, getUserId(auth), isSuper(auth));
+    }
+
     @PatchMapping("/managers/{id}/toggle")
-    @Operation(summary = "Activer/Désactiver un Fleet Manager")
+    @Operation(summary = "Suspendre / réactiver (compatibilité)", description = "Préférer /suspend (avec motif) et /reactivate.")
     public Mono<Void> toggle(@PathVariable UUID id, Authentication auth) {
         return adminUseCase.toggleManagerStatus(id, getUserId(auth), isSuper(auth));
     }
 
     @DeleteMapping("/managers/{id}")
-    @Operation(summary = "Supprimer un Fleet Manager", description = "Suppression logique, bloquée si des flottes lui sont encore assignées.")
+    @Operation(summary = "Clôturer un gestionnaire", description = "Uniquement s'il n'a plus de flotte (transférez-les d'abord) ; compte désactivé, historique conservé.")
     public Mono<Void> delete(@PathVariable UUID id, Authentication auth) {
         return adminUseCase.deleteManager(id, getUserId(auth), isSuper(auth));
     }
@@ -90,7 +107,8 @@ public class AdminManagerController {
         String phone,
         String firstName,
         String lastName,
-        @NotBlank String companyName
+        @Schema(description = "Ignoré : le gestionnaire appartient à l'entreprise de l'administrateur.")
+        String companyName
     ) {
         @AssertTrue(message = "Le prénom ou le nom doit être renseigné.")
         public boolean isNameProvided() {
@@ -111,22 +129,20 @@ public class AdminManagerController {
     }
 
     @GetMapping("/managers/{id}/fleets")
-    @Operation(summary = "Flottes assignées à un gestionnaire")
-    public Flux<FleetResponse> managerFleets(@PathVariable UUID id) {
-        return fleetUseCase.getFleets(id, false).map(fleetMapper::toResponse);
+    @Operation(summary = "Flottes confiées à un gestionnaire de l'entreprise")
+    public Flux<FleetResponse> managerFleets(@PathVariable UUID id, Authentication auth) {
+        return adminUseCase.getManagerDetails(id, getUserId(auth), isSuper(auth))
+                .thenMany(fleetUseCase.getFleets(id, false))
+                .map(fleetMapper::toResponse);
     }
 
     public record AssignFleetsRequest(@NotEmpty List<UUID> fleetIds) {}
 
     @PostMapping("/managers/{id}/fleets")
-    @Operation(summary = "Assigner une ou plusieurs flottes à un gestionnaire")
-    public Mono<Void> assignFleets(@PathVariable UUID id, @Valid @RequestBody AssignFleetsRequest req) {
-        return fleetUseCase.assignFleetsToManager(req.fleetIds(), id);
-    }
-
-    @DeleteMapping("/managers/{id}/fleets/{fleetId}")
-    @Operation(summary = "Désassigner une flotte d'un gestionnaire (libère la flotte)")
-    public Mono<Void> unassignFleet(@PathVariable UUID id, @PathVariable UUID fleetId) {
-        return fleetUseCase.unassignFleetFromManager(fleetId, id);
+    @Operation(summary = "Transférer des flottes à ce gestionnaire",
+            description = "Flottes de l'entreprise, gestionnaire actif, aucun trajet ni affectation ouverts. "
+                    + "Véhicules, chauffeurs et plannings suivent ; dépenses et budgets passés restent à l'ancien gestionnaire.")
+    public Mono<Void> assignFleets(@PathVariable UUID id, @Valid @RequestBody AssignFleetsRequest req, Authentication auth) {
+        return fleetUseCase.assignFleetsToManager(req.fleetIds(), id, getUserId(auth));
     }
 }

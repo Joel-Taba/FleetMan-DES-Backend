@@ -114,6 +114,9 @@ application:
 
   file:
     mode: ${FILE_MODE:kernel}
+  # Hub documentaire du Kernel (document-hub, document-governance) : local tant qu'il n'est pas branché.
+  document:
+    hub: ${DOCUMENT_HUB:local}
 
   # Envoi d'emails transactionnels (rejet de souscription)
   mail:
@@ -151,6 +154,12 @@ application:
     password: ${GEOFENCE_SYSTEM_PASSWORD:}
     organization-id: "5e69f5c5-1f03-41cb-a4a3-d59188f73323"
  
+  # Paiement des abonnements : « simulated » tant que le service de paiement n'est pas branché
+  # (SimulatedSubscriptionPaymentAdapter, aucun encaissement). Le futur adaptateur réel
+  # implémentera SubscriptionPaymentPort et s'activera avec une autre valeur.
+  subscription:
+    payment-mode: ${SUBSCRIPTION_PAYMENT_MODE:simulated}
+
   # Mot de passe démo commun du profil fake-auth et mot de passe initial d'un chauffeur
   # créé sans mot de passe : fournis par le fichier .env, jamais écrits ici.
   demo:

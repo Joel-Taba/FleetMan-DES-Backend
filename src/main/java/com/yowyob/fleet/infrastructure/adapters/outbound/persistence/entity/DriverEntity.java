@@ -10,6 +10,7 @@ import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Table(name = "drivers", schema = "fleet")
@@ -37,6 +38,16 @@ public class DriverEntity implements Persistable<UUID> {
 
     @Column("kernel_actor_id")
     private UUID kernelActorId;
+
+    // Contrat (écrit uniquement par DriverPersistencePort.updateEmployment)
+    @Column("hire_date")
+    private LocalDate hireDate;
+
+    @Column("left_at")
+    private LocalDate leftAt;
+
+    @Column("left_reason")
+    private String leftReason;
 
     @Column("updated_at")
     private Instant updatedAt;

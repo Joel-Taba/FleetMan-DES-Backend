@@ -20,6 +20,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.List;
+import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.ManagerAccountResponse;
 import java.util.UUID;
 
 @Slf4j
@@ -34,6 +35,8 @@ public class AdminService implements ManageAdminUseCase {
     private final FleetManagerPersistencePort managerPersistencePort;
     private final FleetR2dbcRepository fleetRepo;
     private final PlatformAdminR2dbcRepository platformAdminRepo;
+    private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.CompanyR2dbcRepository companyRepo;
+    private final org.springframework.r2dbc.core.DatabaseClient db;
 
     @Override
     public Flux<AuthPort.UserDetail> listFleetManagers(UUID requesterId, boolean isSuperAdmin) {
@@ -56,35 +59,89 @@ public class AdminService implements ManageAdminUseCase {
                 .map(pair -> toManagerDetail(pair.user(), pair.manager()));
     }
 
+    /**
+     * Clôture (au lieu d'une suppression qui masquait le compte et laissait courir son
+     * abonnement) : seulement sans flotte ; le compte est désactivé, l'historique conservé.
+     */
     @Override
     public Mono<Void> deleteManager(UUID managerId, UUID requesterId, boolean isSuperAdmin) {
         return loadOwnedManager(managerId, requesterId, isSuperAdmin)
                 .flatMap(pair -> fleetRepo.countActiveByManagerId(pair.user().getId())
-                        .flatMap(count -> {
-                            if (count > 0) {
-                                return Mono.error(AdminException.managerHasActiveFleets());
-                            }
-                            UserLocalEntity user = pair.user();
-                            user.setDeletedAt(Instant.now());
-                            user.setActive(false);
-                            user.setNewRecord(false);
-                            return userRepo.save(user);
-                        }))
-                .doOnSuccess(u -> log.info("🗑️ Manager {} supprimé (soft delete)", managerId))
-                .then();
+                        .flatMap(count -> count > 0
+                                ? Mono.<Void>error(AdminException.managerStillHasFleets(count))
+                                : setAccountStatus(pair, "CLOSED", null)))
+                .doOnSuccess(u -> log.info("🔒 Gestionnaire {} clôturé", managerId));
     }
 
     @Override
+    public Mono<Void> suspendManager(UUID managerId, String reason, UUID requesterId, boolean isSuperAdmin) {
+        if (reason == null || reason.isBlank()) {
+            return Mono.error(AdminException.suspensionReasonRequired());
+        }
+        return loadOwnedManager(managerId, requesterId, isSuperAdmin)
+                .flatMap(pair -> setAccountStatus(pair, "SUSPENDED", reason.trim()))
+                .doOnSuccess(u -> log.info("⏸️ Gestionnaire {} suspendu", managerId));
+    }
+
+    @Override
+    public Mono<Void> reactivateManager(UUID managerId, UUID requesterId, boolean isSuperAdmin) {
+        return loadOwnedManager(managerId, requesterId, isSuperAdmin)
+                .flatMap(pair -> setAccountStatus(pair, "ACTIVE", null));
+    }
+
+    /** Ancien interrupteur actif / inactif : suspend ou réactive. */
+    @Override
     public Mono<Void> toggleManagerStatus(UUID managerId, UUID requesterId, boolean isSuperAdmin) {
         return loadOwnedManager(managerId, requesterId, isSuperAdmin)
-                .flatMap(pair -> {
-                    UserLocalEntity u = pair.user();
-                    u.setActive(!u.isActive());
-                    u.setNewRecord(false);
-                    return userRepo.save(u);
-                })
-                .doOnSuccess(u -> log.info("🔐 Statut Manager {} changé vers : {}", managerId, u.isActive()))
-                .then();
+                .flatMap(pair -> "ACTIVE".equals(accountStatusOf(pair.manager()))
+                        ? setAccountStatus(pair, "SUSPENDED", "Suspendu par l'administrateur")
+                        : setAccountStatus(pair, "ACTIVE", null));
+    }
+
+    private Mono<Void> setAccountStatus(OwnedManager pair, String status, String reason) {
+        if ("CLOSED".equals(accountStatusOf(pair.manager()))) {
+            return Mono.error(AdminException.managerClosed());
+        }
+        UserLocalEntity user = pair.user();
+        user.setActive("ACTIVE".equals(status));
+        user.setNewRecord(false);
+        var update = db.sql("""
+                        UPDATE fleet.fleet_managers
+                        SET account_status = :status, suspension_reason = :reason, status_changed_at = NOW(),
+                            closed_at = CASE WHEN :status = 'CLOSED' THEN NOW() ELSE closed_at END
+                        WHERE user_id = :id
+                        """)
+                .bind("status", status)
+                .bind("id", user.getId());
+        update = reason != null ? update.bind("reason", reason) : update.bindNull("reason", String.class);
+        return userRepo.save(user).then(update.fetch().rowsUpdated()).then();
+    }
+
+    private static String accountStatusOf(FleetManagerEntity manager) {
+        return manager.getAccountStatus() != null ? manager.getAccountStatus() : "ACTIVE";
+    }
+
+    @Override
+    public Flux<ManagerAccountResponse> listManagerAccounts(UUID requesterId, boolean isSuperAdmin) {
+        Flux<FleetManagerEntity> source = isSuperAdmin
+                ? managerRepo.findAll()
+                : resolveLocalUserId(requesterId).flatMapMany(managerRepo::findByCreatedByAdminId);
+        return source
+                .flatMap(mgr -> Mono.zip(
+                        userRepo.findById(mgr.getUserId()).filter(user -> user.getDeletedAt() == null),
+                        fleetRepo.countActiveByManagerId(mgr.getUserId()).defaultIfEmpty(0L),
+                        companyRepo.findById(mgr.getCreatedByAdminId())
+                                .map(c -> c.getName() != null ? c.getName() : "")
+                                .defaultIfEmpty(""))
+                        .map(t -> new ManagerAccountResponse(
+                                t.getT1().getId(), t.getT1().getUsername(), t.getT1().getEmail(), t.getT1().getPhone(),
+                                t.getT1().getFirstName(), t.getT1().getLastName(), List.of("FLEET_MANAGER"),
+                                t.getT1().getPhotoUrl(), t.getT3(), t.getT1().isActive(), t.getT1().getLastLoginAt(),
+                                accountStatusOf(mgr), mgr.getSuspensionReason(), mgr.getStatusChangedAt(), t.getT2())))
+                .sort(java.util.Comparator
+                        .comparing((ManagerAccountResponse m) -> "CLOSED".equals(m.accountStatus()))
+                        .thenComparing(m -> ((m.firstName() != null ? m.firstName() : "") + " "
+                                + (m.lastName() != null ? m.lastName() : "")).trim(), String.CASE_INSENSITIVE_ORDER));
     }
 
     @Override

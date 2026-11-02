@@ -85,6 +85,12 @@ public class IncidentEntity implements Persistable<UUID> {
     @Column("vehicle_immobilized")
     private boolean vehicleImmobilized;
 
+    @org.springframework.data.relational.core.mapping.Column("vehicle_drivable")
+    private boolean vehicleDrivable = true;
+
+    @org.springframework.data.relational.core.mapping.Column("immobilization_override")
+    private Boolean immobilizationOverride;
+
     @Transient
     private boolean isNew = false;
 

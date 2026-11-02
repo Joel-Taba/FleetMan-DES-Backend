@@ -42,7 +42,7 @@ public class TripException extends DomainException {
 
     public static TripException vehicleUnavailable(String status) {
         return new TripException(
-            "Véhicule indisponible (Statut: " + status + ").",
+            "Véhicule indisponible : " + com.yowyob.fleet.domain.model.VehicleLifecycle.label(status) + ".",
             HttpStatus.BAD_REQUEST,
             "TRP_004"
         );
@@ -176,6 +176,56 @@ public class TripException extends DomainException {
                 + "Enregistrez le plein manquant ou corrigez l'index.",
             HttpStatus.UNPROCESSABLE_ENTITY,
             "TRP_020"
+        );
+    }
+
+    public static TripException departureKmBelowOdometer(java.math.BigDecimal odometer) {
+        return new TripException(
+            "L'index kilométrique de départ est inférieur au dernier relevé du compteur ("
+                + odometer.stripTrailingZeros().toPlainString() + " km).",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_021"
+        );
+    }
+
+    public static TripException departureFuelExceedsTank(java.math.BigDecimal capacity) {
+        return new TripException(
+            "L'index carburant de départ dépasse la capacité du réservoir ("
+                + capacity.stripTrailingZeros().toPlainString() + " L).",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_022"
+        );
+    }
+
+    public static TripException invalidArrivalState() {
+        return new TripException(
+            "Seul un trajet parti (et pas encore arrivé) peut être déclaré arrivé à destination.",
+            HttpStatus.CONFLICT,
+            "TRP_023"
+        );
+    }
+
+    public static TripException detailNotInTrip() {
+        return new TripException(
+            "Cette ligne de chargement n'appartient pas au manifeste du trajet.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_024"
+        );
+    }
+
+    public static TripException invalidDeliveredQuantity(int loaded) {
+        return new TripException(
+            "La quantité livrée doit être comprise entre 0 et la quantité chargée (" + loaded + ").",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "TRP_025"
+        );
+    }
+
+    public static TripException submissionNotPending() {
+        return new TripException(
+            "Complément introuvable ou déjà traité.",
+            HttpStatus.NOT_FOUND,
+            "TRP_026"
         );
     }
 }

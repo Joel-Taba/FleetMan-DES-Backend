@@ -26,7 +26,16 @@ public record DriverResponse(
         Instant lastLoginAt,
         String approvalStatus,
         String fleetName,
-        String assignedVehicleLabel
+        String assignedVehicleLabel,
+        @Schema(description = "Statut contractuel : ACTIVE ou LEFT (le champ status donne le statut du jour : ACTIVE, ON_LEAVE, SUSPENDED ou LEFT)")
+        String contractStatus,
+        java.time.LocalDate hireDate,
+        java.time.LocalDate leftAt,
+        String leftReason,
+        @Schema(description = "Absence en cours aujourd'hui")
+        com.yowyob.fleet.domain.model.DriverAbsence currentAbsence,
+        @Schema(description = "Prochaine absence prévue")
+        com.yowyob.fleet.domain.model.DriverAbsence nextAbsence
 ) {
     public static DriverResponse from(Driver driver, UserLocalEntity user) {
         return from(driver, user, null, false, null, null);
@@ -66,8 +75,30 @@ public record DriverResponse(
                 user != null ? user.getLastLoginAt() : null,
                 user != null ? user.getApprovalStatus() : null,
                 fleetName,
-                assignedVehicleLabel
+                assignedVehicleLabel,
+                driver.status(),
+                null,
+                null,
+                null,
+                null,
+                null
         );
+    }
+
+    /** Ajoute contrat et absences : status devient le statut du jour. */
+    public DriverResponse withEmployment(java.time.LocalDate hireDate, java.time.LocalDate leftAt, String leftReason,
+                                         java.util.List<com.yowyob.fleet.domain.model.DriverAbsence> absences) {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        var current = com.yowyob.fleet.domain.model.DriverAbsence.current(absences, today).orElse(null);
+        var next = absences.stream()
+                .filter(a -> !a.isCancelled() && a.startDate().isAfter(today))
+                .min(java.util.Comparator.comparing(com.yowyob.fleet.domain.model.DriverAbsence::startDate))
+                .orElse(null);
+        String effective = com.yowyob.fleet.domain.model.DriverAbsence.effectiveStatus(contractStatus, absences, today);
+        return new DriverResponse(userId, fleetId, managerId, firstName, lastName, email, phone, username,
+                licenceNumber, effective, assignedVehicleId, photoUrl, onActiveTrip, isActive, lastLoginAt,
+                approvalStatus, fleetName, assignedVehicleLabel, contractStatus, hireDate, leftAt, leftReason,
+                current, next);
     }
 
     public String fullName() {

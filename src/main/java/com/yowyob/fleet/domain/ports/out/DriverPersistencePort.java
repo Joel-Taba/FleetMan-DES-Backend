@@ -17,4 +17,8 @@ public interface DriverPersistencePort {
     Mono<Void> updateFleetAssignment(UUID driverId, UUID fleetId);
     Flux<Driver> findAll();
     Mono<Void> softDelete(UUID userId);
+
+    /** Statut contractuel (ACTIVE / LEFT), date d'embauche et départ. */
+    Mono<Void> updateEmployment(UUID userId, String status, java.time.LocalDate hireDate,
+                                java.time.LocalDate leftAt, String leftReason);
 }

@@ -102,7 +102,7 @@ public class OperationEventConsumer {
         }
 
         String title   = event.isCritical()
-                ? "🚨 Incident CRITIQUE signalé"
+                ? "Incident grave signalé"
                 : "Incident signalé sur un véhicule";
         String message = String.format("Incident %s (%s) sur le véhicule %s.",
                 event.incidentType(), event.severity(), event.vehicleRegistration());

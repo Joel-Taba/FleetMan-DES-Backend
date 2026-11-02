@@ -73,6 +73,24 @@ public class ExpenseEntity implements Persistable<UUID> {
     @Column("created_at")
     private LocalDateTime createdAt;
 
+    @Column("created_by")
+    private UUID createdBy;
+
+    @Column("approval_level")
+    private String approvalLevel;
+
+    @Column("over_budget")
+    private boolean overBudget;
+
+    @Column("receipt_url")
+    private String receiptUrl;
+
+    @Column("receipt_name")
+    private String receiptName;
+
+    @Column("receipt_mime")
+    private String receiptMime;
+
     @Transient
     private boolean isNew = false;
 

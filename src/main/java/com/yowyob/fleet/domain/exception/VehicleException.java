@@ -57,7 +57,7 @@ public class VehicleException extends DomainException {
 
     public static VehicleException invalidStatus(String value) {
         return new VehicleException(
-                "Statut de véhicule invalide : " + value + " (valeurs admises : AVAILABLE, MAINTENANCE).",
+                "Statut de véhicule invalide : " + value + " (valeurs admises : disponible, en maintenance, immobilisé ; la réforme passe par « Retirer du parc »).",
                 HttpStatus.BAD_REQUEST, "VHC_011");
     }
 
@@ -65,5 +65,57 @@ public class VehicleException extends DomainException {
         return new VehicleException(
                 "Ce véhicule est immobilisé par un incident grave non résolu : résolvez l'incident pour le rendre disponible.",
                 HttpStatus.CONFLICT, "VHC_012");
+    }
+
+    public static VehicleException notCompliant(String gaps) {
+        return new VehicleException(
+                "Véhicule non conforme pour ce créneau : " + gaps
+                        + ". Mettez à jour ses documents (assurance, visite technique, carte grise).",
+                HttpStatus.UNPROCESSABLE_ENTITY, "VHC_013");
+    }
+
+    public static VehicleException immobilizationReasonRequired() {
+        return new VehicleException(
+                "Indiquez le motif de l'immobilisation (ex. assurance expirée, panne en attente de pièce).",
+                HttpStatus.BAD_REQUEST, "VHC_014");
+    }
+
+    public static VehicleException retired() {
+        return new VehicleException(
+                "Ce véhicule a été retiré du parc : il est conservé pour l'historique et ne peut plus être modifié ni engagé.",
+                HttpStatus.CONFLICT, "VHC_015");
+    }
+
+    public static VehicleException notDispatchable(String statusLabel) {
+        return new VehicleException(
+                "Ce véhicule n'est pas utilisable actuellement (" + statusLabel + ").",
+                HttpStatus.CONFLICT, "VHC_016");
+    }
+
+    public static VehicleException hasHistory() {
+        return new VehicleException(
+                "Ce véhicule a déjà un historique (trajets, carburant, dépenses ou maintenance) : "
+                        + "retirez-le du parc (vente, réforme…) au lieu de le supprimer.",
+                HttpStatus.CONFLICT, "VHC_017");
+    }
+
+    public static VehicleException invalidRetirement(String detail) {
+        return new VehicleException("Retrait du parc invalide : " + detail, HttpStatus.BAD_REQUEST, "VHC_018");
+    }
+
+    public static VehicleException invalidSpecs(String detail) {
+        return new VehicleException("Caractéristiques du véhicule invalides : " + detail, HttpStatus.BAD_REQUEST, "VHC_019");
+    }
+
+    public static VehicleException odometerDecrease(java.math.BigDecimal current) {
+        return new VehicleException(
+                "Le relevé kilométrique ne peut pas être inférieur au dernier relevé connu (" + current.stripTrailingZeros().toPlainString() + " km).",
+                HttpStatus.UNPROCESSABLE_ENTITY, "VHC_020");
+    }
+
+    public static VehicleException missingVehicleType() {
+        return new VehicleException(
+                "Le type de véhicule est obligatoire : il détermine la catégorie de permis exigée.",
+                HttpStatus.BAD_REQUEST, "VHC_021");
     }
 }

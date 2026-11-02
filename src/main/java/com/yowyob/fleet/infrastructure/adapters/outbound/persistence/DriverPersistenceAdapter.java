@@ -106,7 +106,30 @@ public class DriverPersistenceAdapter implements DriverPersistencePort {
                     }
                     entity.setDeletedAt(Instant.now());
                     entity.setAssignedVehicleId(null);
-                    entity.setStatus("INACTIVE");
+                    entity.setStatus("LEFT");
+                    if (entity.getLeftAt() == null) {
+                        entity.setLeftAt(java.time.LocalDate.now());
+                    }
+                    entity.markAsExisting();
+                    return repository.save(entity);
+                })
+                .then();
+    }
+
+    @Override
+    public Mono<Void> updateEmployment(UUID userId, String status, java.time.LocalDate hireDate,
+                                       java.time.LocalDate leftAt, String leftReason) {
+        return repository.findById(userId)
+                .flatMap(entity -> {
+                    entity.setStatus(status);
+                    if (hireDate != null) {
+                        entity.setHireDate(hireDate);
+                    }
+                    entity.setLeftAt(leftAt);
+                    entity.setLeftReason(leftReason);
+                    if (leftAt != null) {
+                        entity.setAssignedVehicleId(null);
+                    }
                     entity.markAsExisting();
                     return repository.save(entity);
                 })

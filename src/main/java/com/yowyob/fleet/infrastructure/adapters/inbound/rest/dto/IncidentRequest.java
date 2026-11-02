@@ -24,8 +24,7 @@ public record IncidentRequest(
         Incident.Severity severity,
 
         @PositiveOrZero(message = "Le coût ne peut pas être négatif.")
-        @Schema(description = "Coût estimé de l'incident en FCFA (optionnel)", example = "150000.00")
-        BigDecimal cost,
+        BigDecimal estimatedCost,
 
         @NotNull(message = "Le véhicule est obligatoire.")
         @Schema(description = "ID du véhicule impliqué", example = "123e4567-e89b-12d3-a456-426614174000")
@@ -47,5 +46,20 @@ public record IncidentRequest(
         String witnessContact,
 
         @Schema(description = "Identifiant de la personne signalant l'incident", example = "Chauffeur Paul Biya")
-        String reportedBy
+        String reportedBy,
+
+        @Schema(description = "Date et heure de l'incident, si déclaré après coup")
+        java.time.LocalDateTime occurredAt,
+
+        @Schema(description = "Le véhicule peut-il rouler ? Non : il est immobilisé")
+        Boolean vehicleDrivable,
+
+        String locationLabel,
+        Boolean injuries,
+        Integer injuriesCount,
+        Boolean thirdPartyInvolved,
+        String thirdPartyName,
+        String thirdPartyPlate,
+        String thirdPartyInsurer,
+        String thirdPartyContact
 ) {}

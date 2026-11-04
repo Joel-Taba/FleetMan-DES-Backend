@@ -25,6 +25,8 @@ public class PlanningAutomationJob {
 
     private static final Logger log = LoggerFactory.getLogger(PlanningAutomationJob.class);
     static final int MISSED_AFTER_HOURS = 2;
+    /** Un planning publié est archivé ce nombre de jours après la fin de sa période, une fois ses postes clos. */
+    static final int ARCHIVE_AFTER_DAYS = 3;
 
     private final DatabaseClient db;
 
@@ -39,6 +41,7 @@ public class PlanningAutomationJob {
         LocalDateTime now = LocalDateTime.now();
         markMissedTrips(now)
                 .then(closeEndedShifts(now))
+                .then(archiveEndedSchedules(now))
                 .onErrorResume(e -> {
                     log.warn("Automatismes du planning ignorés : {}", e.getMessage());
                     return Mono.empty();
@@ -100,6 +103,22 @@ public class PlanningAutomationJob {
         return noShows.then(completed)
                 .doOnNext(n -> {
                     if (n > 0) log.info("🗓️ {} poste(s) terminé(s) automatiquement", n);
+                })
+                .then();
+    }
+
+    Mono<Void> archiveEndedSchedules(LocalDateTime now) {
+        return db.sql("""
+                UPDATE fleet.schedules s SET status = 'ARCHIVED', updated_at = :now
+                WHERE s.status = 'PUBLISHED' AND s.end_date < :limit
+                  AND NOT EXISTS (SELECT 1 FROM fleet.assignments a
+                                  WHERE a.schedule_id = s.id AND a.status IN ('PENDING', 'IN_PROGRESS'))
+                """)
+                .bind("now", now)
+                .bind("limit", now.toLocalDate().minusDays(ARCHIVE_AFTER_DAYS))
+                .fetch().rowsUpdated()
+                .doOnNext(n -> {
+                    if (n > 0) log.info("🗄️ {} planning(s) archivé(s) automatiquement", n);
                 })
                 .then();
     }

@@ -60,7 +60,7 @@ public class BudgetAlertJob {
         boolean needsSave = false;
 
         if (level == Budget.AlertLevel.WARNING && !budget.isAlert80Sent()) {
-            log.warn("🟡 ALERTE BUDGET 80% — Entité {} ({}) : {}% consommé ({}/{} FCFA)",
+            log.warn("🟡 ALERTE BUDGET 80% · Entité {} ({}) : {}% consommé ({}/{} FCFA)",
                     budget.getEntityId(),
                     budget.getScope(),
                     budget.consumptionRate(),
@@ -73,7 +73,7 @@ public class BudgetAlertJob {
         }
 
         if (level == Budget.AlertLevel.EXCEEDED && !budget.isAlert100Sent()) {
-            log.warn("🔴 ALERTE BUDGET 100% DÉPASSÉ — Entité {} ({}) : {}% consommé ({}/{} FCFA)",
+            log.warn("🔴 ALERTE BUDGET 100% DÉPASSÉ · Entité {} ({}) : {}% consommé ({}/{} FCFA)",
                     budget.getEntityId(),
                     budget.getScope(),
                     budget.consumptionRate(),

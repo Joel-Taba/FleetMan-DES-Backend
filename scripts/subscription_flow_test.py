@@ -161,6 +161,7 @@ finally:
         f"subscription_start=nullif('{start}','')::date, subscription_end=nullif('{end}','')::date, "
         f"billing_cycle=nullif('{cycle}','') where id='{company_id}'")
     sql(f"delete from fleet.subscription_orders where company_id='{company_id}'")
+    sql(f"delete from fleet.subscription_events where company_id='{company_id}'")
     if created_plan:
         sql(f"delete from fleet.subscription_plans where id='{created_plan}'")
     print(f"  ↺ données restaurées — {sum(results)}/{len(results)} contrôles OK")

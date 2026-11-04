@@ -162,4 +162,41 @@ public class PlanningException extends DomainException {
                 "Conducteur introuvable pour l'affectation : " + driverId,
                 HttpStatus.NOT_FOUND, "PLN_012");
     }
+
+    /** PLN_020 — Règles de temps de travail dépassées sans motif */
+    public static PlanningException workRulesExceeded(String details) {
+        return new PlanningException("Temps de travail : " + details + " Indiquez un motif pour confirmer.",
+                HttpStatus.CONFLICT, "PLN_020");
+    }
+
+    /** PLN_021 — Motif obligatoire pour modifier un planning publié */
+    public static PlanningException changeReasonRequired() {
+        return new PlanningException("Ce planning est publié : indiquez le motif du changement, il sera communiqué au chauffeur.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "PLN_021");
+    }
+
+    /** PLN_022 — Modèle de poste invalide ou introuvable */
+    public static PlanningException invalidTemplate(String message) {
+        return new PlanningException(message, HttpStatus.UNPROCESSABLE_ENTITY, "PLN_022");
+    }
+
+    /** PLN_023 — Création en série invalide */
+    public static PlanningException invalidBulk(String message) {
+        return new PlanningException(message, HttpStatus.UNPROCESSABLE_ENTITY, "PLN_023");
+    }
+
+    /** PLN_024 — Règles de temps de travail invalides */
+    public static PlanningException invalidWorkRules(String message) {
+        return new PlanningException(message, HttpStatus.UNPROCESSABLE_ENTITY, "PLN_024");
+    }
+
+    /** PLN_025 — Accusé de réception impossible */
+    public static PlanningException notYourShift() {
+        return new PlanningException("Seul le chauffeur du poste peut en accuser réception.", HttpStatus.FORBIDDEN, "PLN_025");
+    }
+
+    /** Même erreur, précédée du contexte (jour d'une série, poste copié…). */
+    public static PlanningException prefixed(String prefix, DomainException e) {
+        return new PlanningException(prefix + e.getMessage(), e.getStatus(), e.getBusinessCode());
+    }
 }

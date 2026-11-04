@@ -432,7 +432,7 @@ public class DocumentService {
         }
 
         String nameOf(UUID id) {
-            return targets.stream().filter(t -> t.id().equals(id)).map(Target::name).findFirst().orElse("—");
+            return targets.stream().filter(t -> t.id().equals(id)).map(Target::name).findFirst().orElse("-");
         }
 
         Set<String> required(Target t) {

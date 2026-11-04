@@ -53,7 +53,7 @@ public class KernelEventConsumer {
                                 user.setActive(false);
                                 return userRepository.save(user);
                             }))
-                    .doOnSuccess(u -> log.info("⛔ Flotte suspendue (org Kernel {}) — manager désactivé", orgId))
+                    .doOnSuccess(u -> log.info("⛔ Flotte suspendue (org Kernel {}) : manager désactivé", orgId))
                     .subscribe();
         } catch (Exception e) {
             log.warn("ORGANIZATION_SUSPENDED ignoré : {}", e.getMessage());
@@ -87,7 +87,7 @@ public class KernelEventConsumer {
                                 user.setActive(false);
                                 return userRepository.save(user);
                             }))
-                    .doOnSuccess(u -> log.info("⛔ Acteur Kernel {} désactivé — compte conducteur suspendu", actorId))
+                    .doOnSuccess(u -> log.info("⛔ Acteur Kernel {} désactivé : compte conducteur suspendu", actorId))
                     .subscribe();
         } catch (Exception e) {
             log.warn("ACTOR_DEACTIVATED ignoré : {}", e.getMessage());

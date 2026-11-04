@@ -291,15 +291,6 @@ public class SuperAdminController {
         return planUseCase.deactivatePlan(id);
     }
 
-    @PostMapping("/managers/{id}/plan")
-    @Operation(summary = "Affecter un plan à un gestionnaire")
-    public Mono<Void> assignPlan(
-        @PathVariable UUID id,
-        @Valid @org.springframework.web.bind.annotation.RequestBody AssignPlanRequest req
-    ) {
-        return planUseCase.assignPlanToManager(id, req.planId(), req.billingCycle());
-    }
-
     // ── WORKFLOW APPROBATION SOUSCRIPTIONS ───────────────────────────────────
 
     @GetMapping("/subscriptions/pending")

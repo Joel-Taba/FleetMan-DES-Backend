@@ -326,7 +326,7 @@ public class IncidentCaseService {
             if (c.getMaintenanceId() != null) {
                 return Mono.<Void>empty();
             }
-            String title = subject != null && !subject.isBlank() ? subject.trim() : "Réparation — " + incident.getType().label();
+            String title = subject != null && !subject.isBlank() ? subject.trim() : "Réparation : " + incident.getType().label();
             return maintenances.createMaintenance(new ManageMaintenanceUseCase.CreateMaintenanceCommand(
                             title, null, incident.getDescription(), null, null, c.getLocationLabel(), incident.getVehicleId(), incident.getDriverId()))
                     .flatMap(m -> {

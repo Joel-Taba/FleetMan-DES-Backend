@@ -37,7 +37,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                         var populator = new ResourceDatabasePopulator(new ClassPathResource("db/demo-seed.sql"));
                         return Mono.from(populator.populate(connectionFactory));
                     }
-                    log.info("🌱 [DEMO] Données déjà présentes — seed ignoré.");
+                    log.info("🌱 [DEMO] Données déjà présentes : seed ignoré.");
                     return Mono.empty();
                 })
                 .then(runKernelOrgPatch())

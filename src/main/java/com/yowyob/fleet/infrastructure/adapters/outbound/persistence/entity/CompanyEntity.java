@@ -24,6 +24,23 @@ public class CompanyEntity implements Persistable<UUID> {
     private String name;
     @Column("logo_url")
     private String logoUrl;
+    @Column("legal_name")
+    private String legalName;
+    @Column("legal_form")
+    private String legalForm;
+    @Column("registration_number")
+    private String registrationNumber;
+    @Column("tax_id")
+    private String taxId;
+    private String sector;
+    private String address;
+    private String city;
+    private String country;
+    @Column("contact_phone")
+    private String contactPhone;
+    @Column("contact_email")
+    private String contactEmail;
+    private String website;
     @Column("plan_id")
     private UUID planId;
     @Column("subscription_status")

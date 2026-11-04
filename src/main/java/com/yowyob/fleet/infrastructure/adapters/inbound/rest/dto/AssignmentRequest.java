@@ -34,5 +34,11 @@ public record AssignmentRequest(
         LocalDateTime endDatetime,
 
         @Schema(description = "Notes ou instructions")
-        String notes
+        String notes,
+
+        @Schema(description = "Motif d'un dépassement des règles de temps de travail")
+        String workRuleOverride,
+
+        @Schema(description = "Motif communiqué au chauffeur si le planning est publié")
+        String changeReason
 ) {}

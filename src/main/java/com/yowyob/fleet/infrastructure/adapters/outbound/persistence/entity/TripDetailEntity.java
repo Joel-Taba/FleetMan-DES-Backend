@@ -46,6 +46,12 @@ public class TripDetailEntity implements Persistable<UUID> {
     @Column("delivered_quantity")
     private Integer deliveredQuantity;
 
+    @Column("stop_id")
+    private UUID stopId;
+
+    @Column("shortage_reason")
+    private String shortageReason;
+
     @Column("sort_order")
     private int sortOrder;
 

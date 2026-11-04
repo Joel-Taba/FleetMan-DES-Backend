@@ -91,11 +91,13 @@ sql(f"update fleet.vehicles set tank_capacity=60 where id='{V1}'")
 # Aucune pièce n'est en règle dans la base de démo : dossier valide le temps de l'essai.
 for doc in ("INSURANCE", "TECHNICAL_CONTROL", "REGISTRATION"):
     sql(f"insert into fleet.documents (id, target_type, target_id, doc_type, doc_number, expiry_date, file_url, review_status, is_current, "
-        f"created_at, updated_at) values (gen_random_uuid(), 'VEHICLE', '{V1}', '{doc}', 'TEST-058-{doc}', current_date + 400, "
-        f"'/api/v1/files/TEST-058.pdf', 'APPROVED', TRUE, now(), now())")
+        f"created_at, updated_at) select gen_random_uuid(), 'VEHICLE', '{V1}', '{doc}', 'TEST-058-{doc}', current_date + 400, "
+        f"'/api/v1/files/TEST-058.pdf', 'APPROVED', TRUE, now(), now() "
+        f"where not exists (select 1 from fleet.documents where target_id='{V1}' and doc_type='{doc}' and is_current)")
 sql("insert into fleet.documents (id, target_type, target_id, doc_type, doc_number, license_categories, expiry_date, file_url, "
     "review_status, is_current, created_at, updated_at) select gen_random_uuid(), 'DRIVER', d.user_id, 'DRIVING_LICENSE', 'TEST-058-LIC', 'B,C,D', "
-    "current_date + 400, '/api/v1/files/TEST-058.pdf', 'APPROVED', TRUE, now(), now() from fleet.drivers d")
+    "current_date + 400, '/api/v1/files/TEST-058.pdf', 'APPROVED', TRUE, now(), now() from fleet.drivers d "
+    "where not exists (select 1 from fleet.documents x where x.target_id=d.user_id and x.doc_type='DRIVING_LICENSE' and x.is_current)")
 
 now = datetime.datetime.now().replace(second=0, microsecond=0)
 shift_start = now + datetime.timedelta(minutes=10)
@@ -104,6 +106,12 @@ iso = lambda d: d.strftime("%Y-%m-%dT%H:%M:%S")
 trip_ids = []
 notif_keys = []
 
+# Les plannings de démo occupent ces ressources en journée : leurs postes sont mis de côté le temps de l'essai.
+parked = sql(f"select string_agg(id::text || ':' || status, ',') from fleet.assignments where status in ('PENDING','IN_PROGRESS') "
+             f"and (driver_id='{BELLA}' or vehicle_id in ('{V1}')) "
+             f"and start_datetime < now() + interval '36 hours' and end_datetime > now() - interval '12 hours'")
+if parked:
+    sql(f"update fleet.assignments set status='CANCELLED' where id in ({','.join(repr(x.split(':')[0]) for x in parked.split(','))})")
 try:
     print("1. Programme publié aux chauffeurs")
     s, sched = call("POST", "/api/v1/schedules", {"fleetId": DOUALA, "title": "Essai 058", "periodType": "WEEKLY",
@@ -112,7 +120,9 @@ try:
     check("programme créé en brouillon", s == 201 and sched.get("status") == "DRAFT", f"({s} {code(sched)})")
     s, shift = call("POST", "/api/v1/assignments", {"scheduleId": sched["id"], "fleetId": DOUALA, "vehicleId": V1,
                                                     "driverId": BELLA, "startDatetime": iso(shift_start),
-                                                    "endDatetime": iso(shift_end)}, MGR)
+                                                    "endDatetime": iso(shift_end),
+                                                    # Les plannings de démo chargent déjà ce chauffeur : dépassement assumé.
+                                                    "workRuleOverride": "Essai automatisé"}, MGR)
     check("poste créé (sans lieux ni km estimés)", s == 201 and "estimatedKm" not in shift and shift.get("tripCount") == 0,
           f"({s} {code(shift)})")
     SHIFT = shift["id"]
@@ -134,7 +144,7 @@ try:
             "missionObject": "Livraison essai 058",
             "details": [{"itemType": "CARGO", "description": "Cartons", "quantity": 10}]}
     s, r = call("POST", "/api/v1/trips", base, MGR)
-    check("sans destination → refusé", s == 400, f"({s} {code(r)})")
+    check("sans destination ni arrêt → refusé", s in (400, 422), f"({s} {code(r)})")
     s, trip = call("POST", "/api/v1/trips", {**base, "destinationLocation": "Entrepôt Akwa"}, MGR)
     check("trajet créé, rattaché au poste", s == 201 and trip.get("assignmentId") == SHIFT
           and trip.get("destinationLocation") == "Entrepôt Akwa" and "missionCost" not in trip,
@@ -157,7 +167,7 @@ try:
     shift_status = sql(f"select status from fleet.assignments where id='{SHIFT}'")
     check("départ : trajet parti, poste démarré", s == 200 and r.get("status") == "DEPARTED"
           and float(r.get("departureKmIndex")) == odo + 5 and shift_status == "IN_PROGRESS", f"({s} {code(r)} {shift_status})")
-    s, r = call("PATCH", f"/api/v1/assignments/{SHIFT}/status", {"status": "CANCELLED"}, MGR)
+    s, r = call("PATCH", f"/api/v1/assignments/{SHIFT}/status", {"status": "CANCELLED", "reason": "Essai : annulation pendant un trajet"}, MGR)
     check("annuler le poste pendant un trajet → refusé", s == 409 and code(r) == "PLN_018", f"({s} {code(r)})")
 
     print("4. Compléments de chargement")
@@ -228,6 +238,8 @@ try:
     mgr_notif = sql(f"select count(*) from fleet.notifications where data like '%{trip_ids[-1]}%' and type='WARNING'")
     check("le gestionnaire est notifié du trajet manqué", mgr_notif == "1", f"({mgr_notif})")
 finally:
+    for x in (parked.split(",") if parked else []):
+        sql(f"update fleet.assignments set status='{x.split(':')[1]}' where id='{x.split(':')[0]}'")
     ids = ",".join(f"'{i}'" for i in trip_ids) or "NULL"
     sql(f"""
         delete from fleet.documents where doc_number like 'TEST-058-%';

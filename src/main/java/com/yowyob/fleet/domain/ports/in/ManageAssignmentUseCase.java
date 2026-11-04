@@ -36,15 +36,15 @@ public interface ManageAssignmentUseCase {
      * Statuts manuels uniquement : NO_SHOW (chauffeur absent au poste) et CANCELLED. Le démarrage
      * (premier départ) et la fin (heure de fin, km des trajets) sont automatiques.
      */
-    Mono<Assignment> updateStatus(UUID id, Assignment.Status newStatus, BigDecimal actualKm);
+    Mono<Assignment> updateStatus(UUID id, Assignment.Status newStatus, BigDecimal actualKm, String reason);
 
     /** Nombre de trajets rattachés au poste. */
     Mono<Long> countLinkedTrips(UUID assignmentId);
 
     /** Un chauffeur ne voit un poste que si son programme est publié (ou s'il n'a pas de programme). */
     Mono<Boolean> isVisibleToDriver(Assignment assignment);
-    Mono<Assignment> updateResources(UUID id, UUID vehicleId, UUID driverId);
-    Mono<Void> delete(UUID id);
+    Mono<Assignment> updateShift(UUID id, ShiftChange change);
+    Mono<Void> delete(UUID id, String reason);
 
     // ── Records Command ───────────────────────────────────────────────────────
 
@@ -55,6 +55,14 @@ public interface ManageAssignmentUseCase {
             UUID driverId,
             LocalDateTime startDatetime,
             LocalDateTime endDatetime,
-            String notes
+            String notes,
+            /** Motif d'un dépassement des règles de temps de travail (sinon refusé). */
+            String workRuleOverride,
+            /** Motif communiqué au chauffeur si le planning est déjà publié (facultatif à la création). */
+            String changeReason
     ) {}
+
+    /** Réaffectation et/ou nouveaux horaires d'un poste en attente. */
+    record ShiftChange(UUID vehicleId, UUID driverId, LocalDateTime startDatetime, LocalDateTime endDatetime,
+                       String reason, String workRuleOverride) {}
 }

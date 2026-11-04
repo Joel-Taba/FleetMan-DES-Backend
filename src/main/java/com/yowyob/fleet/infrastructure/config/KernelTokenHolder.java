@@ -57,7 +57,7 @@ public class KernelTokenHolder {
             log.debug("🔑 [KERNEL TOKEN] Token en cache encore valide jusqu'à {}", held.expiresAt());
             return Mono.just(held.accessToken());
         }
-        log.info("🔄 [KERNEL TOKEN] Token absent ou expiré — nouveau login en cours...");
+        log.info("🔄 [KERNEL TOKEN] Token absent ou expiré : nouveau login en cours...");
         return doLogin();
     }
 

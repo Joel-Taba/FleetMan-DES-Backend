@@ -25,7 +25,7 @@ public record ExpenseRequest(
         @Schema(description = "Description de la dépense", example = "Amende de stationnement - RN1 Yaoundé")
         String description,
 
-        @Schema(description = "Date et heure de la dépense (optionnel — défaut : maintenant)",
+        @Schema(description = "Date et heure de la dépense (optionnel, défaut : maintenant)",
                 example = "2026-06-01T14:30:00")
         LocalDateTime expenseDate,
 
@@ -36,7 +36,7 @@ public record ExpenseRequest(
         @Schema(description = "ID du chauffeur impliqué (optionnel)")
         UUID driverId,
 
-        @Schema(description = "Justificatif déjà téléversé (URL /api/v1/files/...) — exigé pour approuver, ajoutable ensuite")
+        @Schema(description = "Justificatif déjà téléversé (URL /api/v1/files/...) : exigé pour approuver, ajoutable ensuite")
         String receiptUrl,
 
         String receiptName,

@@ -211,7 +211,7 @@ public class InitialDataLoader implements CommandLineRunner {
 
     private Mono<Void> seedSuperAdmin() {
         if (demoDataEnabled) {
-            log.info("ℹ️ [SEEDER] Profil demo actif — bootstrap super-admin distant ignoré.");
+            log.info("ℹ️ [SEEDER] Profil demo actif : bootstrap super-admin distant ignoré.");
             return Mono.empty();
         }
         return authPort.login(adminPrincipal, adminPassword)

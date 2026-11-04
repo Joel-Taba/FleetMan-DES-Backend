@@ -302,7 +302,7 @@ public class BudgetService implements ManageBudgetUseCase {
                             .flatMap(total -> {
                                 Budget.AlertLevel previousLevel = budget.getAlertLevel();
                                 Budget.AlertLevel newLevel = budget.updateConsumed(total);
-                                log.debug("Budget {} recalculé — {}% consommé [{}]",
+                                log.debug("Budget {} recalculé : {}% consommé [{}]",
                                         budgetId, budget.consumptionRate(), newLevel);
                                 return budgetPersistence.save(budget)
                                         .flatMap(saved -> journal.recordLevelChange(saved, previousLevel, null).thenReturn(saved));

@@ -39,13 +39,15 @@ class SubscriptionCheckoutServiceTest {
     @Mock SubscriptionPlanService planService;
     @Mock SubscriptionPaymentPort paymentPort;
     @Mock DatabaseClient db;
+    @Mock SubscriptionJournal journal;
 
     private SubscriptionCheckoutService service;
     private final UUID managerId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
-        service = new SubscriptionCheckoutService(planRepo, orderRepo, planService, paymentPort, db);
+        service = new SubscriptionCheckoutService(planRepo, orderRepo, planService, paymentPort, db, journal);
+        when(journal.log(any())).thenReturn(Mono.empty());
         when(orderRepo.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
         when(orderRepo.findByCompanyId(managerId)).thenReturn(Flux.empty());
         when(planService.assertUsageFits(any(), any())).thenReturn(Mono.empty());

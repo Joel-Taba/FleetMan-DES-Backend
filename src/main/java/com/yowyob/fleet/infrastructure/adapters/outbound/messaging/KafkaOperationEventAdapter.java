@@ -27,11 +27,11 @@ public class KafkaOperationEventAdapter implements OperationEventPort {
 
     @Override
     public Mono<Void> publishMaintenanceCreated(MaintenanceCreatedEvent event) {
-        log.info("📤 Publication événement MaintenanceCreated — vehicleId: {}, managerId: {}",
+        log.info("📤 Publication événement MaintenanceCreated : vehicleId: {}, managerId: {}",
                 event.vehicleId(), event.fleetManagerId());
 
         return kafkaProducer.send(operationEventsTopic, event.maintenanceId().toString(), event)
-                .doOnSuccess(result -> log.debug("✅ MaintenanceCreatedEvent envoyé — offset: {}",
+                .doOnSuccess(result -> log.debug("✅ MaintenanceCreatedEvent envoyé : offset: {}",
                         result.recordMetadata().offset()))
                 .doOnError(e -> log.error("❌ Échec envoi MaintenanceCreatedEvent: {}", e.getMessage()))
                 .then();
@@ -40,11 +40,11 @@ public class KafkaOperationEventAdapter implements OperationEventPort {
     @Override
     public Mono<Void> publishIncidentReported(IncidentReportedEvent event) {
         String logLevel = event.isCritical() ? "🚨 CRITIQUE" : "📤";
-        log.info("{} Publication événement IncidentReported — type: {}, severity: {}, vehicleId: {}",
+        log.info("{} Publication événement IncidentReported : type: {}, severity: {}, vehicleId: {}",
                 logLevel, event.incidentType(), event.severity(), event.vehicleId());
 
         return kafkaProducer.send(operationEventsTopic, event.incidentId().toString(), event)
-                .doOnSuccess(result -> log.debug("✅ IncidentReportedEvent envoyé — offset: {}",
+                .doOnSuccess(result -> log.debug("✅ IncidentReportedEvent envoyé : offset: {}",
                         result.recordMetadata().offset()))
                 .doOnError(e -> log.error("❌ Échec envoi IncidentReportedEvent: {}", e.getMessage()))
                 .then();

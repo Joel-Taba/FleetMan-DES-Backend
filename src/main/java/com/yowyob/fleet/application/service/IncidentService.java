@@ -129,7 +129,7 @@ public class IncidentService implements ManageIncidentUseCase {
                             .subscribe();
 
                     if (saved.isCritical()) {
-                        log.warn("🚨 Incident CRITIQUE déclaré sur le véhicule {} — Type: {}, Sévérité: {}",
+                        log.warn("🚨 Incident CRITIQUE déclaré sur le véhicule {} · Type: {}, Sévérité: {}",
                                 saved.getVehicleRegistration(), saved.getType(), saved.getSeverity());
                     }
 

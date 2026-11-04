@@ -22,7 +22,9 @@ public interface ManageTripUseCase {
         String description,
         int quantity,
         BigDecimal weight,
-        Integer departureQuantity
+        Integer departureQuantity,
+        /** Indice (0…n-1) de l'arrêt dans la liste des arrêts ; à défaut, le dernier arrêt. */
+        Integer stopIndex
     ) {}
 
     record CreateTripCommand(
@@ -42,7 +44,9 @@ public interface ManageTripUseCase {
         BigDecimal destinationLat,
         BigDecimal destinationLng,
         LocalDateTime scheduledReturnDatetime,
-        List<TripDetailInput> details
+        List<TripDetailInput> details,
+        /** Arrêts de la tournée ; vide : un arrêt unique à la destination. */
+        List<com.yowyob.fleet.domain.model.TripStopRules.StopInput> stops
     ) {}
 
     record UpdateTripCommand(
@@ -70,7 +74,8 @@ public interface ManageTripUseCase {
         String description,
         Integer quantity,
         BigDecimal weight,
-        String notes
+        String notes,
+        UUID stopId
     ) {}
 
     record RegisterReturnCommand(

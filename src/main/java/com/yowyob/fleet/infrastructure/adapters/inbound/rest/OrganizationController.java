@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.yowyob.fleet.infrastructure.config.security.AuthPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -19,6 +20,9 @@ import org.springframework.http.codec.multipart.Part;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -38,6 +42,8 @@ import java.util.UUID;
 public class OrganizationController {
 
     private final OrganizationService organizationService;
+    private final com.yowyob.fleet.application.service.CompanySiteService siteService;
+    private final com.yowyob.fleet.application.service.CompanyOverviewService overviewService;
 
     @Parameter(name = "adminId", description = "UUID de l'admin (organisation). Optionnel : déduit du JWT. Super-admin : peut viser une autre org.")
     @GetMapping("/summary")
@@ -78,13 +84,102 @@ public class OrganizationController {
 
     @PutMapping("/profile")
     @PreAuthorize("hasAnyRole('FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
-    @Operation(summary = "Mettre à jour le nom / logo de l'organisation")
+    @Operation(summary = "Mettre à jour la fiche de l'entreprise")
     public Mono<OrganizationDtos.OrganizationProfile> updateProfile(
-            @RequestBody UpdateOrganizationProfileRequest request,
+            @RequestBody OrganizationDtos.UpdateProfileRequest request,
             Authentication auth
     ) {
         return organizationService.resolveOrganizationAdminId(auth, null)
-                .flatMap(id -> organizationService.updateProfile(id, request.organizationName(), request.logoUrl()));
+                .flatMap(id -> organizationService.updateLegalProfile(id, request));
+    }
+
+    @GetMapping("/structure")
+    @Operation(summary = "Organigramme : sites, flottes et gestionnaires",
+            description = "Admin : toute l'entreprise. Gestionnaire : ses flottes uniquement.")
+    public Mono<OrganizationDtos.OrganizationStructure> structure(
+            @RequestParam(required = false) UUID adminId,
+            Authentication auth
+    ) {
+        return organizationService.resolveOrganizationAdminId(auth, adminId)
+                .flatMap(id -> organizationService.scopedManagerId(auth, null)
+                        .map(java.util.Optional::of)
+                        .defaultIfEmpty(java.util.Optional.empty())
+                        .flatMap(manager -> organizationService.structure(id, manager.orElse(null))));
+    }
+
+    @GetMapping("/overview")
+    @PreAuthorize("hasAnyRole('FLEET_ADMIN', 'FLEET_MANAGER')")
+    @Operation(summary = "Synthèse des tableaux de bord",
+            description = "Flottes, personnel, exploitation, coûts, conformité et activité récente. "
+                    + "Admin : toute l'entreprise. Gestionnaire : ses flottes uniquement.")
+    public Mono<com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.CompanyOverviewDtos.Overview> overview(Authentication auth) {
+        return organizationService.resolveOrganizationAdminId(auth, null)
+                .flatMap(company -> organizationService.scopedManagerId(auth, null)
+                        .map(java.util.Optional::of)
+                        .defaultIfEmpty(java.util.Optional.empty())
+                        .flatMap(manager -> overviewService.overview(AuthPrincipal.userId(auth), company, manager.orElse(null))));
+    }
+
+    @GetMapping("/sites")
+    @Operation(summary = "Sites de l'entreprise")
+    public Flux<OrganizationDtos.CompanySite> sites(Authentication auth) {
+        return organizationService.resolveOrganizationAdminId(auth, null).flatMapMany(siteService::list);
+    }
+
+    @PostMapping("/sites")
+    @PreAuthorize("hasRole('FLEET_ADMIN')")
+    @Operation(summary = "Ajouter un site")
+    public Mono<OrganizationDtos.CompanySite> createSite(@RequestBody OrganizationDtos.SiteRequest request, Authentication auth) {
+        return organizationService.resolveOrganizationAdminId(auth, null)
+                .flatMap(company -> siteService.create(company, request));
+    }
+
+    @PutMapping("/sites/{siteId}")
+    @PreAuthorize("hasRole('FLEET_ADMIN')")
+    @Operation(summary = "Modifier un site")
+    public Mono<OrganizationDtos.CompanySite> updateSite(
+            @PathVariable UUID siteId,
+            @RequestBody OrganizationDtos.SiteRequest request,
+            Authentication auth
+    ) {
+        return organizationService.resolveOrganizationAdminId(auth, null)
+                .flatMap(company -> siteService.update(company, siteId, request));
+    }
+
+    public record SiteActiveRequest(boolean active) {}
+
+    @PatchMapping("/sites/{siteId}/active")
+    @PreAuthorize("hasRole('FLEET_ADMIN')")
+    @Operation(summary = "Activer ou désactiver un site")
+    public Mono<OrganizationDtos.CompanySite> setSiteActive(
+            @PathVariable UUID siteId,
+            @RequestBody SiteActiveRequest request,
+            Authentication auth
+    ) {
+        return organizationService.resolveOrganizationAdminId(auth, null)
+                .flatMap(company -> siteService.setActive(company, siteId, request.active()));
+    }
+
+    @DeleteMapping("/sites/{siteId}")
+    @PreAuthorize("hasRole('FLEET_ADMIN')")
+    @Operation(summary = "Supprimer un site sans flotte")
+    public Mono<Void> deleteSite(@PathVariable UUID siteId, Authentication auth) {
+        return organizationService.resolveOrganizationAdminId(auth, null)
+                .flatMap(company -> siteService.delete(company, siteId));
+    }
+
+    public record FleetSiteRequest(UUID siteId) {}
+
+    @PutMapping("/fleets/{fleetId}/site")
+    @PreAuthorize("hasRole('FLEET_ADMIN')")
+    @Operation(summary = "Rattacher une flotte à un site")
+    public Mono<Void> attachFleetToSite(
+            @PathVariable UUID fleetId,
+            @RequestBody FleetSiteRequest request,
+            Authentication auth
+    ) {
+        return organizationService.resolveOrganizationAdminId(auth, null)
+                .flatMap(company -> siteService.attachFleet(company, fleetId, request.siteId()));
     }
 
     @PostMapping(value = "/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -108,8 +203,6 @@ public class OrganizationController {
                         })
                         .flatMap(bytes -> organizationService.updateLogo(adminId, bytes, filename, contentType)));
     }
-
-    public record UpdateOrganizationProfileRequest(String organizationName, String logoUrl) {}
 
     @GetMapping("/fleets")
     @Operation(summary = "Toutes les flottes de l'organisation")

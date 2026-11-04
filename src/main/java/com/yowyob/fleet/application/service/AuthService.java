@@ -198,7 +198,7 @@ public class AuthService implements AuthUseCase {
             return managerRepo.existsById(localUserId).flatMap(exists -> {
                 if (exists) return Mono.empty();
                 // Un manager doit être créé par un admin (created_by_admin_id NOT NULL).
-                log.warn("Profil FLEET_MANAGER absent pour {} — création ignorée (rattachement admin obligatoire)", localUserId);
+                log.warn("Profil FLEET_MANAGER absent pour {} : création ignorée (rattachement admin obligatoire)", localUserId);
                 return Mono.empty();
             });
         }
@@ -424,7 +424,7 @@ public class AuthService implements AuthUseCase {
             .switchIfEmpty(Mono.defer(() ->
                 userRepo.findByEmail(remote.email())
                     .flatMap(existingByEmail -> {
-                        log.info("🔄 [SYNC] Merge email={} — local id={}, kernel_id={}",
+                        log.info("🔄 [SYNC] Merge email={} : local id={}, kernel_id={}",
                                 remote.email(), existingByEmail.getId(), remote.id());
                         mergeRemoteIntoLocal(existingByEmail, remote);
                         existingByEmail.setLastLoginAt(Instant.now());

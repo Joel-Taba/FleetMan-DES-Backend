@@ -49,6 +49,7 @@ public class SubscriptionCheckoutService {
     private final SubscriptionPlanService planService;
     private final SubscriptionPaymentPort paymentPort;
     private final DatabaseClient db;
+    private final SubscriptionJournal journal;
 
     /** Commande créée, avec la consigne de paiement à afficher (null si rien à payer). */
     public record CheckoutResult(SubscriptionOrderEntity order, String paymentInstructions, boolean simulation) {}
@@ -123,6 +124,46 @@ public class SubscriptionCheckoutService {
         });
     }
 
+    /** Règlement reçu hors ligne, enregistré par le super-administrateur. */
+    public Mono<SubscriptionOrderEntity> recordManualPayment(UUID orderId, UUID actorId, String method, String reference, String note) {
+        return orderRepo.findById(orderId)
+                .switchIfEmpty(Mono.error(SubscriptionException.orderNotFound()))
+                .flatMap(order -> {
+                    if (!PENDING.equals(order.getStatus())) {
+                        return Mono.error(SubscriptionException.orderNotPayable(order.getStatus()));
+                    }
+                    order.setPaymentProvider("MANUAL");
+                    order.setPaymentMethod(method);
+                    order.setRecordedBy(actorId);
+                    order.setPaymentNote(note);
+                    if (reference != null) {
+                        order.setPaymentReference(reference);
+                    }
+                    order.setUpdatedAt(LocalDateTime.now());
+                    order.setNew(false);
+                    return orderRepo.save(order);
+                })
+                .flatMap(order -> confirmPayment(order.getId()));
+    }
+
+    /** Annulation d'une commande en attente par le super-administrateur. */
+    public Mono<SubscriptionOrderEntity> cancelOrderAsAdmin(UUID orderId, UUID actorId, String reason) {
+        return orderRepo.findById(orderId)
+                .switchIfEmpty(Mono.error(SubscriptionException.orderNotFound()))
+                .flatMap(order -> {
+                    if (!PENDING.equals(order.getStatus())) {
+                        return Mono.error(SubscriptionException.orderNotPayable(order.getStatus()));
+                    }
+                    order.setStatus(CANCELLED);
+                    order.setUpdatedAt(LocalDateTime.now());
+                    order.setNew(false);
+                    return orderRepo.save(order);
+                })
+                .flatMap(order -> journal.log(new SubscriptionJournal.Entry(order.getCompanyId(), "ORDER_CANCELLED", actorId,
+                                order.getPlanName(), null, order.getAmount(), order.getPaymentReference(), reason))
+                        .thenReturn(order));
+    }
+
     public Flux<SubscriptionOrderEntity> listOrders(UUID managerId) {
         return orderRepo.findByCompanyId(managerId);
     }
@@ -165,6 +206,9 @@ public class SubscriptionCheckoutService {
         order.setPeriodStart(today);
         return planService.activateSubscription(managerId, plan, BillingCycle.MONTHLY, today)
                 .then(orderRepo.save(order))
+                .flatMap(saved -> journal.log(new SubscriptionJournal.Entry(managerId, "PLAN_CHANGED", managerId,
+                                plan.getName(), null, null, null, null))
+                        .thenReturn(saved))
                 .map(saved -> new CheckoutResult(saved, null, false));
     }
 
@@ -233,7 +277,11 @@ public class SubscriptionCheckoutService {
                     log.info("✅ Abonnement {} payé pour {} (période {} → {})",
                             plan.getName(), order.getCompanyId(), order.getPeriodStart(), order.getPeriodEnd());
                     return orderRepo.save(order);
-                }));
+                }))
+                .flatMap(saved -> journal.log(new SubscriptionJournal.Entry(saved.getCompanyId(), "PAYMENT_CONFIRMED",
+                                saved.getRecordedBy(), saved.getPlanName(), saved.getPeriodEnd(), saved.getAmount(),
+                                saved.getPaymentReference(), null))
+                        .thenReturn(saved));
     }
 
     private record CurrentSubscription(UUID planId, String status, LocalDate end) {}

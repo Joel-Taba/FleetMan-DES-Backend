@@ -7,6 +7,6 @@ import jakarta.validation.constraints.NotBlank;
 public record ExpenseRejectRequest(
 
         @NotBlank(message = "Le motif de rejet est obligatoire.")
-        @Schema(description = "Motif du rejet (obligatoire)", example = "Dépense non justifiée — aucun justificatif fourni.")
+        @Schema(description = "Motif du rejet (obligatoire)", example = "Dépense non justifiée : aucun justificatif fourni.")
         String rejectionReason
 ) {}

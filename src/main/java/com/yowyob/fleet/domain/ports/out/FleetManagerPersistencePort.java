@@ -10,7 +10,5 @@ public interface FleetManagerPersistencePort {
      * et doit correspondre à un {@code platform_admins.user_id} existant.
      */
     Mono<Void> createProfile(UUID userId, String companyName, UUID createdByAdminId);
-
-    Mono<Void> updateCompany(UUID userId, String companyName);
     Mono<String> getCompanyName(UUID userId);
 }

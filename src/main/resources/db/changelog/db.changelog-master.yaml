@@ -233,3 +233,15 @@ databaseChangeLog:
       file: db/changelog/changes/061-budget-tracking.sql
   - include:
       file: db/changelog/changes/062-incident-case.sql
+  # 63. Organisation : fiche légale de l'entreprise, sites, rattachement des flottes.
+  - include:
+      file: db/changelog/changes/063-company-organization.sql
+  # 64. Pilotage des abonnements par le super-administrateur : journal, suspension, règlement manuel.
+  - include:
+      file: db/changelog/changes/064-subscription-administration.sql
+  # 65. Tournées multi-arrêts : arrêts ordonnés, manifeste par arrêt, preuve de livraison.
+  - include:
+      file: db/changelog/changes/065-trip-stops.sql
+  # 66. Plannings : règles de temps de travail, changements après publication, modèles de postes.
+  - include:
+      file: db/changelog/changes/066-planning-workforce.sql

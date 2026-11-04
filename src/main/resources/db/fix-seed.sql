@@ -165,7 +165,7 @@ INSERT INTO fleet.alert_rules (id, name, description, manager_id, trigger_type, 
   ('ab000006-0000-4000-8000-000000000006', 'Score conducteur dégradé',       'Notifier si score mensuel < 70',                        'a0000003-0000-4000-8000-000000000003', 'DRIVER_SCORE_DROP',     'IN_APP_NOTIFICATION', 'MANAGER', true, false, '70'),
   ('ab000007-0000-4000-8000-000000000007', 'Anomalie carburant',             'Détection consommation anormale > 20% au-dessus moyenne','a0000003-0000-4000-8000-000000000003', 'FUEL_ANOMALY',          'IN_APP_NOTIFICATION', 'MANAGER', true, false, '20'),
   ('ab000008-0000-4000-8000-000000000008', 'Alerte doc expiration J-7',      'Alerte urgente 7 jours avant expiration',               'a0000006-0000-4000-8000-000000000006', 'DOCUMENT_EXPIRY',       'EMAIL',               'MANAGER', true, true,  '7'),
-  ('ab000009-0000-4000-8000-000000000009', 'Notification chauffeur — aff.',  'Notifier chauffeur de sa prochaine affectation',        'a0000003-0000-4000-8000-000000000003', 'INCIDENT_REPORTED',     'IN_APP_NOTIFICATION', 'DRIVER',  true, false, NULL)
+  ('ab000009-0000-4000-8000-000000000009', 'Notification chauffeur : aff.',  'Notifier chauffeur de sa prochaine affectation',        'a0000003-0000-4000-8000-000000000003', 'INCIDENT_REPORTED',     'IN_APP_NOTIFICATION', 'DRIVER',  true, false, NULL)
 ON CONFLICT (id) DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════
@@ -174,7 +174,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO fleet.alert_events (id, rule_id, rule_name, manager_id, trigger_type, action_type, title, message, source_entity_id, source_entity_type, read_status) VALUES
   ('ac000001-0000-4000-8000-000000000001', 'ab000001-0000-4000-8000-000000000001', 'Alerte doc expiration J-30',
    'a0000003-0000-4000-8000-000000000003', 'DOCUMENT_EXPIRY', 'IN_APP_NOTIFICATION',
-   'Document bientôt expiré — CE-456-AB',
+   'Document bientôt expiré : CE-456-AB',
    'Le contrôle technique du véhicule CE-456-AB expire le 30/06/2026 (dans 22 jours). Pensez à le renouveler.',
    'f2000002-0000-4000-8000-000000000002', 'VEHICLE_DOCUMENT', 'UNREAD'),
   ('ac000002-0000-4000-8000-000000000002', 'ab000003-0000-4000-8000-000000000003', 'Alerte budget dépassé',
@@ -184,17 +184,17 @@ INSERT INTO fleet.alert_events (id, rule_id, rule_name, manager_id, trigger_type
    'f5000003-0000-4000-8000-000000000003', 'BUDGET', 'UNREAD'),
   ('ac000003-0000-4000-8000-000000000003', 'ab000004-0000-4000-8000-000000000004', 'Alerte maintenance échue',
    'a0000003-0000-4000-8000-000000000003', 'MAINTENANCE_ALERT_DUE', 'IN_APP_NOTIFICATION',
-   'Maintenance en retard — SW-123-DL',
+   'Maintenance en retard : SW-123-DL',
    'La vidange du véhicule SW-123-DL est en retard de 28 jours. Planifiez l''entretien immédiatement.',
    'f9000001-0000-4000-8000-000000000001', 'MAINTENANCE_ALERT', 'UNREAD'),
   ('ac000004-0000-4000-8000-000000000004', 'ab000005-0000-4000-8000-000000000005', 'Alerte incident signalé',
    'a0000003-0000-4000-8000-000000000003', 'INCIDENT_REPORTED', 'IN_APP_NOTIFICATION',
-   'Incident critique — YA-777-LT',
+   'Incident critique : YA-777-LT',
    'André Mbarga a signalé une collision sur le véhicule YA-777-LT. Coût estimé : 180 000 FCFA.',
    'f1000009-0000-4000-8000-000000000009', 'INCIDENT', 'UNREAD'),
   ('ac000005-0000-4000-8000-000000000005', 'ab000001-0000-4000-8000-000000000001', 'Alerte doc expiration J-30',
    'a0000003-0000-4000-8000-000000000003', 'DOCUMENT_EXPIRY', 'IN_APP_NOTIFICATION',
-   'Permis de transport expiré — YA-777-LT',
+   'Permis de transport expiré : YA-777-LT',
    'Le permis de transport du véhicule YA-777-LT est expiré depuis le 10/05/2026. Renouvelez immédiatement.',
    'f2000008-0000-4000-8000-000000000008', 'VEHICLE_DOCUMENT', 'UNREAD')
 ON CONFLICT (id) DO NOTHING;

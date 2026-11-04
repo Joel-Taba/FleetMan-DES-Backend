@@ -32,6 +32,9 @@ public class TripMissionSubmissionEntity implements Persistable<UUID> {
     @Column("detail_id")
     private UUID detailId;
 
+    @Column("stop_id")
+    private UUID stopId;
+
     @Column("rejection_reason")
     private String rejectionReason;
 

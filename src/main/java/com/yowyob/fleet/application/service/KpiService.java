@@ -118,7 +118,7 @@ public class KpiService implements KpiUseCase {
                                                   KpiSnapshot.PeriodType periodType,
                                                   LocalDate periodStart) {
         LocalDate periodEnd = periodEnd(periodType, periodStart);
-        log.info("Calcul KPI flotte {} — {} [{} → {}]", fleetId, periodType, periodStart, periodEnd);
+        log.info("Calcul KPI flotte {} : {} [{} → {}]", fleetId, periodType, periodStart, periodEnd);
 
         LocalDateTime startDt = periodStart.atStartOfDay();
         LocalDateTime endDt = periodEnd.plusDays(1).atStartOfDay();

@@ -326,7 +326,7 @@ public class KernelAuthAdapter implements AuthPort {
     @Override
     public Mono<UserDetail> updateUserProfile(UUID userId, String token,
                                                AuthUseCase.UpdateProfileCommand command) {
-        log.info("🛠 [KERNEL AUTH] updateUserProfile — délégué au Kernel (non implémenté)");
+        log.info("🛠 [KERNEL AUTH] updateUserProfile : délégué au Kernel (non implémenté)");
         return getUserProfile(token);
     }
 
@@ -360,7 +360,7 @@ public class KernelAuthAdapter implements AuthPort {
 
     @Override
     public Mono<Void> deleteRemoteAccount(UUID userId, String token) {
-        log.info("🛠 [KERNEL AUTH] deleteRemoteAccount — délégué au Kernel");
+        log.info("🛠 [KERNEL AUTH] deleteRemoteAccount : délégué au Kernel");
         return Mono.empty();
     }
 
@@ -373,7 +373,7 @@ public class KernelAuthAdapter implements AuthPort {
     @Override
     public Mono<Void> updateProfilePicture(UUID userId, String token,
                                             AuthUseCase.FileContent file) {
-        log.info("🛠 [KERNEL AUTH] updateProfilePicture — délégué au Kernel");
+        log.info("🛠 [KERNEL AUTH] updateProfilePicture : délégué au Kernel");
         return Mono.empty();
     }
 

@@ -63,11 +63,11 @@ public class OperationEventConsumer {
     // ── Handlers ─────────────────────────────────────────────────────────────
 
     private Mono<Void> handleMaintenanceCreated(OperationEventPort.MaintenanceCreatedEvent event) {
-        log.info("📥 [OperationConsumer] MaintenanceCreated — vehicleId: {}, managerId: {}",
+        log.info("📥 [OperationConsumer] MaintenanceCreated : vehicleId: {}, managerId: {}",
                 event.vehicleId(), event.fleetManagerId());
 
         if (event.fleetManagerId() == null) {
-            log.warn("⚠️ fleetManagerId absent dans MaintenanceCreatedEvent — notification ignorée");
+            log.warn("⚠️ fleetManagerId absent dans MaintenanceCreatedEvent : notification ignorée");
             return Mono.empty();
         }
 
@@ -93,11 +93,11 @@ public class OperationEventConsumer {
     }
 
     private Mono<Void> handleIncidentReported(OperationEventPort.IncidentReportedEvent event) {
-        log.info("📥 [OperationConsumer] IncidentReported — type: {}, severity: {}, critical: {}",
+        log.info("📥 [OperationConsumer] IncidentReported : type: {}, severity: {}, critical: {}",
                 event.incidentType(), event.severity(), event.isCritical());
 
         if (event.fleetManagerId() == null) {
-            log.warn("⚠️ fleetManagerId absent dans IncidentReportedEvent — notification ignorée");
+            log.warn("⚠️ fleetManagerId absent dans IncidentReportedEvent : notification ignorée");
             return Mono.empty();
         }
 

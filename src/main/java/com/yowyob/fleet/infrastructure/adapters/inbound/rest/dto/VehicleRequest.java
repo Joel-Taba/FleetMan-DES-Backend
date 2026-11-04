@@ -53,7 +53,7 @@ public record VehicleRequest(
     @Schema(example = "2024")
     Integer manufacturingYear,
 
-    @Schema(description = "Capacité du réservoir (L) — obligatoire sauf remorque ou véhicule électrique", example = "80")
+    @Schema(description = "Capacité du réservoir (L) : obligatoire sauf remorque ou véhicule électrique", example = "80")
     Double tankCapacity,
     Integer totalSeatNumber,
     @Schema(description = "Consommation de référence (L/100 km)", example = "9.5")

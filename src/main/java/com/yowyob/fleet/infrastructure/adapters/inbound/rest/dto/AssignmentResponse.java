@@ -22,7 +22,15 @@ public record AssignmentResponse(
         String notes,
         LocalDateTime createdAt,
         @Schema(description = "Trajets effectués ou prévus pendant le poste")
-        long tripCount
+        long tripCount,
+        @Schema(description = "Accusé de réception du chauffeur")
+        LocalDateTime acknowledgedAt,
+        @Schema(description = "Motif du dernier changement après publication")
+        String changeReason,
+        LocalDateTime changedAt,
+        @Schema(description = "Motif d'un dépassement des règles de temps de travail")
+        String workRuleOverride,
+        String cancelReason
 ) {
     public static AssignmentResponse from(Assignment a) {
         return new AssignmentResponse(
@@ -37,12 +45,18 @@ public record AssignmentResponse(
                 a.getActualKm(),
                 a.getNotes(),
                 a.getCreatedAt(),
-                0
+                0, null, null, null, null, null
         );
     }
 
     public AssignmentResponse withTripCount(long count) {
         return new AssignmentResponse(id, scheduleId, fleetId, vehicleId, driverId, startDatetime, endDatetime,
-                status, actualKm, notes, createdAt, count);
+                status, actualKm, notes, createdAt, count, acknowledgedAt, changeReason, changedAt, workRuleOverride, cancelReason);
+    }
+
+    public AssignmentResponse withTracking(LocalDateTime acknowledged, String change, LocalDateTime changed,
+                                           String override, String cancel) {
+        return new AssignmentResponse(id, scheduleId, fleetId, vehicleId, driverId, startDatetime, endDatetime,
+                status, actualKm, notes, createdAt, tripCount, acknowledged, change, changed, override, cancel);
     }
 }

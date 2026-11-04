@@ -20,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDate;
@@ -36,13 +37,18 @@ public class AssignmentController {
     private final ManageAssignmentUseCase assignmentUseCase;
     private final AccessScopeService accessScope;
     private final ResourceAccessService resourceAccess;
+    private final com.yowyob.fleet.application.service.WorkRulesService workRules;
+    private final com.yowyob.fleet.application.service.PlanningToolsService planningTools;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
     }
 
     private Mono<AssignmentResponse> withTrips(com.yowyob.fleet.domain.model.Assignment a) {
-        return assignmentUseCase.countLinkedTrips(a.getId()).map(AssignmentResponse.from(a)::withTripCount);
+        return Mono.zip(assignmentUseCase.countLinkedTrips(a.getId()), workRules.extras(a.getId()))
+                .map(t -> AssignmentResponse.from(a).withTripCount(t.getT1()).withTracking(
+                        t.getT2().acknowledgedAt(), t.getT2().changeReason(), t.getT2().changedAt(),
+                        t.getT2().workRuleOverride(), t.getT2().cancelReason()));
     }
 
     /** Un programme encore en brouillon n'est pas montré au chauffeur. */
@@ -71,7 +77,9 @@ public class AssignmentController {
                         request.driverId(),
                         request.startDatetime(),
                         request.endDatetime(),
-                        request.notes()
+                        request.notes(),
+                        request.workRuleOverride(),
+                        request.changeReason()
                 );
         UUID actor = getUserId(auth);
         Mono<Void> scope = (request.fleetId() != null
@@ -259,13 +267,15 @@ public class AssignmentController {
             Authentication auth) {
 
         return resourceAccess.assertAssignmentAccess(getUserId(auth), id)
-                .then(assignmentUseCase.updateStatus(id, request.status(), request.actualKm()))
+                .then(assignmentUseCase.updateStatus(id, request.status(), request.actualKm(), request.reason()))
                 .flatMap(this::withTrips);
     }
 
     @PatchMapping("/{id}")
     @PreAuthorize("hasRole('FLEET_MANAGER')")
-    @Operation(summary = "Réassigner véhicule/conducteur (Manager UI)")
+    @Operation(summary = "Modifier un poste à venir : véhicule, chauffeur, horaires",
+               description = "Planning publié : motif obligatoire, communiqué au chauffeur. Un dépassement des règles "
+                       + "de temps de travail exige un motif (workRuleOverride).")
     public Mono<AssignmentResponse> updateResources(
             @PathVariable UUID id,
             @RequestBody AssignmentResourceUpdateRequest request,
@@ -274,7 +284,9 @@ public class AssignmentController {
         return resourceAccess.assertAssignmentManagement(actor, id)
                 .then(resourceAccess.assertVehicleAccess(actor, request.vehicleId()))
                 .then(resourceAccess.assertDriverAccess(actor, request.driverId()))
-                .then(assignmentUseCase.updateResources(id, request.vehicleId(), request.driverId()))
+                .then(assignmentUseCase.updateShift(id, new ManageAssignmentUseCase.ShiftChange(
+                        request.vehicleId(), request.driverId(), request.startDatetime(), request.endDatetime(),
+                        request.reason(), request.workRuleOverride())))
                 .flatMap(this::withTrips);
     }
 
@@ -284,8 +296,69 @@ public class AssignmentController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasRole('FLEET_MANAGER')")
     @Operation(summary = "Supprimer une affectation")
-    public Mono<Void> delete(@PathVariable UUID id, Authentication auth) {
+    public Mono<Void> delete(@PathVariable UUID id, @RequestParam(required = false) String reason, Authentication auth) {
         return resourceAccess.assertAssignmentManagement(getUserId(auth), id)
-                .then(assignmentUseCase.delete(id));
+                .then(assignmentUseCase.delete(id, reason));
+    }
+
+    // ── TEMPS DE TRAVAIL, SÉRIES, ACCUSÉ DE RÉCEPTION ────────────────────────
+
+    public record WorkCheckResponse(java.util.List<com.yowyob.fleet.domain.model.WorkTimeRules.Violation> violations,
+                                    com.yowyob.fleet.domain.model.WorkTimeRules.Limits limits) {}
+
+    @GetMapping("/work-check")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Vérifier les règles de temps de travail avant d'enregistrer un poste")
+    public Mono<WorkCheckResponse> workCheck(
+            @RequestParam UUID fleetId,
+            @RequestParam UUID driverId,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime start,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime end,
+            @RequestParam(required = false) UUID excludeId,
+            Authentication auth) {
+        return accessScope.assertFleetAccess(getUserId(auth), fleetId)
+                .then(resourceAccess.assertDriverAccess(getUserId(auth), driverId))
+                .then(Mono.zip(workRules.check(fleetId, driverId, start, end, excludeId), workRules.limitsOfFleet(fleetId)))
+                .map(t -> new WorkCheckResponse(t.getT1(), t.getT2()));
+    }
+
+    public record BulkRequest(UUID scheduleId, @jakarta.validation.constraints.NotNull UUID fleetId,
+                              @jakarta.validation.constraints.NotNull UUID vehicleId,
+                              @jakarta.validation.constraints.NotNull UUID driverId,
+                              @jakarta.validation.constraints.NotEmpty java.util.List<java.time.LocalDate> dates,
+                              @jakarta.validation.constraints.NotNull java.time.LocalTime startTime,
+                              @jakarta.validation.constraints.NotNull java.time.LocalTime endTime,
+                              String notes, String workRuleOverride, String changeReason) {}
+
+    @PostMapping("/bulk")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Créer le même poste sur plusieurs jours",
+               description = "Tout ou rien : si un jour est refusé (conflit, absence, temps de travail…), aucun poste n'est créé. "
+                       + "Une heure de fin inférieure à l'heure de début désigne un poste de nuit.")
+    public Mono<java.util.List<AssignmentResponse>> bulk(@Valid @RequestBody BulkRequest request, Authentication auth) {
+        UUID actor = getUserId(auth);
+        return accessScope.assertFleetAccess(actor, request.fleetId())
+                .then(resourceAccess.assertVehicleAccess(actor, request.vehicleId()))
+                .then(resourceAccess.assertDriverAccess(actor, request.driverId()))
+                .then(request.scheduleId() != null ? resourceAccess.assertScheduleAccess(actor, request.scheduleId()) : Mono.<Void>empty())
+                .then(planningTools.bulkCreate(new com.yowyob.fleet.application.service.PlanningToolsService.BulkCommand(
+                        request.scheduleId(), request.fleetId(), request.vehicleId(), request.driverId(), request.dates(),
+                        request.startTime(), request.endTime(), request.notes(), request.workRuleOverride(), request.changeReason())))
+                .flatMapMany(Flux::fromIterable)
+                .concatMap(this::withTrips)
+                .collectList();
+    }
+
+    @PostMapping("/{id}/acknowledge")
+    @PreAuthorize("hasRole('FLEET_DRIVER')")
+    @Operation(summary = "Le chauffeur accuse réception de son poste")
+    public Mono<AssignmentResponse> acknowledge(@PathVariable UUID id, Authentication auth) {
+        UUID actor = getUserId(auth);
+        return assignmentUseCase.getById(id)
+                .flatMap(a -> accessScope.resolveLocalUserId(actor).flatMap(localId -> localId.equals(a.getDriverId())
+                        ? workRules.acknowledge(localId, null, id).thenReturn(a)
+                        : Mono.<com.yowyob.fleet.domain.model.Assignment>error(com.yowyob.fleet.domain.exception.PlanningException.notYourShift())))
+                .flatMap(this::withTrips);
     }
 }

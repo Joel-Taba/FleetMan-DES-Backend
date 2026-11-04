@@ -42,7 +42,7 @@ public class PreventiveMaintenanceCheckJob {
                             if (alert.getStatus() != null) {
                                 switch (alert.getStatus()) {
                                     case OVERDUE -> log.warn(
-                                            "🔴 OVERDUE — Véhicule {} : {} (dépassé de {} km / {} jours)",
+                                            "🔴 OVERDUE · Véhicule {} : {} (dépassé de {} km / {} jours)",
                                             alert.getVehicleRegistration(),
                                             alert.getMaintenanceType(),
                                             alert.getKmRemaining() != null
@@ -51,12 +51,12 @@ public class PreventiveMaintenanceCheckJob {
                                                     ? Math.abs(alert.getDaysRemaining()) : "N/A"
                                     );
                                     case DUE -> log.warn(
-                                            "🟠 DUE — Véhicule {} : {} à effectuer",
+                                            "🟠 DUE · Véhicule {} : {} à effectuer",
                                             alert.getVehicleRegistration(),
                                             alert.getMaintenanceType()
                                     );
                                     case UPCOMING -> log.info(
-                                            "🟡 UPCOMING — Véhicule {} : {} dans {} jours / {} km",
+                                            "🟡 UPCOMING · Véhicule {} : {} dans {} jours / {} km",
                                             alert.getVehicleRegistration(),
                                             alert.getMaintenanceType(),
                                             alert.getDaysRemaining(),

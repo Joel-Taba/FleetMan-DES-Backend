@@ -47,6 +47,7 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
     private final UserLocalR2dbcRepository userRepo;
     private final FleetManagerR2dbcRepository managerRepo;
     private final DatabaseClient db;
+    private final SubscriptionJournal journal;
     private final SubscriptionRegistrationService registrationService;
     private final ExternalActorPort externalActorPort;
     private final PlanLimitGuard planLimitGuard;
@@ -354,6 +355,7 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
                     .flatMap(planId -> requestedBillingCycle(cmd.managerId())
                             .flatMap(requested -> assignPlanToManager(cmd.managerId(), planId,
                                     cmd.billingCycle() != null ? cmd.billingCycle() : requested))))
+            .then(journal.log(SubscriptionJournal.Entry.of(cmd.managerId(), "REQUEST_APPROVED", cmd.approvedBy(), null)))
             // L'inscription publique crée le compte Kernel de l'administrateur de l'entreprise sans
             // rôle : il reçoit FLEET_ADMIN à l'approbation, puis crée ses gestionnaires. Best-effort :
             // ne doit pas faire échouer l'approbation en base si le Kernel est indisponible.
@@ -382,6 +384,7 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
                 String body = cmd.message() != null && !cmd.message().isBlank()
                         ? cmd.message() : cmd.reason();
                 return userRepo.save(u)
+                        .then(journal.log(SubscriptionJournal.Entry.of(cmd.managerId(), "REQUEST_REJECTED", cmd.rejectedBy(), cmd.reason())))
                         .then(registrationService.sendRejectionEmail(email, subject, body));
             }).then();
     }
@@ -459,7 +462,7 @@ public class SubscriptionPlanService implements ManageSubscriptionPlanUseCase {
                             (UUID) row.get("user_id"),
                             row.get("company_name") != null ? row.get("company_name").toString() : "",
                             row.get("email") != null ? row.get("email").toString() : "",
-                            row.get("plan_name") != null ? row.get("plan_name").toString() : "—",
+                            row.get("plan_name") != null ? row.get("plan_name").toString() : "-",
                             row.get("subscription_status").toString(),
                             row.get("subscription_start") != null
                                     ? LocalDate.parse(row.get("subscription_start").toString().substring(0, 10)) : null,

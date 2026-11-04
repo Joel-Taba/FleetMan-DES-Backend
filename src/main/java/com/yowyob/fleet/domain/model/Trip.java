@@ -431,4 +431,9 @@ public class Trip {
     }
 
     public void setAssignmentId(UUID assignmentId) { this.assignmentId = assignmentId; }
+
+    /** Arrêts de la tournée, dans l'ordre de passage prévu. */
+    private List<TripStop> stops = new ArrayList<>();
+    public List<TripStop> getStops() { return stops; }
+    public void setStops(List<TripStop> stops) { this.stops = stops != null ? stops : new ArrayList<>(); }
 }

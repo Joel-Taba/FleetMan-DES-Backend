@@ -92,7 +92,7 @@ public class DriverScoringService implements ComputeDriverScoreUseCase {
         LocalDateTime dtStart = periodStart.atStartOfDay();
         LocalDateTime dtEnd   = periodEnd.plusDays(1).atStartOfDay();
 
-        log.info("Calcul score chauffeur {} — {} [{} → {}]", driverId, periodType, periodStart, periodEnd);
+        log.info("Calcul score chauffeur {} : {} [{} → {}]", driverId, periodType, periodStart, periodEnd);
 
         return driverPort.findById(driverId)
                 .switchIfEmpty(Mono.error(ScoringException.driverNotFound(driverId)))

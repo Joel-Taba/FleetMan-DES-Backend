@@ -359,7 +359,7 @@ public class KernelResourceAdapter implements ExternalVehiclePort {
 
     private Throwable wrapError(Throwable ex) {
         if (ex instanceof WebClientResponseException wex) {
-            log.error("❌ [KERNEL RESOURCE] HTTP {} — {}", wex.getStatusCode(), wex.getResponseBodyAsString());
+            log.error("❌ [KERNEL RESOURCE] HTTP {} : {}", wex.getStatusCode(), wex.getResponseBodyAsString());
         }
         return ex;
     }

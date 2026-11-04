@@ -55,7 +55,7 @@ public class CompanySubscriptionController {
     @PreAuthorize("hasRole('FLEET_ADMIN')")
     @Operation(summary = "Souscrire, changer de plan ou renouveler",
                description = "Plan gratuit : activé immédiatement. Plan payant : commande en attente de paiement "
-                       + "(montant calculé côté serveur), réglée via le service de paiement — ou le simulateur tant "
+                       + "(montant calculé côté serveur), réglée via le service de paiement, ou le simulateur tant "
                        + "qu'il n'est pas branché.")
     public Mono<SubscriptionOrderResponse> checkout(@Valid @RequestBody CheckoutRequest req, Authentication auth) {
         return companyScope.requireOwnCompany(userId(auth))

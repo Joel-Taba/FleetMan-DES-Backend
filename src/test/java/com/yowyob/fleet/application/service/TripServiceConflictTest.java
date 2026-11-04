@@ -55,6 +55,7 @@ class TripServiceConflictTest {
     @Mock AccessScopeService accessScope;
     @Mock ResourceAvailabilityService availability;
     @Mock FuelRechargeR2dbcRepository fuelRechargeRepository;
+    @Mock TripStopService stopService;
 
     private TripService tripService;
     private UUID vehicleId;
@@ -66,7 +67,7 @@ class TripServiceConflictTest {
         tripService = new TripService(
                 tripRepository, detailRepository, submissionRepository, vehicleRepository,
                 driverPersistence, operationalRepo, redisTelemetry, distanceCalculator,
-                geofenceApi, db, accessScope, availability, fuelRechargeRepository
+                geofenceApi, db, accessScope, availability, fuelRechargeRepository, stopService
         );
         vehicleId = UUID.randomUUID();
         driverId = UUID.randomUUID();
@@ -144,7 +145,7 @@ class TripServiceConflictTest {
                 LocalDate.now().plusDays(1), LocalTime.of(8, 0),
                 "Yaoundé", null, null, null, null,
                 "Livraison", "Douala", null, null,
-                scheduledReturn, List.of());
+                scheduledReturn, List.of(), List.of());
     }
 
     private VehicleLocalEntity vehicle(String status) {

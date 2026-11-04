@@ -21,6 +21,20 @@ public class SubscriptionExpiryJob {
     private static final Logger log = LoggerFactory.getLogger(SubscriptionExpiryJob.class);
 
     private final DatabaseClient db;
+    private final com.yowyob.fleet.application.service.SubscriptionJournal journal;
+    private final com.yowyob.fleet.application.service.SubscriptionAdminService subscriptionAdmin;
+
+    /** Rappels aux administrateurs avant l'échéance (J-30, J-15, J-7, J-1). */
+    @Scheduled(cron = "0 45 2 * * *")
+    public void remindExpiringSubscriptions() {
+        subscriptionAdmin.sendDueReminders()
+                .doOnNext(n -> log.info("Rappels d'échéance d'abonnement envoyés : {}", n))
+                .onErrorResume(e -> {
+                    log.warn("Échec des rappels d'abonnement : {}", e.getMessage());
+                    return reactor.core.publisher.Mono.empty();
+                })
+                .subscribe();
+    }
 
     @Scheduled(cron = "0 30 2 * * *")
     public void expireSubscriptions() {
@@ -52,6 +66,9 @@ public class SubscriptionExpiryJob {
                             .bind("id", userId)
                             .fetch()
                             .rowsUpdated()
+                            .then(journal.log(com.yowyob.fleet.application.service.SubscriptionJournal.Entry.of(userId, "EXPIRED", null, null)))
+                            .then(journal.notifyAdmin(userId, "Votre abonnement a expiré : renouvelez votre plan pour retrouver l'accès aux fonctions de gestion."))
+                            .thenReturn(1L)
                             .doOnSuccess(v -> log.info("Abonnement expiré pour l'entreprise {}", userId))
                             .onErrorResume(e -> {
                                 log.warn("Échec expiration {}: {}", userId, e.getMessage());

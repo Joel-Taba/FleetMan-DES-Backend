@@ -47,7 +47,7 @@ public class PasswordResetService {
         // Mode fake : réponse toujours 204 (anti-énumération), email seulement si compte demo
         boolean known = DemoTestAccounts.findByIdentifier(normalized).isPresent();
         if (!known) {
-            log.info("🛠 [FAKE] Forgot password — email inconnu (ack silencieux): {}", normalized);
+            log.info("🛠 [FAKE] Forgot password : email inconnu (ack silencieux): {}", normalized);
             return Mono.empty();
         }
 
@@ -64,10 +64,10 @@ public class PasswordResetService {
 
                 Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
 
-                — L'équipe FleetMan
+                L'équipe FleetMan
                 """.formatted(link);
 
-        log.info("🛠 [FAKE] Forgot password pour {} — lien: {}", normalized, link);
+        log.info("🛠 [FAKE] Forgot password pour {} : lien: {}", normalized, link);
 
         return mailPort.sendEmail(normalized, subject, body)
                 .doOnNext(sent -> {

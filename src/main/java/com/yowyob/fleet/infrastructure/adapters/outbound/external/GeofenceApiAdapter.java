@@ -332,7 +332,7 @@ public class GeofenceApiAdapter implements ExternalGeofencePort {
         String shortType = resolveShortType(zoneType);
         return getSystemToken().flatMap(token -> 
             apiClient.addVehicleToZone(remoteVehicleId, shortType, zoneId, token)
-                .doOnSuccess(v -> log.info("ðŸ”— Linked remote vehicle {} to zone {}", remoteVehicleId, zoneId))
+                .doOnSuccess(v -> log.info("🔗 Linked remote vehicle {} to zone {}", remoteVehicleId, zoneId))
         );
     }
 }

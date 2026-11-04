@@ -38,7 +38,77 @@ public final class OrganizationDtos {
             long managerCount,
             long fleetCount,
             long vehicleCount,
+            long driverCount,
+            String legalName,
+            String legalForm,
+            String registrationNumber,
+            String taxId,
+            String sector,
+            String address,
+            String city,
+            String country,
+            String companyPhone,
+            String companyEmail,
+            String website,
+            Instant createdAt,
+            long siteCount,
+            int completeness,
+            List<String> missingFields
+    ) {}
+
+    public record UpdateProfileRequest(
+            String organizationName,
+            String legalName,
+            String legalForm,
+            String registrationNumber,
+            String taxId,
+            String sector,
+            String address,
+            String city,
+            String country,
+            String companyPhone,
+            String companyEmail,
+            String website
+    ) {}
+
+    public record SiteRequest(String name, String siteType, String address, String city, String phone) {}
+
+    public record CompanySite(
+            UUID id,
+            String name,
+            String siteType,
+            String address,
+            String city,
+            String phone,
+            boolean active,
+            long fleetCount
+    ) {}
+
+    public record StructureFleet(
+            UUID id,
+            String name,
+            UUID siteId,
+            UUID managerId,
+            String managerName,
+            String managerStatus,
+            long vehicleCount,
             long driverCount
+    ) {}
+
+    public record StructureManager(
+            UUID id,
+            String fullName,
+            String email,
+            String phone,
+            String accountStatus,
+            long fleetCount
+    ) {}
+
+    /** Organigramme : un gestionnaire ne voit que ses propres flottes. */
+    public record OrganizationStructure(
+            List<CompanySite> sites,
+            List<StructureFleet> fleets,
+            List<StructureManager> managers
     ) {}
 
     public record OrganizationVehicle(

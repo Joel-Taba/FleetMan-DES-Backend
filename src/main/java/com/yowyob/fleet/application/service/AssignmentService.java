@@ -35,6 +35,7 @@ public class AssignmentService implements ManageAssignmentUseCase {
     private final TripR2dbcRepository tripRepository;
     private final ResourceAvailabilityService availability;
     private final org.springframework.r2dbc.core.DatabaseClient db;
+    private final WorkRulesService workRules;
 
     @Override
     @Transactional
@@ -61,7 +62,9 @@ public class AssignmentService implements ManageAssignmentUseCase {
                             .then(availability.assertAssignmentSlotFree(
                                     cmd.vehicleId(), cmd.driverId(),
                                     cmd.startDatetime(), cmd.endDatetime(), null))
-                            .then(Mono.defer(() -> {
+                            .then(workRules.enforce(fleetId, cmd.driverId(), cmd.startDatetime(), cmd.endDatetime(),
+                                    null, cmd.workRuleOverride()))
+                            .flatMap(override -> Mono.defer(() -> {
                                 // 6. Créer l'affectation
                                 Assignment assignment = new Assignment(
                                         null,
@@ -76,7 +79,10 @@ public class AssignmentService implements ManageAssignmentUseCase {
                                         cmd.notes(),
                                         null
                                 );
-                                return assignmentPersistencePort.save(assignment);
+                                return assignmentPersistencePort.save(assignment)
+                                        .flatMap(saved -> workRules.recordOverride(saved.getId(), override)
+                                                .then(notifyNewShift(saved, cmd.changeReason()))
+                                                .thenReturn(saved));
                             }));
                 })
                 .doOnSuccess(a -> log.info("Affectation créée : véhicule={}, conducteur={}, début={}",
@@ -171,14 +177,19 @@ public class AssignmentService implements ManageAssignmentUseCase {
 
     @Override
     @Transactional
-    public Mono<Assignment> updateStatus(UUID id, Assignment.Status newStatus, BigDecimal actualKm) {
+    public Mono<Assignment> updateStatus(UUID id, Assignment.Status newStatus, BigDecimal actualKm, String reason) {
         if (newStatus != Assignment.Status.CANCELLED && newStatus != Assignment.Status.NO_SHOW) {
             return Mono.error(PlanningException.manualStatusNotAllowed(String.valueOf(newStatus)));
         }
         return assignmentPersistencePort.findById(id)
                 .switchIfEmpty(Mono.error(PlanningException.assignmentNotFound(id)))
                 .flatMap(assignment -> countTrips(id, "('DEPARTED', 'ARRIVED')")
-                        .flatMap(inProgress -> {
+                        .zipWith(newStatus == Assignment.Status.CANCELLED
+                                ? workRules.requireReasonIfPublished(assignment.getScheduleId(), reason)
+                                : Mono.just(""))
+                        .flatMap(t -> {
+                            long inProgress = t.getT1();
+                            String why = t.getT2();
                             if (inProgress > 0) {
                                 return Mono.<Assignment>error(PlanningException.shiftHasTripInProgress(id));
                             }
@@ -196,7 +207,14 @@ public class AssignmentService implements ManageAssignmentUseCase {
                                             + "WHERE assignment_id = :id AND status = 'SCHEDULED'")
                                     .bind("id", id)
                                     .fetch().rowsUpdated()
-                                    .then(assignmentPersistencePort.save(assignment));
+                                    .then(assignmentPersistencePort.save(assignment))
+                                    .flatMap(saved -> newStatus != Assignment.Status.CANCELLED
+                                            ? Mono.just(saved)
+                                            : workRules.recordCancel(id, why)
+                                                    .then(why.isEmpty() ? Mono.empty() : workRules.notifyDriver(saved.getDriverId(),
+                                                            "Poste annulé", "Votre poste " + WorkRulesService.describe(saved)
+                                                                    + " est annulé : " + why, saved.getScheduleId(), saved.getId()))
+                                                    .thenReturn(saved));
                         }));
     }
 
@@ -226,49 +244,83 @@ public class AssignmentService implements ManageAssignmentUseCase {
 
     @Override
     @Transactional
-    public Mono<Assignment> updateResources(UUID id, UUID vehicleId, UUID driverId) {
+    public Mono<Assignment> updateShift(UUID id, ShiftChange change) {
         return assignmentPersistencePort.findById(id)
                 .switchIfEmpty(Mono.error(PlanningException.assignmentNotFound(id)))
                 .flatMap(existing -> {
                     if (existing.getStatus() != Assignment.Status.PENDING) {
-                        return Mono.error(new IllegalStateException(
-                                "Seule une affectation PENDING peut être réassignée."));
+                        return Mono.error(PlanningException.invalidStatusTransition(
+                                "Seul un poste à venir peut être modifié."));
                     }
-                    UUID nextVehicle = vehicleId != null ? vehicleId : existing.getVehicleId();
-                    UUID nextDriver = driverId != null ? driverId : existing.getDriverId();
-                    return requireUsableVehicle(nextVehicle)
-                            .flatMap(v -> {
-                                if (!existing.getFleetId().equals(v.getFleetId())) {
-                                    return Mono.<Void>error(PlanningException.vehicleNotInFleet(nextVehicle));
-                                }
-                                return requireActiveDriver(nextDriver);
-                            })
-                            .then(availability.assertCrewQualified(
-                                    nextDriver, nextVehicle, existing.getStartDatetime(), existing.getEndDatetime()))
-                            .then(availability.assertAssignmentSlotFree(
-                                    nextVehicle, nextDriver,
-                                    existing.getStartDatetime(), existing.getEndDatetime(), id))
-                            .then(Mono.defer(() -> {
-                                Assignment updated = new Assignment(
-                                        existing.getId(),
-                                        existing.getScheduleId(),
-                                        existing.getFleetId(),
-                                        nextVehicle,
-                                        nextDriver,
-                                        existing.getStartDatetime(),
-                                        existing.getEndDatetime(),
-                                        existing.getStatus(),
-                                        existing.getActualKm(),
-                                        existing.getNotes(),
-                                        existing.getCreatedAt()
-                                );
-                                return assignmentPersistencePort.save(updated);
-                            }));
+                    UUID nextVehicle = change.vehicleId() != null ? change.vehicleId() : existing.getVehicleId();
+                    UUID nextDriver = change.driverId() != null ? change.driverId() : existing.getDriverId();
+                    LocalDateTime nextStart = change.startDatetime() != null ? change.startDatetime() : existing.getStartDatetime();
+                    LocalDateTime nextEnd = change.endDatetime() != null ? change.endDatetime() : existing.getEndDatetime();
+                    if (!nextEnd.isAfter(nextStart)) {
+                        return Mono.error(PlanningException.invalidDates());
+                    }
+                    boolean changed = !nextVehicle.equals(existing.getVehicleId()) || !nextDriver.equals(existing.getDriverId())
+                            || !nextStart.equals(existing.getStartDatetime()) || !nextEnd.equals(existing.getEndDatetime());
+                    if (!changed) {
+                        return Mono.just(existing);
+                    }
+                    return workRules.requireReasonIfPublished(existing.getScheduleId(), change.reason())
+                            .flatMap(reason -> requireUsableVehicle(nextVehicle)
+                                    .flatMap(v -> {
+                                        if (!existing.getFleetId().equals(v.getFleetId())) {
+                                            return Mono.<Void>error(PlanningException.vehicleNotInFleet(nextVehicle));
+                                        }
+                                        return requireActiveDriver(nextDriver);
+                                    })
+                                    .then(checkSchedule(existing.getScheduleId(), existing.getFleetId(), nextStart, nextEnd))
+                                    .then(availability.assertCrewQualified(nextDriver, nextVehicle, nextStart, nextEnd))
+                                    .then(availability.assertAssignmentSlotFree(nextVehicle, nextDriver, nextStart, nextEnd, id))
+                                    .then(workRules.enforceChange(existing.getFleetId(), nextDriver, nextStart, nextEnd, id,
+                                            change.workRuleOverride(), existing.getDriverId(),
+                                            existing.getStartDatetime(), existing.getEndDatetime()))
+                                    .flatMap(override -> {
+                                        Assignment updated = new Assignment(
+                                                existing.getId(), existing.getScheduleId(), existing.getFleetId(),
+                                                nextVehicle, nextDriver, nextStart, nextEnd, existing.getStatus(),
+                                                existing.getActualKm(), existing.getNotes(), existing.getCreatedAt());
+                                        return assignmentPersistencePort.save(updated)
+                                                .flatMap(saved -> workRules.recordOverride(id, override)
+                                                        .then(reason.isEmpty() ? Mono.empty() : notifyChange(existing, saved, reason))
+                                                        .thenReturn(saved));
+                                    }));
                 });
     }
 
+    /** Planning publié : le chauffeur est prévenu du nouveau poste ; à défaut de motif, un message neutre. */
+    private Mono<Void> notifyNewShift(Assignment saved, String reason) {
+        return workRules.isPublished(saved.getScheduleId()).flatMap(published -> {
+            if (!published) return Mono.<Void>empty();
+            String why = reason != null && !reason.isBlank() ? " : " + reason.trim() : "";
+            return workRules.recordChange(saved.getId(), reason != null && !reason.isBlank() ? reason.trim() : "Poste ajouté")
+                    .then(workRules.notifyDriver(saved.getDriverId(), "Nouveau poste",
+                            "Un poste vous est attribué " + WorkRulesService.describe(saved) + why + ".",
+                            saved.getScheduleId(), saved.getId()));
+        });
+    }
+
+    private Mono<Void> notifyChange(Assignment before, Assignment after, String reason) {
+        Mono<Void> record = workRules.recordChange(after.getId(), reason);
+        if (!before.getDriverId().equals(after.getDriverId())) {
+            return record
+                    .then(workRules.notifyDriver(before.getDriverId(), "Poste retiré",
+                            "Le poste " + WorkRulesService.describe(before) + " ne vous est plus attribué : " + reason,
+                            before.getScheduleId(), before.getId()))
+                    .then(workRules.notifyDriver(after.getDriverId(), "Nouveau poste",
+                            "Un poste vous est attribué " + WorkRulesService.describe(after) + " : " + reason,
+                            after.getScheduleId(), after.getId()));
+        }
+        return record.then(workRules.notifyDriver(after.getDriverId(), "Poste modifié",
+                "Votre poste " + WorkRulesService.describe(before) + " devient " + WorkRulesService.describe(after) + " : " + reason,
+                after.getScheduleId(), after.getId()));
+    }
+
     @Override
-    public Mono<Void> delete(UUID id) {
+    public Mono<Void> delete(UUID id, String reason) {
         return assignmentPersistencePort.findById(id)
                 .switchIfEmpty(Mono.error(PlanningException.assignmentNotFound(id)))
                 .flatMap(a -> {
@@ -278,7 +330,12 @@ public class AssignmentService implements ManageAssignmentUseCase {
                             || a.getStatus() == Assignment.Status.COMPLETED) {
                         return Mono.error(PlanningException.assignmentNotDeletable(id));
                     }
-                    return assignmentPersistencePort.deleteById(id);
+                    return workRules.requireReasonIfPublished(a.getScheduleId(), reason)
+                            .flatMap(why -> assignmentPersistencePort.deleteById(id)
+                                    .then(why.isEmpty() || a.getStatus() != Assignment.Status.PENDING ? Mono.<Void>empty()
+                                            : workRules.notifyDriver(a.getDriverId(), "Poste supprimé",
+                                                    "Le poste " + WorkRulesService.describe(a) + " est supprimé : " + why,
+                                                    a.getScheduleId(), a.getId())));
                 });
     }
 

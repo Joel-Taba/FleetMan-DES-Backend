@@ -15,7 +15,7 @@ public record ScheduleRequest(
         UUID fleetId,
 
         @NotBlank(message = "Le titre est obligatoire")
-        @Schema(description = "Titre du planning", example = "Planning semaine 22 — Flotte Yaoundé")
+        @Schema(description = "Titre du planning", example = "Planning semaine 22 · Flotte Yaoundé")
         String title,
 
         @NotBlank(message = "Le type de période est obligatoire")

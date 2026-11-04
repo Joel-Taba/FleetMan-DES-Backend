@@ -21,7 +21,7 @@ public class KernelCallSupport {
     public <T> Mono<T> execute(String instanceName, Mono<T> call, Mono<T> fallback) {
         ReactiveCircuitBreaker cb = circuitBreakerFactory.create(instanceName);
         return cb.run(call, throwable -> {
-            log.warn("⚡ [CB:{}] Circuit ouvert / erreur : {} — mode dégradé",
+            log.warn("⚡ [CB:{}] Circuit ouvert / erreur : {}, mode dégradé",
                     instanceName, throwable.getMessage());
             return fallback;
         });

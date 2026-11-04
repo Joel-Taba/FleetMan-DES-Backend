@@ -51,17 +51,6 @@ public class FleetManagerPersistenceAdapter implements FleetManagerPersistencePo
     }
 
     @Override
-    public Mono<Void> updateCompany(UUID userId, String companyName) {
-        return repository.findById(userId)
-                .flatMap(entity -> {
-                    entity.setCompanyName(companyName);
-                    // Ici isNew est false par défaut (chargé depuis la DB), donc R2DBC fera un UPDATE
-                    return repository.save(entity);
-                })
-                .then();
-    }
-
-    @Override
     /** Nom de l'entreprise de l'utilisateur (admin ou gestionnaire). */
     public Mono<String> getCompanyName(UUID userId) {
         return companyRepo.findForUser(userId)

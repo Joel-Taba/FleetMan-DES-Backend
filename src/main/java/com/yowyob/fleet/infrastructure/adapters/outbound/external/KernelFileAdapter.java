@@ -178,7 +178,7 @@ public class KernelFileAdapter implements ExternalFilePort {
 
     private Throwable wrapError(Throwable ex) {
         if (ex instanceof WebClientResponseException wex) {
-            log.error("❌ [KERNEL FILE] HTTP {} — {}", wex.getStatusCode(), wex.getResponseBodyAsString());
+            log.error("❌ [KERNEL FILE] HTTP {} : {}", wex.getStatusCode(), wex.getResponseBodyAsString());
         }
         return ex;
     }

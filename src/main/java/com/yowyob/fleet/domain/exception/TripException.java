@@ -228,4 +228,42 @@ public class TripException extends DomainException {
             "TRP_026"
         );
     }
+
+    public static TripException invalidStop(String message) {
+        return new TripException(message, HttpStatus.UNPROCESSABLE_ENTITY, "TRP_027");
+    }
+
+    public static TripException stopNotFound() {
+        return new TripException("Arrêt introuvable sur ce trajet.", HttpStatus.NOT_FOUND, "TRP_028");
+    }
+
+    public static TripException stopNotServable(String status) {
+        return new TripException("Cet arrêt est déjà clos (" + status + ").", HttpStatus.CONFLICT, "TRP_029");
+    }
+
+    public static TripException stopsNotEditable() {
+        return new TripException("Les arrêts ne se modifient plus une fois le trajet clos.", HttpStatus.CONFLICT, "TRP_030");
+    }
+
+    public static TripException stopsReorderOnlyPlanned() {
+        return new TripException("L'ordre et la suppression des arrêts ne se changent qu'avant le départ ; en route, passez l'arrêt.",
+                HttpStatus.CONFLICT, "TRP_031");
+    }
+
+    public static TripException lastStopRequired() {
+        return new TripException("Une tournée garde au moins un arrêt.", HttpStatus.CONFLICT, "TRP_032");
+    }
+
+    public static TripException recipientRequired() {
+        return new TripException("Le nom du réceptionnaire est obligatoire pour une livraison.",
+                HttpStatus.UNPROCESSABLE_ENTITY, "TRP_033");
+    }
+
+    public static TripException invalidProof() {
+        return new TripException("La preuve doit être un fichier déposé dans FleetMan.", HttpStatus.UNPROCESSABLE_ENTITY, "TRP_034");
+    }
+
+    public static TripException stopActionNeedsDeparture() {
+        return new TripException("Les arrêts se servent une fois le trajet parti.", HttpStatus.CONFLICT, "TRP_035");
+    }
 }

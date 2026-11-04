@@ -52,6 +52,7 @@ public class TripService implements ManageTripUseCase {
     private final AccessScopeService accessScope;
     private final ResourceAvailabilityService availability;
     private final FuelRechargeR2dbcRepository fuelRechargeRepository;
+    private final TripStopService stopService;
 
     // ── Création d'un trajet (Manager) ────────────────────────────────────────
 
@@ -63,6 +64,20 @@ public class TripService implements ManageTripUseCase {
         if (!slotEnd.isAfter(slotStart)) {
             return Mono.error(TripException.invalidSchedule());
         }
+        // Tournée : les arrêts saisis, ou un arrêt unique à la destination (ancien formulaire).
+        List<com.yowyob.fleet.domain.model.TripStopRules.StopInput> plan = cmd.stops() != null && !cmd.stops().isEmpty()
+            ? cmd.stops()
+            : (cmd.destinationLocation() != null && !cmd.destinationLocation().isBlank()
+                ? List.of(new com.yowyob.fleet.domain.model.TripStopRules.StopInput("DELIVERY", cmd.destinationLocation(),
+                    cmd.destinationLat(), cmd.destinationLng(), null, null, null, null))
+                : List.of());
+        try {
+            com.yowyob.fleet.domain.model.TripStopRules.validatePlan(plan,
+                slotStart, cmd.scheduledReturnDatetime());
+        } catch (TripException e) {
+            return Mono.error(e);
+        }
+        var lastStop = plan.get(plan.size() - 1);
         return Mono.zip(
             vehicleRepository
                 .findById(cmd.vehicleId())
@@ -107,11 +122,12 @@ public class TripService implements ManageTripUseCase {
                     cmd.departureKmIndex(),
                     cmd.departureFuelIndex(),
                     cmd.missionObject(),
-                    cmd.destinationLocation(),
-                    cmd.destinationLat(),
-                    cmd.destinationLng(),
+                    lastStop.location().trim(),
+                    lastStop.latitude(),
+                    lastStop.longitude(),
                     cmd.scheduledReturnDatetime(),
-                    cmd.details()
+                    cmd.details(),
+                    plan
             );
 
             // Le véhicule n'est plus réservé (ON_TRIP) dès la planification : l'exclusivité
@@ -139,7 +155,7 @@ public class TripService implements ManageTripUseCase {
         return generateTripCode()
                 .flatMap(tripCode -> persistTrip(tripCode, cmd))
                 .onErrorResume(DuplicateKeyException.class, ex -> {
-                    log.warn("⚠️ [TRIP] Collision de trip_code — vérifier la synchronisation de "
+                    log.warn("⚠️ [TRIP] Collision de trip_code : vérifier la synchronisation de "
                             + "fleet.trip_code_seq (migration 040) : {}", ex.getMessage());
                     return Mono.error(TripException.codeCollision());
                 });
@@ -155,7 +171,7 @@ public class TripService implements ManageTripUseCase {
         TripEntity entity = buildTripEntity(tripCode, cmd);
         return relinkAssignment(entity)
                 .flatMap(tripRepository::save)
-                .flatMap(saved -> saveDetails(saved.getId(), cmd.details())
+                .flatMap(saved -> stopService.persistPlan(saved, cmd.stops(), cmd.details())
                         .then(loadTripWithDetails(saved.getId())));
     }
 
@@ -309,6 +325,7 @@ public class TripService implements ManageTripUseCase {
                 trip.setArrivalNotes(cmd.notes());
                 trip.setNew(false);
                 return deliveries
+                    .then(Mono.defer(() -> stopService.completeRemaining(tripId, trip.getArrivedAt(), cmd.notes())))
                     .then(Mono.defer(() -> tripRepository.save(trip)))
                     .flatMap(saved -> loadTripWithDetails(saved.getId()));
             });
@@ -462,7 +479,7 @@ public class TripService implements ManageTripUseCase {
                     Mono<Void> unlinkPair = trip.isDriverVehicleLinked()
                         ? unlinkDriverVehicleForTrip(trip.getDriverId(), trip.getVehicleId())
                         : Mono.empty();
-                    return Mono.when(vehicleFree, odometer, detailsUpdate, unlinkPair)
+                    return Mono.when(vehicleFree, odometer, detailsUpdate, unlinkPair, stopService.closeRemaining(trip.getId()))
                         .then(tripRepository.save(tripToSave))
                         .flatMap(saved -> loadTripWithDetails(saved.getId()));
                 });
@@ -697,13 +714,16 @@ public class TripService implements ManageTripUseCase {
                         if (cmd.missionObject() != null) updated.setMissionObject(
                             cmd.missionObject()
                         );
+                        Mono<Void> moveStop = Mono.empty();
                         if (cmd.destinationLocation() != null && !cmd.destinationLocation().isBlank()) {
-                            updated.setDestinationLocation(cmd.destinationLocation());
-                            updated.setDestinationLat(cmd.destinationLat());
-                            updated.setDestinationLng(cmd.destinationLng());
+                            // La destination est le dernier arrêt : seul un trajet à arrêt unique la déplace ici.
+                            moveStop = stopService.moveSingleStop(updated.getId(), cmd.destinationLocation(),
+                                cmd.destinationLat(), cmd.destinationLng());
                         }
                         updated.setNew(false);
-                        return relinkAssignment(updated).flatMap(tripRepository::save);
+                        Mono<Void> stopMove = moveStop;
+                        return relinkAssignment(updated).flatMap(tripRepository::save)
+                            .flatMap(saved -> stopMove.then(Mono.defer(() -> tripRepository.findById(saved.getId()))));
                     })
                     .flatMap(saved -> loadTripWithDetails(saved.getId()));
             });
@@ -827,6 +847,12 @@ public class TripService implements ManageTripUseCase {
                     return Mono.error(TripException.notDeparted());
                 }
                 String changeType = "REMOVE".equalsIgnoreCase(input.changeType()) ? "REMOVE" : "ADD";
+                Mono<Void> stopCheck = input.stopId() == null || "REMOVE".equals(changeType)
+                    ? Mono.empty()
+                    : stopService.stopForNewLine(tripId, input.stopId())
+                        .filter(input.stopId()::equals)
+                        .switchIfEmpty(Mono.error(TripException.stopNotFound()))
+                        .then();
                 Mono<Void> detailCheck = "REMOVE".equals(changeType)
                     ? (input.detailId() == null
                         ? Mono.error(TripException.detailNotInTrip())
@@ -841,6 +867,7 @@ public class TripService implements ManageTripUseCase {
                 sub.setSubmittedBy(driverId);
                 sub.setChangeType(changeType);
                 sub.setDetailId("REMOVE".equals(changeType) ? input.detailId() : null);
+                sub.setStopId("REMOVE".equals(changeType) ? null : input.stopId());
                 sub.setItemType(input.itemType());
                 sub.setDescription(input.description());
                 sub.setQuantity(input.quantity());
@@ -849,7 +876,7 @@ public class TripService implements ManageTripUseCase {
                 sub.setStatus("PENDING");
                 sub.setCreatedAt(Instant.now());
                 sub.setNew(true);
-                return detailCheck.then(submissionRepository.save(sub)).map(
+                return stopCheck.then(detailCheck).then(submissionRepository.save(sub)).map(
                     TripMissionSubmissionEntity::getId
                 );
             });
@@ -908,8 +935,9 @@ public class TripService implements ManageTripUseCase {
                             sub.getQuantity() != null ? sub.getQuantity() : 1
                         );
                         detail.setNew(true);
-                        return detailRepository
-                            .save(detail)
+                        return stopService.stopForNewLine(trip.getId(), sub.getStopId())
+                            .doOnNext(detail::setStopId)
+                            .then(Mono.defer(() -> detailRepository.save(detail)))
                             .then(submissionRepository.save(sub))
                             .then(loadTripWithDetails(trip.getId()));
                     })
@@ -1156,36 +1184,16 @@ public class TripService implements ManageTripUseCase {
             });
     }
 
-    private Mono<Void> saveDetails(UUID tripId, List<TripDetailInput> inputs) {
-        if (inputs == null || inputs.isEmpty()) return Mono.empty();
-        List<TripDetailEntity> entities = inputs
-            .stream()
-            .map(d -> {
-                TripDetailEntity de = new TripDetailEntity();
-                de.setId(UUID.randomUUID());
-                de.setTripId(tripId);
-                de.setItemType(d.itemType());
-                de.setDescription(d.description());
-                de.setQuantity(d.quantity());
-                de.setWeight(d.weight());
-                de.setDepartureQuantity(
-                    d.departureQuantity() != null
-                        ? d.departureQuantity()
-                        : d.quantity()
-                );
-                de.setNew(true);
-                return de;
-            })
-            .collect(Collectors.toList());
-        return detailRepository.saveAll(entities).then();
-    }
-
     private Mono<Trip> loadTripWithDetails(UUID tripId) {
         return tripRepository.findById(tripId).flatMap(entity ->
-            detailRepository
-                .findAllByTripIdOrderBySortOrder(entity.getId())
-                .collectList()
-                .map(details -> mapToDomain(entity, details))
+            Mono.zip(
+                detailRepository.findAllByTripIdOrderBySortOrder(entity.getId()).collectList(),
+                stopService.stopsOf(entity.getId())
+            ).map(t -> {
+                Trip trip = mapToDomain(entity, t.getT1());
+                trip.setStops(t.getT2());
+                return trip;
+            })
         );
     }
 
@@ -1208,6 +1216,8 @@ public class TripService implements ManageTripUseCase {
                     d.getSortOrder()
                 );
                 detail.setDeliveredQuantity(d.getDeliveredQuantity());
+                detail.setStopId(d.getStopId());
+                detail.setShortageReason(d.getShortageReason());
                 return detail;
             })
             .collect(Collectors.toList());

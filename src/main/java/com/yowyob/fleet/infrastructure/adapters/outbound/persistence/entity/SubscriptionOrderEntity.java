@@ -32,6 +32,9 @@ public class SubscriptionOrderEntity implements Persistable<UUID> {
     private String status;
     @Column("payment_provider") private String paymentProvider;
     @Column("payment_reference") private String paymentReference;
+    @Column("payment_method") private String paymentMethod;
+    @Column("recorded_by") private UUID recordedBy;
+    @Column("payment_note") private String paymentNote;
     @Column("period_start") private LocalDate periodStart;
     @Column("period_end") private LocalDate periodEnd;
     @Column("created_at") private LocalDateTime createdAt;

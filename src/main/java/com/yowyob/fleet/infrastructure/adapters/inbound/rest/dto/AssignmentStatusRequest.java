@@ -16,5 +16,8 @@ public record AssignmentStatusRequest(
 
         @Schema(description = "Kilométrage réel (obligatoire si statut = COMPLETED)",
                 example = "42.3")
-        BigDecimal actualKm
+        BigDecimal actualKm,
+
+        @Schema(description = "Motif de l'annulation (obligatoire si le planning est publié)")
+        String reason
 ) {}

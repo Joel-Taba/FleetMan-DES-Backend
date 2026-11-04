@@ -88,6 +88,46 @@ public class SubscriptionException extends DomainException {
                 HttpStatus.CONFLICT, "SUB_014");
     }
 
+    public static SubscriptionException companyNotFound() {
+        return new SubscriptionException("Entreprise introuvable.", HttpStatus.NOT_FOUND, "SUB_016");
+    }
+
+    public static SubscriptionException reasonRequired() {
+        return new SubscriptionException("Indiquez le motif de cette opération.", HttpStatus.BAD_REQUEST, "SUB_017");
+    }
+
+    public static SubscriptionException invalidExtension(int max) {
+        return new SubscriptionException("La prolongation doit compter de 1 à " + max + " jours.",
+                HttpStatus.BAD_REQUEST, "SUB_018");
+    }
+
+    public static SubscriptionException freePlanHasNoDeadline() {
+        return new SubscriptionException("Une offre gratuite n'a pas d'échéance à prolonger.",
+                HttpStatus.CONFLICT, "SUB_019");
+    }
+
+    public static SubscriptionException alreadySuspended() {
+        return new SubscriptionException("Cet abonnement est déjà suspendu.", HttpStatus.CONFLICT, "SUB_020");
+    }
+
+    public static SubscriptionException notSuspended() {
+        return new SubscriptionException("Cet abonnement n'est pas suspendu.", HttpStatus.CONFLICT, "SUB_021");
+    }
+
+    public static SubscriptionException requestStillPending() {
+        return new SubscriptionException("Cette entreprise est encore une demande : traitez-la depuis les demandes de souscription.",
+                HttpStatus.CONFLICT, "SUB_022");
+    }
+
+    public static SubscriptionException invalidPaymentMethod() {
+        return new SubscriptionException("Mode de règlement inconnu.", HttpStatus.BAD_REQUEST, "SUB_023");
+    }
+
+    public static SubscriptionException paymentReferenceRequired() {
+        return new SubscriptionException("La référence du règlement est obligatoire pour ce mode.",
+                HttpStatus.BAD_REQUEST, "SUB_024");
+    }
+
     public static SubscriptionException paymentSimulationDisabled() {
         return new SubscriptionException(
                 "La simulation de paiement est désactivée : le paiement passe par le service de paiement réel.",

@@ -121,7 +121,7 @@ public class ExpenseService implements ManageExpenseUseCase {
                                     null,
                                     "FINE".equals(cmd.nature()) ? Expense.ExpenseType.FINE : Expense.ExpenseType.INCIDENT,
                                     cmd.amount(),
-                                    "Incident — " + label + (cmd.description() != null && !cmd.description().isBlank() ? " — " + cmd.description().trim() : ""),
+                                    "Incident : " + label + (cmd.description() != null && !cmd.description().isBlank() ? " · " + cmd.description().trim() : ""),
                                     LocalDateTime.now(),
                                     Expense.SourceType.MANUAL,
                                     cmd.incidentId(),
@@ -295,7 +295,7 @@ public class ExpenseService implements ManageExpenseUseCase {
         return evaluateApproval(expense)
                 .flatMap(expensePersistence::save)
                 .flatMap(saved -> {
-                    log.info("✅ Dépense auto [{}] créée pour véhicule {} — montant: {} FCFA",
+                    log.info("✅ Dépense auto [{}] créée pour véhicule {} : montant: {} FCFA",
                             type, vehicleId, amount);
                     return refreshBudgets(fleetId, vehicleId, saved.getExpenseDate()).thenReturn(saved);
                 });
@@ -493,7 +493,7 @@ public class ExpenseService implements ManageExpenseUseCase {
                         }
                         expense.reject(cmd.managerId(), cmd.rejectionReason());
                         return expensePersistence.save(expense)
-                                .doOnSuccess(saved -> log.info("❌ Dépense {} rejetée par {} — motif: {}",
+                                .doOnSuccess(saved -> log.info("❌ Dépense {} rejetée par {} : motif: {}",
                                         cmd.expenseId(), cmd.managerId(), cmd.rejectionReason()));
                     });
                 });
@@ -581,7 +581,7 @@ public class ExpenseService implements ManageExpenseUseCase {
                     return budgetPersistence.save(budget)
                             .flatMap(saved -> budgetJournal.recordLevelChange(saved, previousLevel, null).thenReturn(saved))
                             .doOnSuccess(b -> log.debug(
-                                    "Budget {} recalculé — consommé: {} / {} FCFA ({}%)",
+                                    "Budget {} recalculé : consommé: {} / {} FCFA ({}%)",
                                     b.getId(), b.getConsumed(), b.getAmount(), b.consumptionRate()
                             ));
                 });

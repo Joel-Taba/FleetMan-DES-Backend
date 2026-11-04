@@ -58,7 +58,7 @@ public class SyncPushService {
     ) {
         String invalidReason = validateTarget(item);
         if (invalidReason != null) {
-            log.warn("⛔ [SYNC] Mutation {} refusée : {} {} — {}",
+            log.warn("⛔ [SYNC] Mutation {} refusée : {} {} : {}",
                     item.clientMutationId(), item.method(), item.path(), invalidReason);
             return Mono.just(new MutationResult(
                     item.clientMutationId(),

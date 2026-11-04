@@ -46,8 +46,25 @@ public class TripController {
         String description,
         @NotNull int quantity,
         BigDecimal weight,
-        Integer departureQuantity
+        Integer departureQuantity,
+        Integer stopIndex
     ) {}
+
+    public record TripStopRequest(
+        @NotBlank String stopType,
+        @NotBlank(message = "Le lieu de chaque arrêt est obligatoire.") String location,
+        BigDecimal latitude,
+        BigDecimal longitude,
+        String contactName,
+        String contactPhone,
+        String instructions,
+        LocalDateTime plannedArrival
+    ) {
+        public com.yowyob.fleet.domain.model.TripStopRules.StopInput toInput() {
+            return new com.yowyob.fleet.domain.model.TripStopRules.StopInput(stopType, location, latitude, longitude,
+                contactName, contactPhone, instructions, plannedArrival);
+        }
+    }
 
     public record CreateTripRequest(
         @NotNull UUID vehicleId,
@@ -61,11 +78,13 @@ public class TripController {
         BigDecimal departureKmIndex,
         @PositiveOrZero(message = "L'index carburant (L) ne peut pas être négatif.") BigDecimal departureFuelIndex,
         String missionObject,
-        @NotBlank(message = "La destination est obligatoire.") String destinationLocation,
+        /** Ancien formulaire : destination unique ; ignorée si des arrêts sont fournis. */
+        String destinationLocation,
         BigDecimal destinationLat,
         BigDecimal destinationLng,
         LocalDateTime scheduledReturnDatetime,
-        List<TripDetailInputDto> details
+        List<TripDetailInputDto> details,
+        @jakarta.validation.Valid List<TripStopRequest> stops
     ) {}
 
     public record ReturnDetailInputDto(UUID detailId, Integer returnQuantity) {}
@@ -109,7 +128,8 @@ public class TripController {
         String description,
         Integer quantity,
         BigDecimal weight,
-        String notes
+        String notes,
+        UUID stopId
     ) {}
 
     public record CancelTripRequest(String reason) {}
@@ -120,7 +140,7 @@ public class TripController {
     @PostMapping
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Créer un trajet (départ) — réservé au Fleet Manager")
+    @Operation(summary = "Créer un trajet (départ) : réservé au Fleet Manager")
     public Mono<Trip> createTrip(
         @Valid @RequestBody CreateTripRequest req,
         Authentication auth
@@ -136,7 +156,8 @@ public class TripController {
                               d.description(),
                               d.quantity(),
                               d.weight(),
-                              d.departureQuantity()
+                              d.departureQuantity(),
+                              d.stopIndex()
                           )
                       )
                       .toList()
@@ -160,7 +181,8 @@ public class TripController {
                 req.destinationLat(),
                 req.destinationLng(),
                 req.scheduledReturnDatetime(),
-                details
+                details,
+                req.stops() != null ? req.stops().stream().map(TripStopRequest::toInput).toList() : List.of()
             )
         );
     }
@@ -168,7 +190,7 @@ public class TripController {
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
     @PostMapping("/{id}/start")
     @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
-    @Operation(summary = "Lancer un trajet planifié — date/heure réelles et relevés (km, carburant) au départ")
+    @Operation(summary = "Lancer un trajet planifié : date/heure réelles et relevés (km, carburant) au départ")
     public Mono<Trip> startTrip(
         @PathVariable UUID id,
         @RequestBody(required = false) StartTripRequest req,
@@ -410,7 +432,8 @@ public class TripController {
                 req.description(),
                 req.quantity(),
                 req.weight(),
-                req.notes()
+                req.notes(),
+                req.stopId()
             )
         );
     }

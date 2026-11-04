@@ -1,6 +1,7 @@
 package com.yowyob.fleet.application.service;
 
 import com.yowyob.fleet.domain.exception.AdminException;
+import com.yowyob.fleet.domain.model.CompanyRules;
 import com.yowyob.fleet.domain.model.Driver;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.FleetResponse;
@@ -43,6 +44,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class OrganizationService {
 
+    private static final int MAX_LOGO_BYTES = 2 * 1024 * 1024;
+
     private final PlatformAdminR2dbcRepository platformAdminRepo;
     private final FleetManagerR2dbcRepository managerRepo;
     private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.CompanyR2dbcRepository companyRepo;
@@ -59,6 +62,8 @@ public class OrganizationService {
     private final GeofenceR2dbcRepository zoneRepo;
     private final FleetMapper fleetMapper;
     private final LocalFileStorageService localFileStorageService;
+    private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.CompanySiteR2dbcRepository siteRepo;
+    private final org.springframework.r2dbc.core.DatabaseClient db;
 
     public Mono<UUID> resolveOrganizationAdminId(Authentication auth, UUID requestedAdminId) {
         UUID principalId = AuthPrincipal.userId(auth);
@@ -135,8 +140,90 @@ public class OrganizationService {
                 .flatMap(admin -> Mono.zip(
                         summary(adminId),
                         companyRepo.findById(adminId)
-                                .defaultIfEmpty(new com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.CompanyEntity())
-                ).map(t -> toProfile(adminId, admin, t.getT2(), t.getT1())));
+                                .defaultIfEmpty(new com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.CompanyEntity()),
+                        siteRepo.findByCompany(adminId).collectList()
+                ).map(t -> toProfile(adminId, admin, t.getT2(), t.getT1(), t.getT3())));
+    }
+
+    /** Fiche légale de l'entreprise ; le nom recopié sur les gestionnaires suit. */
+    public Mono<OrganizationDtos.OrganizationProfile> updateLegalProfile(UUID adminId, OrganizationDtos.UpdateProfileRequest r) {
+        CompanyRules.Profile p = CompanyRules.normalize(new CompanyRules.Profile(
+                r.organizationName(), r.legalName(), r.legalForm(), r.registrationNumber(), r.taxId(), r.sector(),
+                r.address(), r.city(), r.country(), r.companyPhone(), r.companyEmail(), r.website()));
+        return companyRepo.findById(adminId)
+                .switchIfEmpty(Mono.error(AdminException.createdByMustBeAdmin()))
+                .flatMap(company -> {
+                    company.setName(p.name());
+                    company.setLegalName(p.legalName());
+                    company.setLegalForm(p.legalForm());
+                    company.setRegistrationNumber(p.registrationNumber());
+                    company.setTaxId(p.taxId());
+                    company.setSector(p.sector());
+                    company.setAddress(p.address());
+                    company.setCity(p.city());
+                    company.setCountry(p.country());
+                    company.setContactPhone(p.phone());
+                    company.setContactEmail(p.email());
+                    company.setWebsite(p.website());
+                    company.setUpdatedAt(Instant.now());
+                    company.setNew(false);
+                    return companyRepo.save(company);
+                })
+                .then(db.sql("UPDATE fleet.fleet_managers SET company_name = LEFT(:name, 100) WHERE created_by_admin_id = :id")
+                        .bind("name", p.name()).bind("id", adminId)
+                        .fetch().rowsUpdated())
+                .then(profile(adminId));
+    }
+
+    /** Organigramme de l'entreprise, limité aux flottes du gestionnaire si {@code managerId} est donné. */
+    public Mono<OrganizationDtos.OrganizationStructure> structure(UUID adminId, UUID managerId) {
+        Mono<java.util.List<OrganizationDtos.StructureFleet>> fleets = db.sql("""
+                SELECT f.id, f.name, f.site_id, f.manager_id,
+                       TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS manager_name,
+                       fm.account_status,
+                       (SELECT COUNT(*) FROM fleet.vehicles v
+                        WHERE v.fleet_id = f.id AND v.deleted_at IS NULL AND v.status <> 'RETIRED') AS vehicles,
+                       (SELECT COUNT(*) FROM fleet.drivers d
+                        WHERE d.fleet_id = f.id AND d.deleted_at IS NULL AND d.status <> 'LEFT') AS drivers
+                FROM fleet.fleets f
+                LEFT JOIN fleet.users u ON u.id = f.manager_id
+                LEFT JOIN fleet.fleet_managers fm ON fm.user_id = f.manager_id
+                WHERE f.company_id = :company AND f.deleted_at IS NULL
+                ORDER BY LOWER(f.name)
+                """)
+                .bind("company", adminId)
+                .map((row, meta) -> new OrganizationDtos.StructureFleet(
+                        row.get("id", UUID.class), row.get("name", String.class), row.get("site_id", UUID.class),
+                        row.get("manager_id", UUID.class), blankToNull(row.get("manager_name", String.class)),
+                        row.get("account_status", String.class),
+                        row.get("vehicles", Long.class), row.get("drivers", Long.class)))
+                .all()
+                .filter(f -> managerId == null || managerId.equals(f.managerId()))
+                .collectList();
+        Mono<java.util.List<OrganizationDtos.StructureManager>> managers = managerId != null
+                ? Mono.just(java.util.List.of())
+                : db.sql("""
+                SELECT fm.user_id, TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS full_name,
+                       u.email, u.phone, fm.account_status,
+                       (SELECT COUNT(*) FROM fleet.fleets f WHERE f.manager_id = fm.user_id AND f.deleted_at IS NULL) AS fleets
+                FROM fleet.fleet_managers fm
+                JOIN fleet.users u ON u.id = fm.user_id AND u.deleted_at IS NULL
+                WHERE fm.created_by_admin_id = :company AND fm.account_status <> 'CLOSED'
+                ORDER BY LOWER(u.last_name), LOWER(u.first_name)
+                """)
+                .bind("company", adminId)
+                .map((row, meta) -> new OrganizationDtos.StructureManager(
+                        row.get("user_id", UUID.class), row.get("full_name", String.class),
+                        row.get("email", String.class), row.get("phone", String.class),
+                        row.get("account_status", String.class), row.get("fleets", Long.class)))
+                .all()
+                .collectList();
+        Mono<java.util.List<OrganizationDtos.CompanySite>> sites = siteRepo.findByCompany(adminId)
+                .flatMap(s -> siteRepo.countFleets(s.getId()).map(n -> new OrganizationDtos.CompanySite(
+                        s.getId(), s.getName(), s.getSiteType(), s.getAddress(), s.getCity(), s.getPhone(), s.isActive(), n)), 1)
+                .collectList();
+        return Mono.zip(sites, fleets, managers)
+                .map(t -> new OrganizationDtos.OrganizationStructure(t.getT1(), t.getT2(), t.getT3()));
     }
 
     /** Nom et logo de l'entreprise (ils étaient recopiés sur chacun de ses gestionnaires). */
@@ -158,6 +245,12 @@ public class OrganizationService {
     }
 
     public Mono<OrganizationDtos.OrganizationProfile> updateLogo(UUID adminId, byte[] data, String filename, String contentType) {
+        if (contentType == null || !contentType.startsWith("image/")) {
+            return Mono.error(com.yowyob.fleet.domain.exception.CompanyException.invalidField("Le logo doit être une image."));
+        }
+        if (data.length > MAX_LOGO_BYTES) {
+            return Mono.error(com.yowyob.fleet.domain.exception.CompanyException.invalidField("Le logo ne doit pas dépasser 2 Mo."));
+        }
         String safeName = (filename == null || filename.isBlank()) ? "logo.jpg" : filename;
         return localFileStorageService.storeBytes(data, safeName, contentType, "org-logo")
                 .flatMap(stored -> updateProfile(adminId, null, stored.publicUrl()));
@@ -167,7 +260,8 @@ public class OrganizationService {
             UUID adminId,
             UserLocalEntity admin,
             com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.CompanyEntity org,
-            OrganizationDtos.OrganizationSummary summary
+            OrganizationDtos.OrganizationSummary summary,
+            java.util.List<com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.CompanySiteEntity> sites
     ) {
         String name = org.getName();
         if (name == null || name.isBlank()) {
@@ -181,6 +275,11 @@ public class OrganizationService {
                 logo = admin.getPhotoUrl();
             }
         }
+        boolean hasHeadOffice = sites.stream().anyMatch(s -> "HEAD_OFFICE".equals(s.getSiteType()));
+        java.util.List<String> missing = CompanyRules.missingFields(new CompanyRules.Profile(
+                name, org.getLegalName(), org.getLegalForm(), org.getRegistrationNumber(), org.getTaxId(), org.getSector(),
+                org.getAddress(), org.getCity(), org.getCountry(), org.getContactPhone(), org.getContactEmail(), org.getWebsite()),
+                org.getLogoUrl() != null && !org.getLogoUrl().isBlank(), hasHeadOffice);
         return new OrganizationDtos.OrganizationProfile(
                 adminId,
                 name,
@@ -193,7 +292,22 @@ public class OrganizationService {
                 summary.managerCount(),
                 summary.fleetCount(),
                 summary.vehicleCount(),
-                summary.driverCount()
+                summary.driverCount(),
+                org.getLegalName(),
+                org.getLegalForm(),
+                org.getRegistrationNumber(),
+                org.getTaxId(),
+                org.getSector(),
+                org.getAddress(),
+                org.getCity(),
+                org.getCountry(),
+                org.getContactPhone(),
+                org.getContactEmail(),
+                org.getWebsite(),
+                org.getCreatedAt(),
+                sites.size(),
+                CompanyRules.completeness(missing),
+                missing
         );
     }
 

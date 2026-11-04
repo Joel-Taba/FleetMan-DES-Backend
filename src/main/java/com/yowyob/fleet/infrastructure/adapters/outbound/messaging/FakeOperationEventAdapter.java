@@ -14,14 +14,14 @@ public class FakeOperationEventAdapter implements OperationEventPort {
 
     @Override
     public Mono<Void> publishMaintenanceCreated(MaintenanceCreatedEvent event) {
-        log.info("🛠 [FAKE EVENT] MaintenanceCreated — maintenance={} vehicle={} manager={}",
+        log.info("🛠 [FAKE EVENT] MaintenanceCreated : maintenance={} vehicle={} manager={}",
                 event.maintenanceId(), event.vehicleId(), event.fleetManagerId());
         return Mono.empty();
     }
 
     @Override
     public Mono<Void> publishIncidentReported(IncidentReportedEvent event) {
-        log.info("🛠 [FAKE EVENT] IncidentReported — incident={} type={} severity={} critical={}",
+        log.info("🛠 [FAKE EVENT] IncidentReported : incident={} type={} severity={} critical={}",
                 event.incidentId(), event.incidentType(), event.severity(), event.isCritical());
         return Mono.empty();
     }

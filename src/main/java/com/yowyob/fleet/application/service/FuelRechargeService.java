@@ -180,7 +180,7 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
                 com.yowyob.fleet.domain.model.Expense.ExpenseType.FUEL,
                 recharge.getId(),
                 recharge.getPrice(),
-                "Carburant — " + recharge.getQuantity().stripTrailingZeros().toPlainString() + " L",
+                "Carburant : " + recharge.getQuantity().stripTrailingZeros().toPlainString() + " L",
                 recharge.getVehicleId(),
                 recharge.getDriverId());
     }
@@ -206,7 +206,7 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
      */
     private Mono<Void> syncFuelLevel(FuelRecharge recharge, BigDecimal tankCapacity) {
         if (tankCapacity.compareTo(BigDecimal.ZERO) == 0) {
-            log.warn("⚠️ Capacité réservoir inconnue pour le véhicule {} — fuel_level non mis à jour",
+            log.warn("⚠️ Capacité réservoir inconnue pour le véhicule {} : fuel_level non mis à jour",
                     recharge.getVehicleId());
             return Mono.empty();
         }

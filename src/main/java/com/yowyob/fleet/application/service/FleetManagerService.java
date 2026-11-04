@@ -111,42 +111,6 @@ public class FleetManagerService implements ManageFleetManagerUseCase {
     }
 
     @Override
-    public Mono<Void> updateManagerCompany(UUID userId, String companyName) {
-        if (companyName == null || companyName.trim().isEmpty()) {
-            return Mono.error(ManagerException.invalidCompanyData("Le nom ne peut pas être vide."));
-        }
-        return managerPersistencePort.updateCompany(userId, companyName);
-    }
-
-    @Override
-    @Transactional
-    public Mono<Void> updateManagerGallery(UUID userId, String photoUrl, java.util.List<String> galleryUrls) {
-        Mono<Void> logoUpdate = photoUrl != null
-                ? managerRepository.findById(userId)
-                        .flatMap(e -> {
-                            e.setLogoUrl(photoUrl);
-                            e.setNew(false);
-                            return managerRepository.save(e);
-                        })
-                        .then()
-                : Mono.empty();
-        Mono<Void> galleryUpdate = galleryUrls != null
-                ? replaceGallery(userId, galleryUrls)
-                : Mono.empty();
-        return logoUpdate.then(galleryUpdate);
-    }
-
-    private Mono<Void> replaceGallery(UUID managerId, java.util.List<String> galleryUrls) {
-        return galleryRepository.findByManagerId(managerId)
-                .flatMap(img -> galleryRepository.deleteById(img.getId()))
-                .then(Flux.fromIterable(galleryUrls)
-                        .filter(url -> url != null && !url.isBlank())
-                        .concatMap(url -> galleryRepository.save(
-                                new FleetManagerGalleryImageEntity(UUID.randomUUID(), managerId, url)))
-                        .then());
-    }
-
-    @Override
     public Mono<ManagerKpiResponse> getManagerKpis(UUID managerId) {
         // Plage du mois courant pour les KPIs temporels
         LocalDateTime startOfMonth = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);

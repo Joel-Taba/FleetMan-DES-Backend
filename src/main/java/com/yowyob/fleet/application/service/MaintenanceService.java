@@ -231,7 +231,7 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
                 com.yowyob.fleet.domain.model.Expense.ExpenseType.MAINTENANCE,
                 maintenance.getId(),
                 maintenance.getCost(),
-                "Maintenance — " + maintenance.getSubject(),
+                "Maintenance : " + maintenance.getSubject(),
                 maintenance.getVehicleId(),
                 maintenance.getDriverId());
     }

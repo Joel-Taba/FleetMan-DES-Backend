@@ -34,6 +34,8 @@ public class FileAccessService {
                         .flatMap(owner -> superAdmin ? Mono.just(true) : assertSelf(actorId, owner).thenReturn(true))))
                 .switchIfEmpty(Mono.defer(() -> expenseOf(url)
                         .flatMap(expenseId -> resourceAccess.assertExpenseAccess(actorId, expenseId).thenReturn(true))))
+                .switchIfEmpty(Mono.defer(() -> stopProofTrip(url)
+                        .flatMap(trip -> superAdmin ? Mono.just(true) : assertTripCrewOrFleet(actorId, trip).thenReturn(true))))
                 .switchIfEmpty(Mono.defer(() -> incidentOf(url)
                         .flatMap(incidentId -> resourceAccess.assertIncidentAccess(actorId, incidentId).thenReturn(true))))
                 .then();
@@ -50,6 +52,22 @@ public class FileAccessService {
                 .bind("u", url)
                 .map(row -> row.get("user_id", UUID.class))
                 .one();
+    }
+
+    private record ProofTrip(UUID driverId, UUID fleetId) {}
+
+    /** Preuve de livraison d'un arrêt : lisible par le chauffeur du trajet et les gestionnaires de sa flotte. */
+    private Mono<ProofTrip> stopProofTrip(String url) {
+        return db.sql("SELECT t.driver_id, t.fleet_id FROM fleet.trip_stops s JOIN fleet.trips t ON t.id = s.trip_id WHERE s.proof_url = :u LIMIT 1")
+                .bind("u", url)
+                .map(row -> new ProofTrip(row.get("driver_id", UUID.class), row.get("fleet_id", UUID.class)))
+                .one();
+    }
+
+    private Mono<Void> assertTripCrewOrFleet(UUID actorId, ProofTrip trip) {
+        return accessScope.resolveLocalUserId(actorId).flatMap(localId -> localId.equals(trip.driverId())
+                ? Mono.<Void>empty()
+                : accessScope.assertFleetAccess(actorId, trip.fleetId()));
     }
 
     private Mono<UUID> incidentOf(String url) {

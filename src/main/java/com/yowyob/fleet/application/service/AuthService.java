@@ -35,17 +35,34 @@ public class AuthService implements AuthUseCase {
     private final FleetR2dbcRepository fleetRepo;
     private final ManageDriverUseCase driverUseCase;
     private final LocalFileStorageService localFileStorageService;
+    private final org.springframework.r2dbc.core.DatabaseClient db;
 
     @Value("${application.kernel.tenant-id:}")
     private String defaultTenantId;
+
+    private static final java.util.regex.Pattern PHONE_IDENTIFIER = java.util.regex.Pattern.compile("^\\+?[0-9][0-9 .-]{7,20}$");
+
+    /**
+     * Un chauffeur peut se connecter avec son numéro de téléphone : il est traduit en identifiant
+     * de compte s'il désigne un seul chauffeur. Sinon l'identifiant est transmis tel quel.
+     */
+    private Mono<String> resolveIdentifier(String identifier) {
+        String raw = identifier == null ? "" : identifier.trim();
+        if (!PHONE_IDENTIFIER.matcher(raw).matches()) return Mono.just(raw);
+        String phone = raw.replaceAll("[^0-9+]", "");
+        return userRepo.findDriversByPhone(phone)
+            .take(2)
+            .collectList()
+            .map(list -> list.size() == 1 && list.get(0).getUsername() != null ? list.get(0).getUsername() : raw);
+    }
 
     @Override
     public Mono<AuthPort.AuthResponse> login(
         String identifier,
         String password
     ) {
-        return authPort
-            .login(identifier, password)
+        return resolveIdentifier(identifier)
+            .flatMap(id -> authPort.login(id, password))
             .onErrorResume(e -> {
                 if (
                     e instanceof AuthException ae &&
@@ -558,10 +575,20 @@ public class AuthService implements AuthUseCase {
                                 : "SUSPENDED".equals(m.getAccountStatus())
                                         ? Mono.<Void>error(AuthException.managerSuspended(m.getSuspensionReason()))
                                         : Mono.<Void>error(AuthException.accountLocked()))
-                        .switchIfEmpty(Mono.error(AuthException.accountLocked()));
+                        .switchIfEmpty(Mono.defer(() -> driverRepoBlockReason(localUserId)
+                                .flatMap(reason -> Mono.<Void>error(AuthException.driverBlocked(reason.orElse(null))))
+                                .switchIfEmpty(Mono.error(AuthException.accountLocked()))));
             }
             return Mono.empty();
         });
+    }
+
+    /** Motif du blocage d'un compte chauffeur (vide si l'utilisateur n'est pas un chauffeur bloqué). */
+    private Mono<java.util.Optional<String>> driverRepoBlockReason(UUID localUserId) {
+        return db.sql("SELECT account_blocked_reason FROM fleet.drivers WHERE user_id = :id AND account_blocked_at IS NOT NULL")
+                .bind("id", localUserId)
+                .map((row, meta) -> java.util.Optional.ofNullable(row.get("account_blocked_reason", String.class)))
+                .one();
     }
 
     @Override

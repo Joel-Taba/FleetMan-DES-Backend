@@ -46,10 +46,14 @@ public class TripAvailabilityService {
     private final AssignmentPersistencePort assignments;
 
     public Mono<Availability> find(UUID actorId, Query q) {
-        return accessScope.resolveLocalUserId(actorId).flatMap(actor -> {
+        // Séparation des flottes : un chauffeur choisi limite les véhicules à sa flotte, un véhicule
+        // choisi limite les chauffeurs à la sienne (une flotte explicite prime).
+        return accessScope.resolveLocalUserId(actorId).zipWith(pinnedFleet(q)).flatMap(pair -> {
+            UUID actor = pair.getT1();
+            UUID fleet = pair.getT2().orElse(null);
             Map<UUID, Boolean> operableFleets = new ConcurrentHashMap<>();
-            Mono<List<VehicleOption>> allVehicles = vehicleCandidates(actor, q.fleetId()).collectList();
-            Mono<List<DriverOption>> allDrivers = driverCandidates(actor, q.fleetId()).collectList();
+            Mono<List<VehicleOption>> allVehicles = vehicleCandidates(actor, fleet).collectList();
+            Mono<List<DriverOption>> allDrivers = driverCandidates(actor, fleet).collectList();
             return Mono.zip(allVehicles, allDrivers).flatMap(t -> {
                 Mono<List<VehicleOption>> vehicles = Flux.fromIterable(t.getT1())
                         .concatMap(v -> vehicleAvailable(v, q, operableFleets))
@@ -61,6 +65,17 @@ public class TripAvailabilityService {
                         t.getT1().size() - r.getT1().size(), t.getT2().size() - r.getT2().size()));
             });
         });
+    }
+
+    private Mono<java.util.Optional<UUID>> pinnedFleet(Query q) {
+        if (q.fleetId() != null) return Mono.just(java.util.Optional.of(q.fleetId()));
+        String sql = q.driverId() != null ? "SELECT fleet_id AS f FROM fleet.drivers WHERE user_id = :id"
+                : q.vehicleId() != null ? "SELECT fleet_id AS f FROM fleet.vehicles WHERE id = :id" : null;
+        if (sql == null) return Mono.just(java.util.Optional.empty());
+        return db.sql(sql).bind("id", q.driverId() != null ? q.driverId() : q.vehicleId())
+                .map((row, meta) -> java.util.Optional.ofNullable(row.get("f", UUID.class)))
+                .one()
+                .defaultIfEmpty(java.util.Optional.empty());
     }
 
     private Mono<VehicleOption> vehicleAvailable(VehicleOption v, Query q, Map<UUID, Boolean> operable) {

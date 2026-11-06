@@ -266,4 +266,23 @@ public class TripException extends DomainException {
     public static TripException stopActionNeedsDeparture() {
         return new TripException("Les arrêts se servent une fois le trajet parti.", HttpStatus.CONFLICT, "TRP_035");
     }
+
+    public static TripException manifestOnlyPlanned() {
+        return new TripException("Le manifeste se modifie avant le départ ; en route, le chauffeur signale les changements de chargement.",
+                HttpStatus.CONFLICT, "TRP_036");
+    }
+
+    public static TripException invalidManifestLine(String message) {
+        return new TripException(message, HttpStatus.UNPROCESSABLE_ENTITY, "TRP_037");
+    }
+
+    public static TripException invalidPosition() {
+        return new TripException("Position GPS invalide : latitude entre -90 et 90, longitude entre -180 et 180.",
+                HttpStatus.BAD_REQUEST, "TRP_038");
+    }
+
+    public static TripException trackingNotActive() {
+        return new TripException("La position ne se partage que pendant un trajet en cours (parti ou arrivé).",
+                HttpStatus.UNPROCESSABLE_ENTITY, "TRP_039");
+    }
 }

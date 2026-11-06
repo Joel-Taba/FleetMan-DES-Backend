@@ -52,6 +52,24 @@ public class FuelRechargeEntity implements Persistable<UUID> {
     @Column("driver_full_name")
     private String driverFullName;
 
+    @Column("odometer_km")
+    private BigDecimal odometerKm;
+
+    @Column("station_label")
+    private String stationLabel;
+
+    @Column("receipt_url")
+    private String receiptUrl;
+
+    @Column("receipt_name")
+    private String receiptName;
+
+    @Column("receipt_mime")
+    private String receiptMime;
+
+    @Column("created_by")
+    private UUID createdBy;
+
     @Transient
     private boolean isNew = false;
 

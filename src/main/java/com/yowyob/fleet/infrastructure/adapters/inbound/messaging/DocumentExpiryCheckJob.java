@@ -1,5 +1,6 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.messaging;
 
+import com.yowyob.fleet.application.service.AppNotifier;
 import com.yowyob.fleet.domain.model.DocumentCatalog;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -15,9 +16,10 @@ import reactor.core.publisher.Mono;
 
 /**
  * Chaque nuit (et au démarrage) : alerte sur les pièces en vigueur qui expirent (J-30, J-15, J-7)
- * ou ont expiré. Destinataires : le gestionnaire de la flotte, le chauffeur concerné ; pour un
- * gestionnaire, lui-même et son administrateur. Une seule notification par palier et par
- * destinataire (fleet.document_alerts).
+ * ou ont expiré. Destinataires : pour un véhicule, le gestionnaire de la flotte et le chauffeur
+ * qui l'a pour véhicule attitré (il transporte ses papiers) ; pour un chauffeur, lui-même et son
+ * gestionnaire ; pour un gestionnaire, lui-même et son administrateur. Une seule notification par
+ * palier et par destinataire (fleet.document_alerts). Événements DOCUMENT_EXPIRING / DOCUMENT_EXPIRED.
  */
 @Component
 @RequiredArgsConstructor
@@ -26,6 +28,7 @@ public class DocumentExpiryCheckJob {
     private static final Logger log = LoggerFactory.getLogger(DocumentExpiryCheckJob.class);
 
     private final DatabaseClient db;
+    private final AppNotifier notifier;
 
     @EventListener(ApplicationReadyEvent.class)
     public void onStartup() {
@@ -52,9 +55,12 @@ public class DocumentExpiryCheckJob {
                       AND d.expiry_date <= :today + 30
                 ),
                 recipients AS (
-                    SELECT due.*, f.manager_id AS user_id, v.license_plate AS who
+                    SELECT due.*, r.user_id, v.license_plate AS who
                     FROM due JOIN fleet.vehicles v ON due.target_type = 'VEHICLE' AND v.id = due.target_id
-                    JOIN fleet.fleets f ON f.id = v.fleet_id
+                    LEFT JOIN fleet.fleets f ON f.id = v.fleet_id
+                    CROSS JOIN LATERAL (SELECT f.manager_id
+                                        UNION SELECT dr.user_id FROM fleet.drivers dr
+                                              WHERE dr.assigned_vehicle_id = v.id AND COALESCE(dr.status, 'ACTIVE') <> 'LEFT') AS r(user_id)
                     UNION ALL
                     SELECT due.*, r.user_id, TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, ''))
                     FROM due JOIN fleet.drivers dr ON due.target_type = 'DRIVER' AND dr.user_id = due.target_id
@@ -75,20 +81,21 @@ public class DocumentExpiryCheckJob {
                     ON CONFLICT (document_id, alert_type, recipient_id) DO NOTHING
                     RETURNING document_id, alert_type, recipient_id
                 )
-                INSERT INTO fleet.notifications (id, user_id, title, message, type, is_read, created_at, data, tenant_id)
-                SELECT gen_random_uuid(), r.user_id,
-                       CASE WHEN r.alert_type = 'EXPIRED' THEN 'Document expiré' ELSE 'Document bientôt expiré' END,
-                       r.who || ' : ' || CASE r.doc_type LABELS ELSE r.doc_type END || CASE WHEN r.alert_type = 'EXPIRED' THEN ' a expiré le ' ELSE ' expire le ' END
-                           || to_char(r.expiry_date, 'DD/MM/YYYY') || '.',
-                       CASE WHEN r.alert_type IN ('EXPIRED', 'J7') THEN 'WARNING' ELSE 'INFO' END,
-                       FALSE, :now,
-                       json_build_object('type', 'DOCUMENT', 'documentId', r.id, 'alert', r.alert_type)::text, r.tenant_id
+                SELECT r.id, r.user_id, r.alert_type, r.doc_type, r.target_type, r.target_id,
+                       r.who || ' : ' || CASE r.doc_type LABELS ELSE r.doc_type END
+                           || CASE WHEN r.alert_type = 'EXPIRED' THEN ' a expiré le ' ELSE ' expire le ' END
+                           || to_char(r.expiry_date, 'DD/MM/YYYY') || '.' AS message
                 FROM fresh JOIN recipients r
                   ON r.id = fresh.document_id AND r.alert_type = fresh.alert_type AND r.user_id = fresh.recipient_id
                 """.replace("LABELS", labels))
                 .bind("today", today)
                 .bind("now", LocalDateTime.now())
-                .fetch().rowsUpdated()
+                .map((row, meta) -> new Alert(row.get("id", java.util.UUID.class), row.get("user_id", java.util.UUID.class),
+                        row.get("alert_type", String.class), row.get("target_type", String.class),
+                        row.get("target_id", java.util.UUID.class), row.get("message", String.class)))
+                .all()
+                .concatMap(this::send)
+                .count()
                 .doOnNext(n -> {
                     if (n > 0) log.info("📄 {} alerte(s) d'expiration de document envoyée(s)", n);
                 })
@@ -97,5 +104,23 @@ public class DocumentExpiryCheckJob {
                     return Mono.empty();
                 })
                 .subscribe();
+    }
+
+    record Alert(java.util.UUID documentId, java.util.UUID userId, String alertType, String targetType,
+                 java.util.UUID targetId, String message) {
+    }
+
+    private Mono<Integer> send(Alert a) {
+        boolean expired = "EXPIRED".equals(a.alertType());
+        boolean own = !"VEHICLE".equals(a.targetType()) && a.userId().equals(a.targetId());
+        String message = a.message() + (expired
+                ? (own ? " Déposez la nouvelle pièce : sans elle, aucun trajet ni poste ne peut vous être confié." : "")
+                : (own ? " Pensez à déposer son renouvellement." : ""));
+        return notifier.toUser(a.userId(), null, expired ? "Document expiré" : "Document bientôt expiré", message,
+                        expired || "J7".equals(a.alertType()) ? AppNotifier.Level.WARNING : AppNotifier.Level.INFO,
+                        expired ? "DOCUMENT_EXPIRED" : "DOCUMENT_EXPIRING",
+                        AppNotifier.refs("documentId", a.documentId(), "alert", a.alertType(),
+                                "vehicleId", "VEHICLE".equals(a.targetType()) ? a.targetId() : null))
+                .thenReturn(1);
     }
 }

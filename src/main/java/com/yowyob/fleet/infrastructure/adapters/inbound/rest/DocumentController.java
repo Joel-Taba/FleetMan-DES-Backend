@@ -107,6 +107,19 @@ public class DocumentController {
         return documents.checklist(userId(auth), targetType(kind), targetId);
     }
 
+    public record RequestDocumentBody(@NotBlank(message = "Indiquez la pièce demandée.") String docType, String message) {
+    }
+
+    @PostMapping("/{kind:drivers|managers}/{targetId}/documents/requests")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize(STAFF)
+    @Operation(summary = "Demander une pièce manquante à la personne (chauffeur ou gestionnaire)",
+               description = "La personne est notifiée (DOCUMENT_REQUESTED) ; la demande reste visible dans sa checklist jusqu'au dépôt.")
+    public Mono<DocumentService.OpenRequest> requestDocument(@PathVariable String kind, @PathVariable UUID targetId,
+                                                             @Valid @RequestBody RequestDocumentBody body, Authentication auth) {
+        return documents.requestDocument(userId(auth), targetType(kind), targetId, body.docType(), body.message());
+    }
+
     // ── Une pièce ────────────────────────────────────────────────────────────
 
     @GetMapping("/documents/{id:[0-9a-fA-F-]{36}}")

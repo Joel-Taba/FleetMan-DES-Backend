@@ -235,7 +235,9 @@ try:
         time.sleep(10)
     check("trajet non parti 2 h après l'heure prévue → MISSED", st.split("|")[0] == "MISSED", f"({st})")
     check("poste terminé : COMPLETED, km = ceux de ses trajets", st.split("|")[1] == "COMPLETED:42.00", f"({st})")
-    mgr_notif = sql(f"select count(*) from fleet.notifications where data like '%{trip_ids[-1]}%' and type='WARNING'")
+    # Depuis l'ajout de la notification au chauffeur, on ne compte que celle du gestionnaire de la flotte.
+    mgr_notif = sql(f"select count(*) from fleet.notifications where data like '%{trip_ids[-1]}%' and type='WARNING' "
+                    f"and user_id=(select manager_id from fleet.fleets where id='{DOUALA}')")
     check("le gestionnaire est notifié du trajet manqué", mgr_notif == "1", f"({mgr_notif})")
 finally:
     for x in (parked.split(",") if parked else []):

@@ -68,8 +68,68 @@ public record IncidentResponse(
         UUID driverId,
 
         @Schema(description = "Nom complet du chauffeur")
-        String driverFullName
+        String driverFullName,
+
+        @Schema(description = "Le véhicule peut encore rouler (faux : déclaré non roulant)")
+        boolean vehicleDrivable,
+
+        @Schema(description = "Le véhicule est immobilisé par cet incident")
+        boolean vehicleImmobilized,
+
+        @Schema(description = "Lieu en clair (listes)")
+        String locationLabel,
+
+        @Schema(description = "Nombre de photos jointes (listes)")
+        Integer photoCount,
+
+        @Schema(description = "Nombre de pièces jointes (listes)")
+        Integer attachmentCount,
+
+        @Schema(description = "Nom du déclarant (listes)")
+        String reportedByName,
+
+        @Schema(description = "Responsable du dossier (listes)")
+        String handlerName,
+
+        @Schema(description = "Trajet en cours au moment de l'incident (listes)")
+        UUID tripId,
+
+        @Schema(description = "Code du trajet (listes)")
+        String tripCode,
+
+        @Schema(description = "Le trajet est interrompu par cet incident (listes)")
+        Boolean tripInterrupted,
+
+        @Schema(description = "Date d'enregistrement de la déclaration (listes)")
+        LocalDateTime declaredAt,
+
+        @Schema(description = "Dernière étape du dossier : date (listes)")
+        LocalDateTime lastEventAt,
+
+        @Schema(description = "Dernière étape du dossier : type (listes)")
+        String lastEventType,
+
+        @Schema(description = "Une demande d'information attend la réponse du chauffeur (listes)")
+        Boolean infoRequestPending,
+
+        @Schema(description = "Flotte de l'opération, figée à sa création (le véhicule peut avoir changé de flotte depuis)")
+        java.util.UUID fleetId
 ) {
+    /** Même réponse avec la flotte de l'opération. */
+    public IncidentResponse withFleet(java.util.UUID fleet) {
+        return new IncidentResponse(id, type, description, severity, status, incidentDateTime, resolvedAt, cost, report, location, witness, policeReportNumber, insuranceClaimNumber, reportedBy, isCritical, isOpen, vehicleId, vehicleRegistration, driverId, driverFullName, vehicleDrivable, vehicleImmobilized, locationLabel, photoCount, attachmentCount, reportedByName, handlerName, tripId, tripCode, tripInterrupted, declaredAt, lastEventAt, lastEventType, infoRequestPending, fleet);
+    }
+
+
+    /** Complète la réponse avec le résumé du dossier (listes). */
+    public IncidentResponse withSummary(com.yowyob.fleet.application.service.IncidentCaseService.Summary s) {
+        if (s == null) return this;
+        return new IncidentResponse(id, type, description, severity, status, incidentDateTime, resolvedAt, cost, report, location,
+                witness, policeReportNumber, insuranceClaimNumber, reportedBy, isCritical, isOpen, vehicleId, vehicleRegistration,
+                driverId, driverFullName, vehicleDrivable, vehicleImmobilized, s.locationLabel(), s.photoCount(), s.attachmentCount(),
+                s.reportedByName(), s.handlerName(), s.tripId(), s.tripCode(), s.tripInterrupted(), s.declaredAt(), s.lastEventAt(),
+                s.lastEventType(), s.infoRequestPending(), fleetId);
+    }
 
     /**
      * DTO imbriqué pour les informations du témoin.
@@ -114,7 +174,10 @@ public record IncidentResponse(
                 i.getVehicleId(),
                 i.getVehicleRegistration(),
                 i.getDriverId(),
-                i.getDriverFullName()
-        );
+                i.getDriverFullName(),
+                i.isVehicleDrivable(),
+                i.isVehicleImmobilized(),
+                null, null, null, null, null, null, null, null, null, null, null, null
+        , null);
     }
 }

@@ -31,7 +31,21 @@ import java.util.UUID;
 public class FuelRechargeController {
 
     private final ManageFuelRechargeUseCase fuelRechargeUseCase;
+    private final com.yowyob.fleet.application.service.OperationFleetLookup fleetLookup;
     private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
+    private final com.yowyob.fleet.application.service.OperationLookup lookup;
+
+    /** Joint à chaque plein l'état de sa dépense générée (validation du gestionnaire). */
+    private Flux<FuelRechargeResponse> withExpenses(Flux<FuelRecharge> recharges) {
+        return recharges.collectList().flatMapMany(list -> lookup.autoExpenses(list.stream().map(FuelRecharge::getId).toList())
+                .flatMapMany(expenses -> Flux.fromIterable(list)
+                        .map(f -> FuelRechargeResponse.from(f, expenses.get(f.getId())))))
+                .transform(r -> fleetLookup.attach(r, "fuel_recharges", FuelRechargeResponse::id, FuelRechargeResponse::withFleet));
+    }
+
+    private Mono<FuelRechargeResponse> withExpense(Mono<FuelRecharge> recharge) {
+        return withExpenses(recharge.flux()).next();
+    }
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -48,23 +62,44 @@ public class FuelRechargeController {
             @Valid @RequestBody FuelRechargeRequest request,
             Authentication auth) {
 
-        ManageFuelRechargeUseCase.CreateFuelRechargeCommand cmd =
-                new ManageFuelRechargeUseCase.CreateFuelRechargeCommand(
-                        request.quantity(),
-                        request.price(),
-                        request.longitude(),
-                        request.latitude(),
-                        normalizeStationName(request.stationName()),
-                        request.vehicleId(),
-                        request.driverId()
-                );
         UUID actor = getUserId(auth);
-        // Un chauffeur ne déclare que pour le véhicule qu'il conduit ; un gestionnaire,
-        // pour un véhicule de son périmètre.
-        Mono<Void> scope = com.yowyob.fleet.infrastructure.config.security.AuthPrincipal.isFleetDriver(auth)
+        boolean driver = com.yowyob.fleet.infrastructure.config.security.AuthPrincipal.isFleetDriver(auth);
+        // Un chauffeur déclare pour lui-même (le plein lui est attribué, il suit la validation) et
+        // seulement pour le véhicule qu'il conduit ; un gestionnaire, pour un véhicule de son périmètre.
+        Mono<UUID> driverIdMono = driver
+                ? lookup.localUser(actor)
+                : Mono.justOrEmpty(request.driverId());
+        Mono<Void> scope = driver
                 ? resourceAccess.assertDriverOperatesVehicle(actor, request.vehicleId())
                 : resourceAccess.assertVehicleAccess(actor, request.vehicleId());
-        return scope.then(fuelRechargeUseCase.createFuelRecharge(cmd)).map(FuelRechargeResponse::from);
+        return scope.then(driverIdMono.map(java.util.Optional::of).defaultIfEmpty(java.util.Optional.empty()))
+                .flatMap(driverId -> fuelRechargeUseCase.createFuelRecharge(
+                        new ManageFuelRechargeUseCase.CreateFuelRechargeCommand(
+                                request.quantity(),
+                                request.price(),
+                                request.longitude(),
+                                request.latitude(),
+                                normalizeStationName(request.stationName()),
+                                request.vehicleId(),
+                                driverId.orElse(null),
+                                request.odometerKm(),
+                                stationLabel(request.stationName()),
+                                request.receiptUrl(),
+                                request.receiptName(),
+                                request.receiptMime(),
+                                actor)))
+                .flatMap(saved -> withExpense(Mono.just(saved)));
+    }
+
+    @GetMapping("/mine")
+    @PreAuthorize("hasRole('FLEET_DRIVER')")
+    @Operation(summary = "Mes pleins (chauffeur)",
+               description = "Pleins attribués au chauffeur connecté, du plus récent au plus ancien, avec l'état de validation de la dépense.")
+    public Flux<FuelRechargeResponse> mine(Authentication auth) {
+        return withExpenses(lookup.localUser(getUserId(auth))
+                .flatMapMany(fuelRechargeUseCase::getByDriverId)
+                .sort(java.util.Comparator.comparing(FuelRecharge::getRechargeDateTime,
+                        java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()))));
     }
 
     // ── LECTURE ───────────────────────────────────────────────────────────────
@@ -74,7 +109,7 @@ public class FuelRechargeController {
     @Operation(summary = "Lister mes recharges",
                description = "Retourne toutes les recharges des véhicules gérés par le manager connecté.")
     public Flux<FuelRechargeResponse> listAll(Authentication auth) {
-        return fuelRechargeUseCase.getAllByManager(getUserId(auth)).map(FuelRechargeResponse::from);
+        return withExpenses(fuelRechargeUseCase.getAllByManager(getUserId(auth)));
     }
 
     @GetMapping("/{id}")
@@ -84,7 +119,7 @@ public class FuelRechargeController {
             @Parameter(description = "ID de la recharge") @PathVariable UUID id,
             Authentication auth) {
         return resourceAccess.assertFuelRechargeAccess(getUserId(auth), id)
-                .then(fuelRechargeUseCase.getById(id)).map(FuelRechargeResponse::from);
+                .then(withExpense(fuelRechargeUseCase.getById(id)));
     }
 
     @GetMapping("/vehicle/{vehicleId}")
@@ -95,7 +130,7 @@ public class FuelRechargeController {
             @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
             Authentication auth) {
         return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
-                .thenMany(fuelRechargeUseCase.getByVehicleId(vehicleId)).map(FuelRechargeResponse::from);
+                .thenMany(withExpenses(fuelRechargeUseCase.getByVehicleId(vehicleId)));
     }
 
     @GetMapping("/driver/{driverId}")
@@ -105,7 +140,7 @@ public class FuelRechargeController {
             @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId,
             Authentication auth) {
         return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
-                .thenMany(fuelRechargeUseCase.getByDriverId(driverId)).map(FuelRechargeResponse::from);
+                .thenMany(withExpenses(fuelRechargeUseCase.getByDriverId(driverId)));
     }
 
     @GetMapping("/range")
@@ -117,7 +152,7 @@ public class FuelRechargeController {
             @Parameter(description = "Date de fin (ISO 8601)", example = "2026-12-31T23:59:59")
             @RequestParam LocalDateTime end,
             Authentication auth) {
-        return fuelRechargeUseCase.getByDateRange(start, end, getUserId(auth)).map(FuelRechargeResponse::from);
+        return withExpenses(fuelRechargeUseCase.getByDateRange(start, end, getUserId(auth)));
     }
 
     // ── KPIs ──────────────────────────────────────────────────────────────────
@@ -154,10 +189,12 @@ public class FuelRechargeController {
                         request.longitude(),
                         request.latitude(),
                         normalizeStationName(request.stationName()),
-                        request.driverId()
+                        request.driverId(),
+                        request.odometerKm(),
+                        stationLabel(request.stationName())
                 );
         return resourceAccess.assertFuelRechargeAccess(getUserId(auth), id)
-                .then(fuelRechargeUseCase.update(cmd)).map(FuelRechargeResponse::from);
+                .then(withExpense(fuelRechargeUseCase.update(cmd)));
     }
 
     // ── SUPPRESSION ───────────────────────────────────────────────────────────
@@ -181,6 +218,18 @@ public class FuelRechargeController {
             BigDecimal totalCost
     ) {}
 
+    /** Nom saisi conservé tel quel quand il ne se réduit pas à l'enseigne (« Total Bastos »). */
+    private String stationLabel(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String value = raw.trim();
+        try {
+            FuelRecharge.StationName.valueOf(value.toUpperCase());
+            return null;
+        } catch (IllegalArgumentException ex) {
+            return value.length() > 255 ? value.substring(0, 255) : value;
+        }
+    }
+
     private FuelRecharge.StationName normalizeStationName(String raw) {
         if (raw == null || raw.isBlank()) {
             return null;
@@ -188,6 +237,11 @@ public class FuelRechargeController {
         try {
             return FuelRecharge.StationName.valueOf(raw.trim().toUpperCase());
         } catch (IllegalArgumentException ex) {
+            // « Total Bastos » → TOTAL : l'enseigne reconnue dans le nom saisi.
+            String upper = raw.trim().toUpperCase();
+            for (FuelRecharge.StationName brand : FuelRecharge.StationName.values()) {
+                if (brand != FuelRecharge.StationName.OTHER && upper.contains(brand.name())) return brand;
+            }
             return FuelRecharge.StationName.OTHER;
         }
     }

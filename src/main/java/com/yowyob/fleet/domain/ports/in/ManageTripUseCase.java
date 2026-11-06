@@ -63,7 +63,9 @@ public interface ManageTripUseCase {
         String missionObject,
         String destinationLocation,
         BigDecimal destinationLat,
-        BigDecimal destinationLng
+        BigDecimal destinationLng,
+        /** Nouveau retour prévu (trajet planifié) ; null = inchangé. */
+        java.time.LocalDateTime scheduledReturnDatetime
     ) {}
 
     /** ADD : chargement ajouté en route ; REMOVE : chargement non livré / refusé (detailId requis). */
@@ -174,10 +176,7 @@ public interface ManageTripUseCase {
         return getTripById(tripId);
     }
 
-    // ── Télémétrie (conservée pour usage futur app mobile chauffeur) ─────────
-
-    /** Enregistre un point GPS (trajet du chauffeur appelant) et vérifie les zones de géofencing. */
-    Mono<Void> sendTelemetry(UUID tripId, UUID driverId, Double lat, Double lng, Double speed);
+    // ── Chauffeur (le suivi GPS en direct est dans TrackTripUseCase) ─────────
 
     /** Récupère le trajet actif du chauffeur (lecture seule). */
     Mono<Trip> getMyActiveTrip(UUID driverId);

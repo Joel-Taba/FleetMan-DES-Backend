@@ -16,6 +16,12 @@ public class AuthException extends DomainException {
         return new AuthException("Votre compte est suspendu localement. Contactez un admin.", HttpStatus.FORBIDDEN, "AUTH_002");
     }
 
+    public static AuthException driverBlocked(String reason) {
+        return new AuthException("Votre compte chauffeur est bloqué par votre gestionnaire"
+                + (reason != null && !reason.isBlank() ? " (" + reason + ")" : "")
+                + ". Contactez-le pour le rétablir.", HttpStatus.FORBIDDEN, "AUTH_002");
+    }
+
     public static AuthException managerSuspended(String reason) {
         return new AuthException("Votre compte gestionnaire est suspendu"
                 + (reason != null && !reason.isBlank() ? " (" + reason + ")" : "")

@@ -31,6 +31,10 @@ public class WorkRulesService {
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("dd/MM 'à' HH:mm");
 
     private final DatabaseClient db;
+    private final AppNotifier notifier;
+
+    /** Nature d'un changement communiqué au chauffeur (clé « change » de la notification SHIFT_CHANGED). */
+    public enum ShiftChangeKind { NEW, MODIFIED, REMOVED, CANCELLED, DELETED }
 
     public Mono<WorkTimeRules.Limits> limitsOfCompany(UUID companyId) {
         return db.sql("SELECT max_shift_hours, min_rest_hours, max_weekly_hours, max_consecutive_days FROM fleet.companies WHERE id = :c")
@@ -150,6 +154,19 @@ public class WorkRulesService {
                 .defaultIfEmpty(false);
     }
 
+    /**
+     * Le chauffeur voit-il ce poste ? Un poste hors planning est visible dès sa création, celui
+     * d'un planning dès la publication (un brouillon reste invisible).
+     */
+    public Mono<Boolean> isVisibleToDriver(UUID scheduleId) {
+        if (scheduleId == null) return Mono.just(true);
+        return db.sql("SELECT status FROM fleet.schedules WHERE id = :id")
+                .bind("id", scheduleId)
+                .map((row, meta) -> !"DRAFT".equals(row.get("status", String.class)))
+                .one()
+                .defaultIfEmpty(true);
+    }
+
     /** Motif exigé pour toucher un poste d'un planning publié. */
     public Mono<String> requireReasonIfPublished(UUID scheduleId, String reason) {
         return isPublished(scheduleId).flatMap(published -> {
@@ -166,9 +183,10 @@ public class WorkRulesService {
                 .fetch().rowsUpdated().then();
     }
 
-    /** Changement après publication : motif tracé, accusé de réception à refaire. */
+    /** Changement après publication : motif tracé, accusé de réception à refaire, alerte de non-lecture réarmée. */
     public Mono<Void> recordChange(UUID assignmentId, String reason) {
-        return db.sql("UPDATE fleet.assignments SET change_reason = :r, changed_at = :now, acknowledged_at = NULL WHERE id = :id")
+        return db.sql("UPDATE fleet.assignments SET change_reason = :r, changed_at = :now, acknowledged_at = NULL, "
+                        + "unack_alerted_at = NULL WHERE id = :id")
                 .bind("r", reason).bind("now", LocalDateTime.now()).bind("id", assignmentId)
                 .fetch().rowsUpdated().then();
     }
@@ -180,16 +198,56 @@ public class WorkRulesService {
                 .fetch().rowsUpdated().then();
     }
 
-    public Mono<Void> notifyDriver(UUID driverId, String title, String message, UUID scheduleId, UUID assignmentId) {
-        return db.sql("""
-                INSERT INTO fleet.notifications (id, user_id, title, message, type, is_read, created_at, data, tenant_id)
-                SELECT gen_random_uuid(), u.id, :title, :message, 'INFO', FALSE, :now, :data, u.tenant_id
-                FROM fleet.users u WHERE u.id = :driver
-                """)
-                .bind("title", title).bind("message", message).bind("now", LocalDateTime.now())
-                .bind("data", "{\"type\":\"SHIFT_CHANGED\",\"scheduleId\":\"" + scheduleId + "\",\"assignmentId\":\"" + assignmentId + "\"}")
-                .bind("driver", driverId)
+    /** Poste marqué absent par le gestionnaire : la tâche planifiée ne renverra pas la notification. */
+    public Mono<Void> recordNoShow(UUID assignmentId) {
+        return db.sql("UPDATE fleet.assignments SET no_show_notified_at = :now WHERE id = :id")
+                .bind("now", LocalDateTime.now()).bind("id", assignmentId)
                 .fetch().rowsUpdated().then();
+    }
+
+    /** Le chauffeur est prévenu qu'il a été marqué absent à son poste. */
+    public Mono<Void> notifyNoShow(Assignment a, String reason) {
+        String why = clean(reason);
+        return notifier.toUser(a.getDriverId(), null, "Absence au poste",
+                "Vous avez été marqué absent au poste " + describe(a) + (why != null ? " : " + why : ".")
+                        + " Contactez votre gestionnaire si c'est une erreur.",
+                AppNotifier.Level.WARNING, "SHIFT_NO_SHOW",
+                AppNotifier.refs("assignmentId", a.getId(), "scheduleId", a.getScheduleId()));
+    }
+
+    /** Notification SHIFT_CHANGED historique (nouveau poste, modification, retrait, annulation, suppression). */
+    public Mono<Void> notifyDriver(UUID driverId, String title, String message, UUID scheduleId, UUID assignmentId) {
+        return notifyShift(driverId, title, message, ShiftChangeKind.MODIFIED, scheduleId, assignmentId);
+    }
+
+    /**
+     * Prévient le chauffeur d'un changement de poste. Pour un poste supprimé ou retiré, l'identifiant
+     * du poste n'est pas joint : le chauffeur ne peut plus l'ouvrir.
+     */
+    public Mono<Void> notifyShift(UUID driverId, String title, String message, ShiftChangeKind kind,
+                                  UUID scheduleId, UUID assignmentId) {
+        boolean gone = kind == ShiftChangeKind.DELETED || kind == ShiftChangeKind.REMOVED;
+        AppNotifier.Level level = kind == ShiftChangeKind.NEW ? AppNotifier.Level.INFO : AppNotifier.Level.WARNING;
+        return notifier.toUser(driverId, null, title, message, level, "SHIFT_CHANGED",
+                AppNotifier.refs("assignmentId", gone ? null : assignmentId, "scheduleId", scheduleId,
+                        "change", kind.name()));
+    }
+
+    /** Nombre de postes à venir d'un planning et nombre de ceux dont le chauffeur a accusé réception. */
+    public record AckSummary(long upcoming, long acknowledged, long changedUnacknowledged) {}
+
+    public Mono<AckSummary> ackSummary(UUID scheduleId) {
+        return db.sql("""
+                SELECT COUNT(*) AS n,
+                       COUNT(acknowledged_at) AS acked,
+                       COUNT(*) FILTER (WHERE acknowledged_at IS NULL AND changed_at IS NOT NULL) AS changed
+                FROM fleet.assignments WHERE schedule_id = :s AND status IN ('PENDING', 'IN_PROGRESS')
+                """)
+                .bind("s", scheduleId)
+                .map((row, meta) -> new AckSummary(row.get("n", Long.class), row.get("acked", Long.class),
+                        row.get("changed", Long.class)))
+                .one()
+                .defaultIfEmpty(new AckSummary(0, 0, 0));
     }
 
     public static String describe(Assignment a) {
@@ -206,14 +264,17 @@ public class WorkRulesService {
                 .defaultIfEmpty(new Extras(null, null, null, null, null));
     }
 
-    /** Accusé de réception : tous les postes publiés du chauffeur dans ce planning, ou un poste. */
+    /**
+     * Accusé de réception : tous les postes publiés du chauffeur dans ce planning, ou un poste
+     * (y compris un poste hors planning, visible dès sa création).
+     */
     public Mono<Long> acknowledge(UUID driverId, UUID scheduleId, UUID assignmentId) {
         String filter = assignmentId != null ? "a.id = :target" : "a.schedule_id = :target";
         return db.sql("""
                 UPDATE fleet.assignments a SET acknowledged_at = :now
-                FROM fleet.schedules s
-                WHERE s.id = a.schedule_id AND s.status <> 'DRAFT' AND a.driver_id = :driver
-                  AND a.acknowledged_at IS NULL AND %s
+                WHERE a.driver_id = :driver AND a.acknowledged_at IS NULL AND %s
+                  AND (a.schedule_id IS NULL OR EXISTS (SELECT 1 FROM fleet.schedules s
+                                                        WHERE s.id = a.schedule_id AND s.status <> 'DRAFT'))
                 """.formatted(filter))
                 .bind("now", LocalDateTime.now()).bind("driver", driverId)
                 .bind("target", assignmentId != null ? assignmentId : scheduleId)

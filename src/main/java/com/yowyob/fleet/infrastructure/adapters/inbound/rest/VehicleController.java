@@ -41,6 +41,7 @@ public class VehicleController {
     private final AccessScopeService accessScope;
     private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
     private final ObjectMapper objectMapper;
+    private final com.yowyob.fleet.application.service.VehicleOperationalJournal operationalJournal;
 
     /**
      * Helper pour extraire le token JWT
@@ -270,8 +271,28 @@ public class VehicleController {
     public Mono<Void> updateOp(@PathVariable UUID vehicleId, @RequestBody Map<String, Object> updates,
                                Authentication auth) {
         // Le chauffeur n'ajuste que le véhicule qu'il conduit (affecté ou trajet en cours).
-        return resourceAccess.assertDriverOperatesVehicle(getUserId(auth), vehicleId)
-                .then(vehicleUseCase.updateOperationalData(vehicleId, updates));
+        // Chaque relevé est tracé (auteur, avant / après) ; un relevé refusé (compteur qui recule)
+        // est tracé hors transaction et signalé au gestionnaire.
+        UUID actor = getUserId(auth);
+        return resourceAccess.assertDriverOperatesVehicle(actor, vehicleId)
+                .then(operationalJournal.snapshot(vehicleId))
+                .flatMap(before -> vehicleUseCase.updateOperationalData(vehicleId, updates)
+                        .then(Mono.defer(() -> operationalJournal.recordAccepted(vehicleId, actor, before)))
+                        .onErrorResume(com.yowyob.fleet.domain.exception.VehicleException.class,
+                                e -> operationalJournal.recordRejected(vehicleId, actor, before, updates).then(Mono.error(e))));
+    }
+
+    @Tag(name = OpenApiConfig.TAG_VHC_OP)
+    @GetMapping("/vehicles/{vehicleId}/operational/updates")
+    @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Derniers relevés terrain (auteur, avant / après, anomalies)",
+            description = "Le gestionnaire voit qui a saisi le compteur ou la jauge et quand ; le chauffeur, ceux du véhicule qu'il conduit.")
+    public reactor.core.publisher.Flux<com.yowyob.fleet.application.service.VehicleOperationalJournal.Entry> operationalUpdates(
+            @PathVariable UUID vehicleId, @RequestParam(defaultValue = "10") int limit, Authentication auth) {
+        Mono<Void> gate = AuthPrincipal.isFleetDriver(auth)
+                ? resourceAccess.assertDriverOperatesVehicle(getUserId(auth), vehicleId)
+                : requireVehicleAccess(vehicleId, auth);
+        return gate.thenMany(operationalJournal.recent(vehicleId, limit));
     }
 
     // ========================================================================

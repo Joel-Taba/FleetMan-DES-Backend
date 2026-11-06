@@ -39,6 +39,7 @@ class IncidentImpactServiceTest {
     @Mock TripR2dbcRepository tripRepository;
     @Mock IncidentPersistencePort incidentPersistence;
     @Mock AssignmentPersistencePort assignmentPort;
+    @Mock IncidentNotifier notifier;
 
     private IncidentImpactService service;
     private UUID vehicleId;
@@ -46,7 +47,9 @@ class IncidentImpactServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new IncidentImpactService(vehicleRepository, tripRepository, incidentPersistence, assignmentPort);
+        service = new IncidentImpactService(vehicleRepository, tripRepository, incidentPersistence, assignmentPort, notifier);
+        when(notifier.tripInterrupted(any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(notifier.tripResumed(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
         vehicleId = UUID.randomUUID();
         vehicle = new VehicleLocalEntity();
         vehicle.setId(vehicleId);
@@ -72,11 +75,13 @@ class IncidentImpactServiceTest {
         trip.setId(UUID.randomUUID());
         trip.setVehicleId(vehicleId);
         trip.setStatus("DEPARTED");
+        trip.setDriverId(UUID.randomUUID());
         vehicle.setStatus("ON_TRIP");
         when(tripRepository.findInProgressTripsForVehicle(vehicleId)).thenReturn(Flux.just(trip));
         Incident incident = incident(Incident.Severity.CRITICAL);
+        UUID manager = UUID.randomUUID();
 
-        StepVerifier.create(service.applyImpact(incident))
+        StepVerifier.create(service.applyImpact(incident, manager))
                 .assertNext(saved -> assertTrue(saved.isVehicleImmobilized()))
                 .verifyComplete();
 
@@ -84,6 +89,8 @@ class IncidentImpactServiceTest {
         assertNotNull(trip.getInterruptedAt());
         assertEquals(incident.getId(), trip.getInterruptionIncidentId());
         assertTrue(trip.isInterrupted());
+        // Le chauffeur du trajet est prévenu de l'interruption.
+        verify(notifier).tripInterrupted(incident, trip.getId(), trip.getTripCode(), trip.getDriverId(), manager);
     }
 
     @Test
@@ -130,6 +137,7 @@ class IncidentImpactServiceTest {
         assertEquals("ON_TRIP", vehicle.getStatus());
         assertNotNull(trip.getResumedAt());
         assertFalse(trip.isInterrupted());
+        verify(notifier).tripResumed(any(), any(), any(), any(), any(), any());
     }
 
     @Test

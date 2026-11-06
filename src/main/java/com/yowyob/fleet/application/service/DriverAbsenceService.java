@@ -40,13 +40,41 @@ public class DriverAbsenceService {
     private final AccessScopeService accessScope;
     private final TripR2dbcRepository tripRepository;
     private final AssignmentPersistencePort assignmentPort;
+    private final AppNotifier notifier;
+
+    private static final java.time.format.DateTimeFormatter DAY = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     public record DeclareAbsenceCommand(String type, LocalDate startDate, LocalDate endDate, String reason) {}
 
+    /** Le gestionnaire de la flotte, ou le chauffeur lui-même (lecture seule de ses absences). */
     public Flux<DriverAbsence> list(UUID driverId, UUID actorId) {
-        return requireDriverInScope(driverId, actorId)
+        return accessScope.resolveLocalUserId(actorId).defaultIfEmpty(new UUID(0, 0))
+                .flatMap(localId -> localId.equals(driverId) ? Mono.<Void>empty() : requireDriverInScope(driverId, actorId).then())
                 .thenMany(absenceRepository.findByDriverId(driverId))
                 .map(DriverAbsenceEntity::toDomain);
+    }
+
+    /** Libellé français d'un type d'absence (texte des notifications). */
+    public static String typeLabel(String type) {
+        return switch (type == null ? "" : type) {
+            case DriverAbsence.LEAVE -> "congé";
+            case DriverAbsence.SICK_LEAVE -> "arrêt maladie";
+            case DriverAbsence.SUSPENSION -> "suspension";
+            default -> "absence";
+        };
+    }
+
+    static String period(LocalDate start, LocalDate end) {
+        return end == null ? "à partir du " + start.format(DAY) + " (sans date de fin)"
+                : start.equals(end) ? "le " + start.format(DAY)
+                : "du " + start.format(DAY) + " au " + end.format(DAY);
+    }
+
+    private Mono<Void> notifyDriver(UUID driverId, UUID actorId, String title, String message, AppNotifier.Level level,
+                                    String event, UUID absenceId) {
+        return accessScope.resolveLocalUserId(actorId).onErrorResume(e -> Mono.empty()).defaultIfEmpty(actorId)
+                .flatMap(actor -> notifier.toUser(driverId, actor, title, message, level, event,
+                        AppNotifier.refs("absenceId", absenceId, "driverId", driverId)));
     }
 
     /** Absences en cours ou à venir d'un ensemble de chauffeurs, groupées par chauffeur. */
@@ -61,6 +89,12 @@ public class DriverAbsenceService {
 
     @Transactional
     public Mono<DriverAbsence> declare(UUID driverId, DeclareAbsenceCommand cmd, UUID actorId) {
+        return declare(driverId, cmd, actorId, true);
+    }
+
+    /** {@code notifyDriver} faux : l'absence vient d'une demande du chauffeur, prévenu par la décision. */
+    @Transactional
+    public Mono<DriverAbsence> declare(UUID driverId, DeclareAbsenceCommand cmd, UUID actorId, boolean notifyDriver) {
         String type = cmd.type() == null ? "" : cmd.type().trim().toUpperCase(Locale.ROOT);
         if (!DriverAbsence.TYPES.contains(type)) {
             return Mono.error(DriverException.invalidAbsence("type inconnu (congé, arrêt maladie ou suspension)"));
@@ -91,6 +125,10 @@ public class DriverAbsenceService {
                     return absenceRepository.save(entity);
                 }))
                 .map(DriverAbsenceEntity::toDomain)
+                .flatMap(a -> !notifyDriver ? Mono.just(a) : notifyDriver(driverId, actorId, "Absence enregistrée",
+                        "Votre gestionnaire a enregistré : " + typeLabel(a.type()) + " " + period(a.startDate(), a.endDate())
+                                + (a.reason() != null ? " (" + a.reason() + ")" : "") + ". Aucun poste ni trajet ne vous sera confié sur ces jours.",
+                        AppNotifier.Level.INFO, "ABSENCE_RECORDED", a.id()).thenReturn(a))
                 .doOnSuccess(a -> log.info("📅 Absence {} déclarée pour le chauffeur {} ({} → {})",
                         type, driverId, a.startDate(), a.endDate()));
     }
@@ -103,7 +141,11 @@ public class DriverAbsenceService {
                     entity.setNew(false);
                     return absenceRepository.save(entity);
                 })
-                .map(DriverAbsenceEntity::toDomain);
+                .map(DriverAbsenceEntity::toDomain)
+                .flatMap(a -> notifyDriver(driverId, actorId, "Absence annulée",
+                        "Votre " + typeLabel(a.type()) + " " + period(a.startDate(), a.endDate())
+                                + " est annulée : vous redevenez disponible sur ces jours.",
+                        AppNotifier.Level.WARNING, "ABSENCE_CANCELLED", a.id()).thenReturn(a));
     }
 
     /**
@@ -127,7 +169,12 @@ public class DriverAbsenceService {
                     entity.setNew(false);
                     return absenceRepository.save(entity);
                 })
-                .map(DriverAbsenceEntity::toDomain);
+                .map(DriverAbsenceEntity::toDomain)
+                .flatMap(a -> notifyDriver(driverId, actorId,
+                        DriverAbsence.SUSPENSION.equals(a.type()) ? "Suspension levée" : "Fin d'absence avancée",
+                        "Votre " + typeLabel(a.type()) + " se termine le " + endDate.format(DAY)
+                                + " : vous êtes de nouveau disponible à partir du " + endDate.plusDays(1).format(DAY) + ".",
+                        AppNotifier.Level.INFO, "ABSENCE_ENDED", a.id()).thenReturn(a));
     }
 
     private Mono<DriverAbsenceEntity> requireAbsence(UUID driverId, UUID absenceId, UUID actorId) {

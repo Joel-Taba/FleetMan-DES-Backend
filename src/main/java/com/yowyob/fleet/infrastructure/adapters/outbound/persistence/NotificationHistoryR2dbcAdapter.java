@@ -70,6 +70,11 @@ public class NotificationHistoryR2dbcAdapter implements NotificationHistoryRepos
         return repository.markAllAsReadByUserId(userId).defaultIfEmpty(0L);
     }
 
+    @Override
+    public Mono<Long> countUnread(UUID userId) {
+        return repository.countUnreadByUserId(userId).defaultIfEmpty(0L);
+    }
+
     private Notification toDomain(NotificationEntity entity) {
         return new Notification(
             entity.getId(),

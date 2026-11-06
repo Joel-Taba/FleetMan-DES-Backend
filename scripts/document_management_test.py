@@ -119,6 +119,26 @@ DRIVER_DOCS = f"/api/v1/drivers/{BELLA}/documents"
 VEHICLE_DOCS = f"/api/v1/vehicles/{V1}/documents"
 MANAGER_DOCS = f"/api/v1/managers/{DUPONT}/documents"
 
+
+# Données de démonstration (pièces en règle ajoutées le 03/11, plannings de démo) : écrites avant cet
+# essai, elles faussent ses hypothèses. Mises de côté le temps de l'essai, restaurées dans finally.
+parked_docs = sql("select coalesce(string_agg(id::text, ','), '') from fleet.documents where is_current "
+                  "and notes in ('Document de démonstration','Permis de démonstration') and target_id in ('"+BELLA+"','"+V1+"')")
+# Rattachées le temps de l'essai à une cible fictive : elles ne comptent ni dans les versions ni dans l'historique.
+PARK_TARGET = "00000000-0000-4000-8000-0000000e5059"
+parked_targets = {}
+if parked_docs:
+    for row in sql("select id::text || ':' || target_id::text from fleet.documents where id in ("
+                   + ",".join(repr(x) for x in parked_docs.split(",")) + ")").splitlines():
+        parked_targets[row.split(":")[0]] = row.split(":")[1]
+    sql("update fleet.documents set is_current=false, target_id='" + PARK_TARGET + "' where id in ("
+        + ",".join(repr(x) for x in parked_docs.split(",")) + ")")
+parked_shifts = sql("select coalesce(string_agg(id::text || ':' || status, ','), '') from fleet.assignments "
+                    "where status in ('PENDING','IN_PROGRESS') and (driver_id in ('"+BELLA+"') or vehicle_id in ('"+V1+"')) "
+                    "and end_datetime > now() - interval '12 hours' and start_datetime < now() + interval '40 days'")
+if parked_shifts:
+    sql("update fleet.assignments set status='CANCELLED' where id in (" + ",".join(repr(x.split(':')[0]) for x in parked_shifts.split(",")) + ")")
+
 try:
     print("1. Dépôt")
     s, r = call("POST", DRIVER_DOCS, {**piece("DRIVING_LICENSE", licenseCategories="B,C,D"), "fileUrl": ""}, DRV)
@@ -272,3 +292,10 @@ finally:
         update fleet.drivers set assigned_vehicle_id = {f"'{saved_bella}'" if saved_bella else 'NULL'} where user_id='{BELLA}';
     """)
     print(f"  ↺ données restaurées — {sum(results)}/{len(results)} contrôles OK")
+    for x in (parked_shifts.split(",") if parked_shifts else []):
+        sql(f"update fleet.assignments set status='{x.split(':')[1]}' where id='{x.split(':')[0]}'")
+    for doc_id, target in parked_targets.items():
+        sql(f"update fleet.documents set target_id='{target}' where id='{doc_id}'")
+    if parked_docs:
+        sql("update fleet.documents d set is_current=true where d.id in (" + ",".join(repr(x) for x in parked_docs.split(","))
+            + ") and not exists (select 1 from fleet.documents o where o.target_id=d.target_id and o.doc_type=d.doc_type and o.is_current)")

@@ -27,7 +27,31 @@ public interface ManageMaintenanceUseCase {
             Double latitude,
             String locationName,
             UUID vehicleId,
-            UUID driverId       // optionnel
+            UUID driverId,      // optionnel
+            Maintenance.Status status,      // null : intervention terminée (saisie après coup)
+            String maintenanceType,         // PREVENTIVE / CORRECTIVE / EMERGENCY
+            boolean urgent,
+            LocalDateTime plannedAt,        // obligatoire si PLANNED
+            UUID actorId                    // auteur (chauffeur demandeur ou gestionnaire)
+    ) {
+        /** Ordre de réparation ouvert depuis un dossier d'incident : planifié, à dater par le gestionnaire. */
+        public CreateMaintenanceCommand(String subject, BigDecimal cost, String report, Double longitude, Double latitude,
+                                        String locationName, UUID vehicleId, UUID driverId) {
+            this(subject, cost, report, longitude, latitude, locationName, vehicleId, driverId,
+                    Maintenance.Status.REQUESTED, "CORRECTIVE", false, null, null);
+        }
+    }
+
+    /** Avancement décidé par le gestionnaire : PLAN, START, COMPLETE, CANCEL. */
+    record TransitionCommand(
+            UUID maintenanceId,
+            UUID actorId,
+            String action,
+            LocalDateTime plannedAt,
+            String garage,
+            BigDecimal cost,
+            String report,
+            String reason
     ) {}
 
     record UpdateMaintenanceCommand(
@@ -48,6 +72,12 @@ public interface ManageMaintenanceUseCase {
      * Publie un événement de notification au Fleet Manager.
      */
     Mono<Maintenance> createMaintenance(CreateMaintenanceCommand command);
+
+    /** Planifier, démarrer, terminer ou annuler (effets sur le véhicule, notification du chauffeur). */
+    Mono<Maintenance> transition(TransitionCommand command);
+
+    /** Maintenances qui concernent le chauffeur : ses demandes, celles où il est cité, celles de son véhicule. */
+    Flux<Maintenance> getForDriver(UUID driverId);
 
     /**
      * Récupère une maintenance par son identifiant.

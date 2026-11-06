@@ -35,8 +35,16 @@ import java.util.UUID;
 public class IncidentController {
 
     private final ManageIncidentUseCase incidentUseCase;
+    private final com.yowyob.fleet.application.service.OperationFleetLookup fleetLookup;
     private final AccessScopeService accessScope;
     private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
+    private final com.yowyob.fleet.application.service.IncidentCaseService caseService;
+
+    /** Listes : résumé du dossier (photos, lieu, trajet, dernière étape), plus récemment déclarés d'abord. */
+    private Flux<IncidentResponse> enriched(Flux<Incident> source) {
+        return fleetLookup.attach(caseService.enrich(source).map(e -> IncidentResponse.from(e.incident()).withSummary(e.summary())),
+                "incidents", IncidentResponse::id, IncidentResponse::withFleet);
+    }
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -57,7 +65,15 @@ public class IncidentController {
     public Mono<IncidentResponse> create(
             @Valid @RequestBody IncidentRequest request,
             Authentication auth) {
+        // Un chauffeur déclare toujours pour lui-même : il est le chauffeur concerné, il suit le dossier.
+        boolean driver = AuthPrincipal.isFleetDriver(auth);
+        Mono<java.util.Optional<UUID>> concernedDriver = driver
+                ? accessScope.resolveLocalUserId(getUserId(auth)).map(java.util.Optional::of)
+                : Mono.just(java.util.Optional.ofNullable(request.driverId()));
+        return concernedDriver.flatMap(driverId -> create(request, driverId.orElse(null), driver, auth));
+    }
 
+    private Mono<IncidentResponse> create(IncidentRequest request, UUID driverId, boolean driver, Authentication auth) {
         ManageIncidentUseCase.CreateIncidentCommand cmd =
                 new ManageIncidentUseCase.CreateIncidentCommand(
                         request.type(),
@@ -71,7 +87,7 @@ public class IncidentController {
                         request.witnessContact(),
                         request.reportedBy(),
                         request.vehicleId(),
-                        request.driverId(),
+                        driverId,
                         getUserId(auth),
                         new com.yowyob.fleet.application.service.IncidentCaseService.CaseDetails(
                                 request.locationLabel(), request.estimatedCost(), request.injuries(), request.injuriesCount(),
@@ -81,9 +97,10 @@ public class IncidentController {
                 );
         // Un chauffeur ne déclare que pour le véhicule qu'il conduit (il pouvait viser
         // n'importe quel véhicule, y compris d'une autre entreprise).
-        Mono<Void> scope = AuthPrincipal.isFleetDriver(auth)
+        Mono<Void> scope = driver
                 ? resourceAccess.assertDriverOperatesVehicle(getUserId(auth), request.vehicleId())
-                : resourceAccess.assertVehicleAccess(getUserId(auth), request.vehicleId());
+                : resourceAccess.assertVehicleAccess(getUserId(auth), request.vehicleId())
+                        .then(driverId != null ? resourceAccess.assertDriverAccess(getUserId(auth), driverId) : Mono.<Void>empty());
         return scope.then(incidentUseCase.createIncident(cmd)).map(IncidentResponse::from);
     }
 
@@ -94,7 +111,7 @@ public class IncidentController {
     @Operation(summary = "Lister mes incidents",
                description = "Retourne tous les incidents des véhicules gérés par le manager connecté.")
     public Flux<IncidentResponse> listAll(Authentication auth) {
-        return incidentUseCase.getAllByManager(getUserId(auth)).map(IncidentResponse::from);
+        return enriched(incidentUseCase.getAllByManager(getUserId(auth)));
     }
 
     @GetMapping("/{id}")
@@ -124,7 +141,7 @@ public class IncidentController {
             @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
             Authentication auth) {
         return accessScope.assertVehicleAccess(getUserId(auth), vehicleId)
-                .thenMany(incidentUseCase.getByVehicleId(vehicleId).map(IncidentResponse::from));
+                .thenMany(enriched(incidentUseCase.getByVehicleId(vehicleId)));
     }
 
     @GetMapping("/driver/{driverId}")
@@ -134,7 +151,7 @@ public class IncidentController {
             @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId,
             Authentication auth) {
         return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
-                .thenMany(incidentUseCase.getByDriverId(driverId)).map(IncidentResponse::from);
+                .thenMany(enriched(incidentUseCase.getByDriverId(driverId)));
     }
 
     @GetMapping("/open")
@@ -142,7 +159,7 @@ public class IncidentController {
     @Operation(summary = "Incidents ouverts",
                description = "Retourne uniquement les incidents en statut REPORTED ou UNDER_INVESTIGATION. Utile pour le tableau de bord.")
     public Flux<IncidentResponse> getOpen(Authentication auth) {
-        return incidentUseCase.getOpenIncidents(getUserId(auth)).map(IncidentResponse::from);
+        return enriched(incidentUseCase.getOpenIncidents(getUserId(auth)));
     }
 
     @GetMapping("/filter")
@@ -160,11 +177,11 @@ public class IncidentController {
 
         UUID managerId = getUserId(auth);
 
-        if (type != null)     return incidentUseCase.getByType(type, managerId).map(IncidentResponse::from);
-        if (severity != null) return incidentUseCase.getBySeverity(severity, managerId).map(IncidentResponse::from);
-        if (status != null)   return incidentUseCase.getByStatus(status, managerId).map(IncidentResponse::from);
+        if (type != null)     return enriched(incidentUseCase.getByType(type, managerId));
+        if (severity != null) return enriched(incidentUseCase.getBySeverity(severity, managerId));
+        if (status != null)   return enriched(incidentUseCase.getByStatus(status, managerId));
 
-        return incidentUseCase.getAllByManager(managerId).map(IncidentResponse::from);
+        return enriched(incidentUseCase.getAllByManager(managerId));
     }
 
     @GetMapping("/range")
@@ -176,7 +193,7 @@ public class IncidentController {
             @Parameter(description = "Date de fin (ISO 8601)", example = "2026-12-31T23:59:59")
             @RequestParam LocalDateTime end,
             Authentication auth) {
-        return incidentUseCase.getByDateRange(start, end, getUserId(auth)).map(IncidentResponse::from);
+        return enriched(incidentUseCase.getByDateRange(start, end, getUserId(auth)));
     }
 
     // ── KPIs ──────────────────────────────────────────────────────────────────

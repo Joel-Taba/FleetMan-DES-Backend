@@ -31,4 +31,9 @@ public interface UserLocalR2dbcRepository extends ReactiveCrudRepository<UserLoc
     Mono<UserLocalEntity> findByKernelId(UUID kernelId);
 
     Flux<UserLocalEntity> findByEmailIn(Collection<String> emails);
+
+    /** Chauffeurs actifs portant ce numéro (connexion par téléphone). */
+    @org.springframework.data.r2dbc.repository.Query("SELECT u.* FROM fleet.users u JOIN fleet.drivers d ON d.user_id = u.id "
+            + "WHERE REGEXP_REPLACE(u.phone, '[^0-9+]', '', 'g') = :phone AND u.deleted_at IS NULL AND d.deleted_at IS NULL")
+    reactor.core.publisher.Flux<com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.UserLocalEntity> findDriversByPhone(String phone);
 }

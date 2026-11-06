@@ -15,6 +15,9 @@ public interface NotificationHistoryRepositoryPort {
 
     Mono<Long> markAllAsRead(UUID userId);
 
+    /** Nombre de notifications non lues de l'utilisateur (badge des cloches). */
+    Mono<Long> countUnread(UUID userId);
+
     // Record Helper pour la pagination
     record PagedResult<T>(List<T> content, long totalElements, int totalPages, int currentPage) {}
 }

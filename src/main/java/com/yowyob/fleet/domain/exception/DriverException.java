@@ -119,4 +119,11 @@ public class DriverException extends DomainException {
                 "Dossier du chauffeur incomplet pour ce créneau : " + gaps + ". Déposez ou renouvelez ces pièces.",
                 HttpStatus.UNPROCESSABLE_ENTITY, "DRV_021");
     }
+
+    public static DriverException fleetMismatch(String driverFleet, String vehicleFleet) {
+        return new DriverException("Ce chauffeur appartient à « " + (driverFleet == null || "null".equals(driverFleet) ? "aucune" : driverFleet)
+                + " » et ce véhicule à « " + (vehicleFleet == null || "null".equals(vehicleFleet) ? "aucune" : vehicleFleet)
+                + " » : un trajet ou un poste associe un chauffeur et un véhicule de la même flotte. "
+                + "Changez d'abord le chauffeur de flotte si nécessaire.", HttpStatus.UNPROCESSABLE_ENTITY, "DRV_026");
+    }
 }

@@ -45,6 +45,7 @@ public class DocumentService {
     private final CompanyScopeService companyScope;
     private final DocumentHubPort hub;
     private final DatabaseClient db;
+    private final AppNotifier notifier;
 
     public record SubmitCommand(String docType, String docNumber, String licenseCategories, String issuer,
                                 LocalDate issueDate, LocalDate expiryDate, String fileUrl, String fileOriginalName,
@@ -54,8 +55,13 @@ public class DocumentService {
     public record ApproveCommand(LocalDate expiryDate, String licenseCategories, String notes) {
     }
 
+    /** {@code requestedAt} / {@code requestMessage} : pièce demandée par le contrôleur et pas encore déposée. */
     public record ChecklistItem(String docType, boolean legal, boolean mandatory, String state, LocalDate expiryDate,
-                                UUID documentId, boolean renewalPending) {
+                                UUID documentId, boolean renewalPending, LocalDateTime requestedAt, String requestMessage) {
+    }
+
+    /** Demande de pièce en cours (pas encore satisfaite par un dépôt). */
+    public record OpenRequest(String docType, LocalDateTime requestedAt, String message) {
     }
 
     public record CatalogEntry(String targetType, String docType, boolean legal, boolean mandatory, boolean expiryRequired) {
@@ -118,7 +124,9 @@ public class DocumentService {
                                     return documents.save(saved);
                                 })
                                 .defaultIfEmpty(saved))
-                        .flatMap(saved -> notifyReviewers(saved, localId).thenReturn(saved)));
+                        .flatMap(saved -> fulfilRequests(saved)
+                                .then(notifyReviewers(saved, localId, false))
+                                .thenReturn(saved)));
     }
 
     /** Correction d'une pièce encore en attente de contrôle (l'historique d'une pièce traitée reste intact). */
@@ -148,7 +156,10 @@ public class DocumentService {
                         doc.setUpdatedAt(LocalDateTime.now());
                         doc.setNew(false);
                         return documents.save(doc);
-                    }));
+                    }))
+                    .flatMap(saved -> accessScope.resolveLocalUserId(actorId)
+                            .flatMap(localId -> notifyReviewers(saved, localId, true))
+                            .thenReturn(saved));
         });
     }
 
@@ -194,7 +205,7 @@ public class DocumentService {
                         }));
                     })
                     .flatMap(saved -> hub.review(saved.getKernelLinkId(), "APPROVED", saved.getExpiryDate(), saved.getNotes())
-                            .then(notifyOutcome(saved, "Document approuvé", "a été approuvé.", "INFO"))
+                            .then(notifyOutcome(saved, "Document approuvé", "a été approuvé.", AppNotifier.Level.SUCCESS, "DOCUMENT_APPROVED"))
                             .thenReturn(saved));
         });
     }
@@ -222,7 +233,8 @@ public class DocumentService {
                         return documents.save(doc);
                     })
                     .flatMap(saved -> hub.review(saved.getKernelLinkId(), "REJECTED", null, reason)
-                            .then(notifyOutcome(saved, "Document rejeté", "a été rejeté : " + reason.trim(), "WARNING"))
+                            .then(notifyOutcome(saved, "Document rejeté", "a été rejeté : " + reason.trim()
+                                    + ". Déposez une nouvelle pièce depuis votre dossier.", AppNotifier.Level.WARNING, "DOCUMENT_REJECTED"))
                             .thenReturn(saved));
         });
     }
@@ -277,11 +289,13 @@ public class DocumentService {
     public Flux<ChecklistItem> checklist(UUID actorId, TargetType type, UUID rawTargetId) {
         return localTarget(type, rawTargetId).flatMapMany(targetId -> access.assertCanRead(actorId, type, targetId)
                 .then(Mono.zip(compliance.requiredTypes(type, targetId),
-                        documents.findActive(type.name(), targetId).collectList()))
-                .flatMapIterable(t -> buildChecklist(type, t.getT1(), t.getT2())));
+                        documents.findActive(type.name(), targetId).collectList(),
+                        openRequests(type, targetId).collectMap(OpenRequest::docType)))
+                .flatMapIterable(t -> buildChecklist(type, t.getT1(), t.getT2(), t.getT3())));
     }
 
-    private static List<ChecklistItem> buildChecklist(TargetType type, Set<String> required, List<DocumentEntity> active) {
+    private static List<ChecklistItem> buildChecklist(TargetType type, Set<String> required, List<DocumentEntity> active,
+                                                      Map<String, OpenRequest> requests) {
         LocalDate today = LocalDate.now();
         List<ChecklistItem> items = new ArrayList<>();
         for (DocumentCatalog.Entry entry : DocumentCatalog.entries(type)) {
@@ -293,7 +307,9 @@ public class DocumentService {
                     DocumentRules.checklistState(ofType.stream().map(DocumentEntity::toPiece).toList(), today),
                     inForce != null ? inForce.getExpiryDate() : null,
                     latest != null ? latest.getId() : null,
-                    inForce != null && ofType.stream().anyMatch(d -> "PENDING".equals(d.getReviewStatus()))));
+                    inForce != null && ofType.stream().anyMatch(d -> "PENDING".equals(d.getReviewStatus())),
+                    requests.containsKey(entry.docType()) ? requests.get(entry.docType()).requestedAt() : null,
+                    requests.containsKey(entry.docType()) ? requests.get(entry.docType()).message() : null));
         }
         items.sort(Comparator.comparing(ChecklistItem::mandatory).reversed());
         return items;
@@ -588,47 +604,113 @@ public class DocumentService {
 
     // ── Notifications ────────────────────────────────────────────────────────
 
-    /** Prévient les contrôleurs d'un dépôt à examiner, sauf si c'est l'un d'eux qui l'a fait. */
-    private Mono<Void> notifyReviewers(DocumentEntity doc, UUID submitterId) {
+    /**
+     * Prévient le contrôleur d'un dépôt à examiner (DOCUMENT_SUBMITTED), sauf si c'est lui qui l'a fait :
+     * gestionnaire de la flotte pour un véhicule ou un chauffeur, administrateur pour un gestionnaire.
+     */
+    private Mono<Void> notifyReviewers(DocumentEntity doc, UUID submitterId, boolean correction) {
         String sql = switch (TargetType.valueOf(doc.getTargetType())) {
-            case VEHICLE -> "SELECT f.manager_id AS u FROM fleet.vehicles v JOIN fleet.fleets f ON f.id = v.fleet_id WHERE v.id = :id";
-            case DRIVER -> "SELECT f.manager_id AS u FROM fleet.drivers d JOIN fleet.fleets f ON f.id = d.fleet_id WHERE d.user_id = :id";
-            case MANAGER -> "SELECT created_by_admin_id AS u FROM fleet.fleet_managers WHERE user_id = :id";
+            case VEHICLE -> "SELECT f.manager_id AS u, v.license_plate AS who FROM fleet.vehicles v JOIN fleet.fleets f ON f.id = v.fleet_id WHERE v.id = :id";
+            case DRIVER -> "SELECT f.manager_id AS u, TRIM(COALESCE(us.first_name, '') || ' ' || COALESCE(us.last_name, '')) AS who "
+                    + "FROM fleet.drivers d JOIN fleet.fleets f ON f.id = d.fleet_id JOIN fleet.users us ON us.id = d.user_id WHERE d.user_id = :id";
+            case MANAGER -> "SELECT fm.created_by_admin_id AS u, TRIM(COALESCE(us.first_name, '') || ' ' || COALESCE(us.last_name, '')) AS who "
+                    + "FROM fleet.fleet_managers fm JOIN fleet.users us ON us.id = fm.user_id WHERE fm.user_id = :id";
         };
-        return db.sql(sql).bind("id", doc.getTargetId()).map(row -> row.get("u", UUID.class)).one()
-                .filter(reviewer -> !reviewer.equals(submitterId))
-                .flatMap(reviewer -> insertNotification(reviewer, "Document à contrôler",
-                        "Nouveau dépôt à contrôler : " + describe(doc) + ".", "INFO", doc))
+        return db.sql(sql).bind("id", doc.getTargetId())
+                .map((row, meta) -> new Object[]{row.get("u", UUID.class), row.get("who", String.class)})
+                .one()
+                .filter(r -> r[0] != null)
+                .flatMap(r -> {
+                    String who = r[1] == null || ((String) r[1]).isBlank() ? "" : " (" + r[1] + ")";
+                    return notifier.toUser((UUID) r[0], submitterId, correction ? "Dépôt corrigé" : "Document à contrôler",
+                            (correction ? "Dépôt corrigé, à contrôler : " : "Nouveau dépôt à contrôler : ") + describe(doc) + who + ".",
+                            AppNotifier.Level.INFO, "DOCUMENT_SUBMITTED",
+                            AppNotifier.refs("documentId", doc.getId(), "vehicleId",
+                                    TargetType.VEHICLE.name().equals(doc.getTargetType()) ? doc.getTargetId() : null,
+                                    "driverId", TargetType.DRIVER.name().equals(doc.getTargetType()) ? doc.getTargetId() : null));
+                })
                 .then();
     }
 
-    private Mono<Void> notifyOutcome(DocumentEntity doc, String title, String outcome, String type) {
+    /** Décision du contrôleur : le déposant et la personne concernée sont prévenus (jamais le contrôleur lui-même). */
+    private Mono<Void> notifyOutcome(DocumentEntity doc, String title, String outcome, AppNotifier.Level level, String event) {
         UUID person = TargetType.valueOf(doc.getTargetType()) == TargetType.VEHICLE ? null : doc.getTargetId();
-        return Flux.fromIterable(java.util.stream.Stream.of(doc.getSubmittedBy(), person)
-                        .filter(java.util.Objects::nonNull)
-                        .filter(u -> !u.equals(doc.getReviewedBy()))
-                        .distinct()
-                        .toList())
-                .concatMap(u -> insertNotification(u, title, "Votre document (" + describe(doc) + ") " + outcome, type, doc))
-                .then();
+        List<UUID> recipients = java.util.stream.Stream.of(doc.getSubmittedBy(), person)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        return notifier.toUsers(recipients, doc.getReviewedBy(), title, "Votre document (" + describe(doc) + ") " + outcome,
+                level, event, AppNotifier.refs("documentId", doc.getId()));
+    }
+
+    // ── Pièces demandées ─────────────────────────────────────────────────────
+
+    /**
+     * Le contrôleur demande une pièce à une personne (chauffeur ou gestionnaire) : la demande s'affiche
+     * dans sa checklist jusqu'au dépôt et elle est notifiée (DOCUMENT_REQUESTED).
+     */
+    @Transactional
+    public Mono<OpenRequest> requestDocument(UUID actorId, TargetType type, UUID rawTargetId, String docType, String message) {
+        if (type == TargetType.VEHICLE) {
+            return Mono.error(DocumentException.invalidDocType("les papiers d'un véhicule sont déposés par le gestionnaire"));
+        }
+        if (docType == null || DocumentCatalog.find(type, docType).isEmpty() || DocumentCatalog.OTHER.equals(docType)) {
+            return Mono.error(DocumentException.invalidDocType(String.valueOf(docType)));
+        }
+        String note = message == null || message.isBlank() ? null : message.trim();
+        return localTarget(type, rawTargetId).flatMap(targetId -> access.assertCanReview(actorId, type, targetId)
+                .then(accessScope.resolveLocalUserId(actorId))
+                .flatMap(reviewer -> {
+                    LocalDateTime now = LocalDateTime.now();
+                    var insert = db.sql("""
+                                    INSERT INTO fleet.document_requests (id, target_type, target_id, doc_type, message, requested_by, requested_at)
+                                    VALUES (:id, :t, :target, :d, :m, :by, :now)
+                                    """)
+                            .bind("id", UUID.randomUUID()).bind("t", type.name()).bind("target", targetId)
+                            .bind("d", docType).bind("by", reviewer).bind("now", now);
+                    insert = note != null ? insert.bind("m", note) : insert.bindNull("m", String.class);
+                    String label = DocumentCatalog.label(type, docType);
+                    return db.sql("""
+                                    UPDATE fleet.document_requests SET fulfilled_at = :now
+                                    WHERE target_type = :t AND target_id = :target AND doc_type = :d AND fulfilled_at IS NULL
+                                    """)
+                            .bind("now", now).bind("t", type.name()).bind("target", targetId).bind("d", docType)
+                            .fetch().rowsUpdated()
+                            .then(insert.fetch().rowsUpdated())
+                            .then(notifier.toUser(targetId, reviewer, "Document demandé",
+                                    "Merci de déposer : " + label + (note != null ? " (" + note + ")" : "")
+                                            + ". Rendez-vous dans « Mes documents ».",
+                                    AppNotifier.Level.WARNING, "DOCUMENT_REQUESTED",
+                                    AppNotifier.refs(type == TargetType.DRIVER ? "driverId" : "managerId", targetId, "docType", docType)))
+                            .thenReturn(new OpenRequest(docType, now, note));
+                }));
+    }
+
+    private Flux<OpenRequest> openRequests(TargetType type, UUID targetId) {
+        if (type == TargetType.VEHICLE) return Flux.empty();
+        return db.sql("""
+                        SELECT doc_type, requested_at, message FROM fleet.document_requests
+                        WHERE target_type = :t AND target_id = :id AND fulfilled_at IS NULL ORDER BY requested_at
+                        """)
+                .bind("t", type.name()).bind("id", targetId)
+                .map((row, meta) -> new OpenRequest(row.get("doc_type", String.class),
+                        row.get("requested_at", LocalDateTime.class), row.get("message", String.class)))
+                .all()
+                .onErrorResume(e -> Flux.empty());
+    }
+
+    /** Un dépôt satisfait la demande en cours de la même pièce. */
+    private Mono<Void> fulfilRequests(DocumentEntity doc) {
+        return db.sql("""
+                        UPDATE fleet.document_requests SET fulfilled_at = :now, document_id = :doc
+                        WHERE target_type = :t AND target_id = :id AND doc_type = :d AND fulfilled_at IS NULL
+                        """)
+                .bind("now", LocalDateTime.now()).bind("doc", doc.getId()).bind("t", doc.getTargetType())
+                .bind("id", doc.getTargetId()).bind("d", doc.getDocType())
+                .fetch().rowsUpdated()
+                .then()
+                .onErrorResume(e -> Mono.empty());
     }
 
     private static String describe(DocumentEntity doc) {
         return DocumentCatalog.label(TargetType.valueOf(doc.getTargetType()), doc.getDocType());
-    }
-
-    private Mono<Long> insertNotification(UUID userId, String title, String message, String type, DocumentEntity doc) {
-        return db.sql("""
-                INSERT INTO fleet.notifications (id, user_id, title, message, type, is_read, created_at, data, tenant_id)
-                SELECT gen_random_uuid(), u.id, :title, :message, :type, FALSE, :now, :data, u.tenant_id
-                FROM fleet.users u WHERE u.id = :user
-                """)
-                .bind("title", title)
-                .bind("message", message)
-                .bind("type", type)
-                .bind("now", LocalDateTime.now())
-                .bind("data", "{\"type\":\"DOCUMENT\",\"documentId\":\"" + doc.getId() + "\"}")
-                .bind("user", userId)
-                .fetch().rowsUpdated();
     }
 }

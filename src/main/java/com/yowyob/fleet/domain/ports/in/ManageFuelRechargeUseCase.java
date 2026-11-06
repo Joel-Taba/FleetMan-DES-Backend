@@ -23,7 +23,13 @@ public interface ManageFuelRechargeUseCase {
             Double latitude,
             FuelRecharge.StationName stationName,   // optionnel
             UUID vehicleId,
-            UUID driverId                           // optionnel
+            UUID driverId,                          // optionnel
+            BigDecimal odometerKm,                  // optionnel
+            String stationLabel,                    // nom saisi (« Total Bastos »)
+            String receiptUrl,                      // photo du ticket (optionnelle)
+            String receiptName,
+            String receiptMime,
+            UUID actorId                            // auteur de la saisie
     ) {}
 
     record UpdateFuelRechargeCommand(
@@ -33,7 +39,9 @@ public interface ManageFuelRechargeUseCase {
             Double longitude,
             Double latitude,
             FuelRecharge.StationName stationName,
-            UUID driverId
+            UUID driverId,
+            BigDecimal odometerKm,
+            String stationLabel
     ) {}
 
     // ── Use Cases ─────────────────────────────────────────────────────────────

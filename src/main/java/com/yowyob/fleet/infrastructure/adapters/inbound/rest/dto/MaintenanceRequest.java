@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Schema(description = "Requête de création ou mise à jour d'une maintenance véhicule")
@@ -36,5 +37,18 @@ public record MaintenanceRequest(
         Double latitude,
 
         @Schema(description = "Nom du lieu d'intervention (optionnel)", example = "Garage Central Yaoundé")
-        String locationName
+        String locationName,
+
+        @Schema(description = "Statut initial (gestionnaire) : PLANNED, IN_PROGRESS ou COMPLETED (défaut). Une demande de chauffeur est toujours REQUESTED.",
+                allowableValues = {"REQUESTED", "PLANNED", "IN_PROGRESS", "COMPLETED"})
+        String status,
+
+        @Schema(description = "Type : PREVENTIVE, CORRECTIVE, EMERGENCY", allowableValues = {"PREVENTIVE", "CORRECTIVE", "EMERGENCY"})
+        String maintenanceType,
+
+        @Schema(description = "Demande urgente")
+        Boolean urgent,
+
+        @Schema(description = "Date prévue (obligatoire si PLANNED)", example = "2026-11-10T09:00:00")
+        LocalDateTime plannedAt
 ) {}

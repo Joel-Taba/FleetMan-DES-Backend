@@ -36,6 +36,7 @@ public class ExpenseController {
     private final ManageExpenseUseCase expenseUseCase;
     private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
     private final com.yowyob.fleet.application.service.CompanyScopeService companyScope;
+    private final com.yowyob.fleet.application.service.AccessScopeService accessScope;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -108,6 +109,16 @@ public class ExpenseController {
                description = "Retourne toutes les dépenses (auto et manuelles) de toutes les flottes gérées par le manager connecté.")
     public Flux<ExpenseResponse> listAll(Authentication auth) {
         return expenseUseCase.getAllByManager(getUserId(auth)).map(ExpenseResponse::from);
+    }
+
+    @GetMapping("/mine")
+    @PreAuthorize("hasRole('FLEET_DRIVER')")
+    @Operation(summary = "Mes dépenses (chauffeur)",
+               description = "Dépenses rattachées au chauffeur connecté : péages, amendes, pleins, avec leur statut de validation.")
+    public Flux<ExpenseResponse> mine(Authentication auth) {
+        return accessScope.resolveLocalUserId(getUserId(auth))
+                .flatMapMany(expenseUseCase::getByDriver)
+                .map(ExpenseResponse::from);
     }
 
     @GetMapping("/{id}")

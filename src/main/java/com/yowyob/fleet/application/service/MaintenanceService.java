@@ -38,9 +38,15 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
     private final UserLocalR2dbcRepository userRepo;
     private final com.yowyob.fleet.domain.ports.in.ManageExpenseUseCase expenseUseCase;
     private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.OperationalParameterR2dbcRepository operationalRepo;
+    private final OperationLookup lookup;
+    private final OperationNotifier notifications;
 
     // ── 1. CRÉATION ──────────────────────────────────────────────────────────
 
+    /**
+     * Demande d'un chauffeur (REQUESTED, notifiée au gestionnaire), ordre planifié / en cours, ou
+     * intervention terminée saisie après coup par le gestionnaire (notifiée aux chauffeurs du véhicule).
+     */
     @Override
     @Transactional
     public Mono<Maintenance> createMaintenance(CreateMaintenanceCommand cmd) {
@@ -50,17 +56,23 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
                 .switchIfEmpty(Mono.error(OperationException.vehicleNotFound(cmd.vehicleId())))
                 .map(v -> v.licensePlate());
 
-        // 2. Résolution optionnelle du nom du chauffeur
+        // 2. Chauffeur cité : nom lisible (l'identifiant s'affichait à la place du nom)
         Mono<String> driverNameMono = cmd.driverId() != null
                 ? driverPersistence.findById(cmd.driverId())
                         .switchIfEmpty(Mono.error(OperationException.driverNotFound(cmd.driverId())))
-                        .map(d -> d.userId().toString()) // sera enrichi si le modèle Driver expose le nom
+                        .flatMap(d -> lookup.fullName(d.userId()))
                 : Mono.just("");
 
-        return Mono.zip(vehicleRegistrationMono, driverNameMono)
+        Mono<java.util.Optional<UUID>> requesterMono = lookup.localUser(cmd.actorId())
+                .filterWhen(lookup::isDriver)
+                .map(java.util.Optional::of)
+                .defaultIfEmpty(java.util.Optional.empty());
+
+        return Mono.zip(vehicleRegistrationMono, driverNameMono, requesterMono)
                 .flatMap(tuple -> {
                     String vehicleReg  = tuple.getT1();
                     String driverName  = tuple.getT2().isBlank() ? null : tuple.getT2();
+                    UUID requester     = tuple.getT3().orElse(null);
 
                     Coordinates coords = buildCoordinates(cmd.longitude(), cmd.latitude());
 
@@ -77,16 +89,25 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
                             cmd.driverId(),
                             driverName
                     );
+                    // Un chauffeur ne fait qu'une demande : c'est le gestionnaire qui planifie.
+                    Maintenance.Status initial = requester != null ? Maintenance.Status.REQUESTED : cmd.status();
+                    String type = cmd.maintenanceType() != null ? cmd.maintenanceType()
+                            : Maintenance.TYPES.contains(cmd.subject()) ? cmd.subject() : null;
+                    maintenance.initWorkflow(initial, type, cmd.urgent(), cmd.plannedAt(), requester, LocalDateTime.now());
 
-                    return maintenancePersistence.save(maintenance);
+                    Mono<Void> workshop = maintenance.getStatus() == Maintenance.Status.IN_PROGRESS
+                            ? enterWorkshop(maintenance)
+                            : Mono.empty();
+                    return workshop.then(maintenancePersistence.save(maintenance));
                 })
                 .flatMap(saved -> {
-                    // 3. Synchronisation maintenance_parameters du véhicule
-                    Mono<Void> syncParams = syncMaintenanceParameters(saved.getVehicleId())
+                    // 3. Paramètres de maintenance du véhicule : seulement quand l'intervention a eu lieu
+                    Mono<Void> syncParams = (saved.getStatus() == Maintenance.Status.COMPLETED
+                            ? syncMaintenanceParameters(saved.getVehicleId())
+                            : Mono.<Void>empty())
                             .then(syncExpense(saved));
 
-                    // 4. Publication événement (Kafka, best-effort — no-op si Kafka indisponible)
-                    //    + notification in-app immédiate au Fleet Manager (toujours active)
+                    // 4. Événement Kafka (push, best-effort) ; alerte + email au gestionnaire pour une demande
                     vehiclePersistence.getLocalDataById(saved.getVehicleId())
                             .flatMap(v -> {
                                 OperationEventPort.MaintenanceCreatedEvent event =
@@ -103,17 +124,89 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
                                                 saved.getId(), e.getMessage()))
                                         .onErrorResume(e -> Mono.empty());
 
-                                Mono<AlertEvent> notify = notifyManagerOfMaintenance(saved, v.managerId());
+                                Mono<?> alert = saved.getStatus() == Maintenance.Status.REQUESTED && saved.getRequestedBy() != null
+                                        ? notifyManagerOfMaintenance(saved, v.managerId())
+                                        : Mono.empty();
 
-                                return Mono.when(kafkaPublish, notify);
+                                return Mono.when(kafkaPublish, alert);
                             })
-                            .doOnError(e -> log.warn("⚠️ Échec notification maintenance {}: {}",
+                            .doOnError(e -> log.warn("⚠️ Échec alerte maintenance {}: {}",
                                     saved.getId(), e.getMessage()))
                             .onErrorResume(e -> Mono.empty())
                             .subscribe();
 
-                    return syncParams.thenReturn(saved);
+                    // 5. Notification in-app (centre de notifications), dans la chaîne : jamais bloquante
+                    return syncParams
+                            .then(notifications.maintenanceCreated(saved, cmd.actorId()))
+                            .thenReturn(saved);
                 });
+    }
+
+    // ── 1 bis. CYCLE DE VIE ─────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public Mono<Maintenance> transition(TransitionCommand cmd) {
+        return maintenancePersistence.findById(cmd.maintenanceId())
+                .switchIfEmpty(Mono.error(OperationException.maintenanceNotFound(cmd.maintenanceId())))
+                .flatMap(m -> {
+                    Maintenance.Status before = m.getStatus();
+                    LocalDateTime now = LocalDateTime.now();
+                    String action = cmd.action() == null ? "" : cmd.action().trim().toUpperCase();
+                    Mono<Void> vehicleEffect;
+                    switch (action) {
+                        case "PLAN" -> {
+                            m.plan(cmd.plannedAt(), cmd.garage());
+                            vehicleEffect = Mono.empty();
+                        }
+                        case "START" -> {
+                            m.start(now);
+                            vehicleEffect = enterWorkshop(m);
+                        }
+                        case "COMPLETE" -> {
+                            m.complete(now, cmd.cost(), cmd.report());
+                            vehicleEffect = before == Maintenance.Status.IN_PROGRESS
+                                    ? lookup.releaseVehicleFromWorkshop(m.getVehicleId(), m.getId()).then()
+                                    : Mono.empty();
+                        }
+                        case "CANCEL" -> {
+                            m.cancel(now, cmd.reason());
+                            vehicleEffect = before == Maintenance.Status.IN_PROGRESS
+                                    ? lookup.releaseVehicleFromWorkshop(m.getVehicleId(), m.getId()).then()
+                                    : Mono.empty();
+                        }
+                        default -> {
+                            return Mono.error(com.yowyob.fleet.domain.exception.MaintenanceWorkflowException
+                                    .invalidTransition(before.name(), action));
+                        }
+                    }
+                    Mono<Void> afterSave = switch (m.getStatus()) {
+                        case COMPLETED -> syncMaintenanceParameters(m.getVehicleId()).then(syncExpense(m));
+                        case CANCELLED -> expenseUseCase.deleteAutoExpenses(m.getId());
+                        default -> Mono.empty();
+                    };
+                    return vehicleEffect
+                            .then(maintenancePersistence.save(m))
+                            .flatMap(saved -> afterSave
+                                    .then(notifications.maintenanceTransition(saved, cmd.actorId()))
+                                    .thenReturn(saved));
+                });
+    }
+
+    /** Le véhicule disponible passe en MAINTENANCE ; un véhicule en trajet doit d'abord rentrer. */
+    private Mono<Void> enterWorkshop(Maintenance m) {
+        return lookup.vehicle(m.getVehicleId())
+                .flatMap(v -> com.yowyob.fleet.domain.model.VehicleLifecycle.ON_TRIP.equals(v.status())
+                        ? Mono.<Void>error(com.yowyob.fleet.domain.exception.MaintenanceWorkflowException.vehicleOnTrip())
+                        : lookup.vehicleToWorkshop(m.getVehicleId(), "Maintenance : " + m.getSubject()));
+    }
+
+    @Override
+    public Flux<Maintenance> getForDriver(UUID driverId) {
+        return lookup.localUser(driverId).flatMapMany(localId -> lookup.assignedVehicle(localId)
+                .map(java.util.Optional::of)
+                .defaultIfEmpty(java.util.Optional.empty())
+                .flatMapMany(vehicle -> maintenancePersistence.findForDriver(localId, vehicle.orElse(null))));
     }
 
     // ── 2. LECTURE ───────────────────────────────────────────────────────────
@@ -173,7 +266,9 @@ public class MaintenanceService implements ManageMaintenanceUseCase {
                     }
 
                     return maintenancePersistence.save(maintenance)
-                            .flatMap(saved -> syncExpense(saved).thenReturn(saved));
+                            .flatMap(saved -> (saved.getStatus() == Maintenance.Status.CANCELLED
+                                    ? Mono.<Void>empty()
+                                    : syncExpense(saved)).thenReturn(saved));
                 });
     }
 

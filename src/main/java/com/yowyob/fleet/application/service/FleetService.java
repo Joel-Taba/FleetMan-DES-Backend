@@ -317,9 +317,13 @@ public class FleetService implements ManageFleetUseCase {
         Flux<FleetEntity> source = isAdmin
                 ? repository.findAllByOrganizationAdminId(requesterId)
                 : repository.findAllByManagerId(requesterId);
+        // vehicleCount n'est pas une colonne : on le calcule (véhicules actifs, hors retirés).
         return source
                 .filter(f -> f.getDeletedAt() == null)
-                .map(mapper::toDomain);
+                .map(mapper::toDomain)
+                .concatMap(f -> vehicleRepo.countByFleetId(f.id()).defaultIfEmpty(0L)
+                        .map(n -> new Fleet(f.id(), f.managerId(), f.name(), f.phoneNumber(), f.monthlyBudget(),
+                                f.createdAt(), n.intValue(), f.kernelOrganizationId())));
     }
 
     @Override

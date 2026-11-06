@@ -31,6 +31,8 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
     private final DriverPersistencePort driverPersistence;
     private final OperationalParameterR2dbcRepository operationalRepo;
     private final com.yowyob.fleet.domain.ports.in.ManageExpenseUseCase expenseUseCase;
+    private final OperationLookup lookup;
+    private final OperationNotifier notifications;
 
     // ── 1. CRÉATION ──────────────────────────────────────────────────────────
 
@@ -45,21 +47,25 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
                         ? BigDecimal.valueOf(v.tankCapacity())
                         : BigDecimal.ZERO);
 
-        // 2. Résolution optionnelle du nom du chauffeur
+        // 2. Chauffeur : nom lisible (l'identifiant s'affichait à la place du nom)
         Mono<String> vehicleRegMono = vehiclePersistence.getLocalDataById(cmd.vehicleId())
                 .map(v -> v.licensePlate());
 
         Mono<String> driverNameMono = cmd.driverId() != null
                 ? driverPersistence.findById(cmd.driverId())
                         .switchIfEmpty(Mono.error(OperationException.driverNotFound(cmd.driverId())))
-                        .map(d -> d.userId().toString())
+                        .flatMap(d -> lookup.fullName(d.userId()))
                 : Mono.just("");
 
-        return Mono.zip(tankCapacityMono, vehicleRegMono, driverNameMono)
+        Mono<java.util.Optional<UUID>> actorMono = lookup.localUser(cmd.actorId())
+                .map(java.util.Optional::of).defaultIfEmpty(java.util.Optional.empty());
+
+        return Mono.zip(tankCapacityMono, vehicleRegMono, driverNameMono, actorMono)
                 .flatMap(tuple -> {
                     BigDecimal tankCapacity = tuple.getT1();
                     String vehicleReg      = tuple.getT2();
                     String driverName      = tuple.getT3().isBlank() ? null : tuple.getT3();
+                    UUID actor             = tuple.getT4().orElse(null);
 
                     Coordinates coords = buildCoordinates(cmd.longitude(), cmd.latitude());
 
@@ -75,10 +81,16 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
                             cmd.driverId(),
                             driverName
                     );
+                    recharge.setOdometerKm(cmd.odometerKm());
+                    recharge.setStationLabel(cmd.stationLabel());
+                    recharge.attachReceipt(cmd.receiptUrl(), cmd.receiptName(), cmd.receiptMime());
+                    recharge.setCreatedBy(actor);
+                    boolean byDriver = actor != null && actor.equals(cmd.driverId());
 
                     return fuelRechargePersistence.save(recharge)
                             .flatMap(saved -> syncFuelLevel(saved, tankCapacity)
-                                    .then(syncExpense(saved))
+                                    .then(byDriver ? syncDeclaredExpense(saved) : syncExpense(saved))
+                                    .then(notifications.fuelCreated(saved, actor))
                                     .thenReturn(saved));
                 });
     }
@@ -142,7 +154,7 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
 
                     Coordinates coords = buildCoordinates(cmd.longitude(), cmd.latitude());
 
-                    FuelRecharge updated = new FuelRecharge(
+                    FuelRecharge updated = existing.copyDetailsTo(new FuelRecharge(
                             existing.getId(),
                             newQuantity,
                             newPrice,
@@ -153,7 +165,9 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
                             existing.getVehicleRegistration(),
                             cmd.driverId() != null ? cmd.driverId() : existing.getDriverId(),
                             existing.getDriverFullName()
-                    );
+                    ));
+                    if (cmd.odometerKm() != null) updated.setOdometerKm(cmd.odometerKm());
+                    if (cmd.stationLabel() != null) updated.setStationLabel(cmd.stationLabel());
 
                     return fuelRechargePersistence.save(updated)
                             .flatMap(saved -> syncExpense(saved).thenReturn(saved));
@@ -173,6 +187,20 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
     }
 
     // ── HELPERS PRIVÉS ───────────────────────────────────────────────────────
+
+    /** Plein déclaré par le chauffeur : sa dépense attend la validation du gestionnaire, ticket joint. */
+    private Mono<Void> syncDeclaredExpense(FuelRecharge recharge) {
+        return expenseUseCase.syncDeclaredAutoExpense(
+                com.yowyob.fleet.domain.model.Expense.ExpenseType.FUEL,
+                recharge.getId(),
+                recharge.getPrice(),
+                "Carburant : " + recharge.getQuantity().stripTrailingZeros().toPlainString() + " L",
+                recharge.getVehicleId(),
+                recharge.getDriverId(),
+                recharge.getReceiptUrl(),
+                recharge.getReceiptName(),
+                recharge.getReceiptMime());
+    }
 
     /** Dépense FUEL auto-générée, alignée sur le prix du plein. */
     private Mono<Void> syncExpense(FuelRecharge recharge) {
@@ -205,25 +233,34 @@ public class FuelRechargeService implements ManageFuelRechargeUseCase {
      * côté front, qui attend un pourcentage numérique.
      */
     private Mono<Void> syncFuelLevel(FuelRecharge recharge, BigDecimal tankCapacity) {
-        if (tankCapacity.compareTo(BigDecimal.ZERO) == 0) {
+        boolean knownCapacity = tankCapacity.compareTo(BigDecimal.ZERO) != 0;
+        if (!knownCapacity) {
             log.warn("⚠️ Capacité réservoir inconnue pour le véhicule {} : fuel_level non mis à jour",
                     recharge.getVehicleId());
-            return Mono.empty();
+            if (recharge.getOdometerKm() == null) {
+                return Mono.empty();
+            }
         }
 
         return operationalRepo.findByVehicleId(recharge.getVehicleId())
                 .flatMap(params -> {
-                    // Calcul du nouveau niveau en pourcentage
-                    BigDecimal added = recharge.getQuantity()
-                            .divide(tankCapacity, 4, RoundingMode.HALF_UP)
-                            .multiply(BigDecimal.valueOf(100));
-                    BigDecimal current = parseFuelLevel(params.getFuelLevel());
-                    BigDecimal percentage = (current != null ? current : BigDecimal.ZERO).add(added)
-                            .min(BigDecimal.valueOf(100));
-
-                    String fuelLevel = percentage.setScale(0, RoundingMode.HALF_UP) + "%";
-
-                    params.setFuelLevel(fuelLevel);
+                    if (knownCapacity) {
+                        // Calcul du nouveau niveau en pourcentage
+                        BigDecimal added = recharge.getQuantity()
+                                .divide(tankCapacity, 4, RoundingMode.HALF_UP)
+                                .multiply(BigDecimal.valueOf(100));
+                        BigDecimal current = parseFuelLevel(params.getFuelLevel());
+                        BigDecimal percentage = (current != null ? current : BigDecimal.ZERO).add(added)
+                                .min(BigDecimal.valueOf(100));
+                        params.setFuelLevel(percentage.setScale(0, RoundingMode.HALF_UP) + "%");
+                    }
+                    // Relevé du compteur au plein, même sans capacité de réservoir connue :
+                    // ne fait jamais reculer le kilométrage connu.
+                    if (recharge.getOdometerKm() != null && (params.getOdometerReading() == null
+                            || recharge.getOdometerKm().compareTo(params.getOdometerReading()) > 0)) {
+                        params.setOdometerReading(recharge.getOdometerKm());
+                        params.setMileage(recharge.getOdometerKm());
+                    }
                     params.setTimestamp(Instant.now());
                     return operationalRepo.save(params);
                 })

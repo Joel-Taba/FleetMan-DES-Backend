@@ -71,25 +71,16 @@ public class OperationEventConsumer {
             return Mono.empty();
         }
 
-        String title   = "Nouvelle maintenance déclarée";
-        String message = String.format("Une maintenance a été enregistrée pour le véhicule %s : \"%s\"",
-                event.vehicleRegistration(), event.subject());
-
-        // 1. Notification in-app
-        Mono<Void> inApp = saveInAppNotification(
-                event.fleetManagerId(), title, message, "MAINTENANCE",
-                Map.of("maintenanceId", event.maintenanceId().toString(),
-                       "vehicleId",     event.vehicleId().toString())
-        );
-
-        // 2. Notification push/email (fire & forget)
+        // La notification in-app (centre de notifications, événement MAINTENANCE_REQUESTED /
+        // MAINTENANCE_RECORDED…) est émise de façon synchrone par MaintenanceService via AppNotifier :
+        // l'enregistrer aussi ici la doublait (et son champ data n'était pas du JSON). Seul le push reste.
         sendPushNotification(
                 event.fleetManagerId(), TEMPLATE_MAINTENANCE,
                 Map.of("subject",      event.subject(),
                        "vehicleReg",   event.vehicleRegistration() != null ? event.vehicleRegistration() : "")
         ).subscribe();
 
-        return inApp;
+        return Mono.empty();
     }
 
     private Mono<Void> handleIncidentReported(OperationEventPort.IncidentReportedEvent event) {
@@ -108,24 +99,17 @@ public class OperationEventConsumer {
                 event.incidentType(), event.severity(), event.vehicleRegistration());
 
         int templateId = event.isCritical() ? TEMPLATE_INCIDENT_CRITICAL : TEMPLATE_INCIDENT;
+        log.debug("[OperationConsumer] {} : {}", title, message);
 
-        // 1. Notification in-app
-        Mono<Void> inApp = saveInAppNotification(
-                event.fleetManagerId(), title, message, "INCIDENT",
-                Map.of("incidentId",  event.incidentId().toString(),
-                       "vehicleId",   event.vehicleId().toString(),
-                       "isCritical",  String.valueOf(event.isCritical()))
-        );
-
-        // 2. Notification push/email (fire & forget)
-        sendPushNotification(
+        // La notification in-app (INCIDENT_DECLARED, avec incidentId) est déjà écrite par IncidentService
+        // via AppNotifier/IncidentNotifier au moment de la déclaration : la réécrire ici la doublerait
+        // (et avec un champ data illisible). Le consumer ne fait plus que le push externe.
+        return sendPushNotification(
                 event.fleetManagerId(), templateId,
                 Map.of("incidentType", event.incidentType(),
                        "severity",     event.severity(),
                        "vehicleReg",   event.vehicleRegistration() != null ? event.vehicleRegistration() : "")
-        ).subscribe();
-
-        return inApp;
+        );
     }
 
     // ── Helpers privés ────────────────────────────────────────────────────────

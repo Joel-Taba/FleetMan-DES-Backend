@@ -208,13 +208,16 @@ public class AssignmentService implements ManageAssignmentUseCase {
                                     .bind("id", id)
                                     .fetch().rowsUpdated()
                                     .then(assignmentPersistencePort.save(assignment))
-                                    .flatMap(saved -> newStatus != Assignment.Status.CANCELLED
-                                            ? Mono.just(saved)
-                                            : workRules.recordCancel(id, why)
-                                                    .then(why.isEmpty() ? Mono.empty() : workRules.notifyDriver(saved.getDriverId(),
-                                                            "Poste annulé", "Votre poste " + WorkRulesService.describe(saved)
-                                                                    + " est annulé : " + why, saved.getScheduleId(), saved.getId()))
-                                                    .thenReturn(saved));
+                                    .flatMap(saved -> workRules.isVisibleToDriver(saved.getScheduleId())
+                                            .flatMap(visible -> newStatus == Assignment.Status.NO_SHOW
+                                                    ? workRules.recordNoShow(id)
+                                                            .then(visible ? workRules.notifyNoShow(saved, reason) : Mono.<Void>empty())
+                                                    : workRules.recordCancel(id, why)
+                                                            .then(!visible ? Mono.<Void>empty() : workRules.notifyShift(saved.getDriverId(),
+                                                                    "Poste annulé", "Votre poste " + WorkRulesService.describe(saved)
+                                                                            + " est annulé" + suffix(why), WorkRulesService.ShiftChangeKind.CANCELLED,
+                                                                    saved.getScheduleId(), saved.getId())))
+                                            .thenReturn(saved));
                         }));
     }
 
@@ -285,38 +288,51 @@ public class AssignmentService implements ManageAssignmentUseCase {
                                                 existing.getActualKm(), existing.getNotes(), existing.getCreatedAt());
                                         return assignmentPersistencePort.save(updated)
                                                 .flatMap(saved -> workRules.recordOverride(id, override)
-                                                        .then(reason.isEmpty() ? Mono.empty() : notifyChange(existing, saved, reason))
+                                                        .then(workRules.isVisibleToDriver(saved.getScheduleId())
+                                                                .flatMap(visible -> visible ? notifyChange(existing, saved, reason) : Mono.<Void>empty()))
                                                         .thenReturn(saved));
                                     }));
                 });
     }
 
-    /** Planning publié : le chauffeur est prévenu du nouveau poste ; à défaut de motif, un message neutre. */
+    /**
+     * Poste visible du chauffeur (planning publié ou poste hors planning) : il est prévenu du
+     * nouveau poste et doit en accuser réception ; à défaut de motif, un message neutre.
+     */
     private Mono<Void> notifyNewShift(Assignment saved, String reason) {
-        return workRules.isPublished(saved.getScheduleId()).flatMap(published -> {
-            if (!published) return Mono.<Void>empty();
-            String why = reason != null && !reason.isBlank() ? " : " + reason.trim() : "";
-            return workRules.recordChange(saved.getId(), reason != null && !reason.isBlank() ? reason.trim() : "Poste ajouté")
-                    .then(workRules.notifyDriver(saved.getDriverId(), "Nouveau poste",
-                            "Un poste vous est attribué " + WorkRulesService.describe(saved) + why + ".",
-                            saved.getScheduleId(), saved.getId()));
+        return workRules.isVisibleToDriver(saved.getScheduleId()).flatMap(visible -> {
+            if (!visible) return Mono.<Void>empty();
+            String why = WorkRulesService.clean(reason);
+            return workRules.recordChange(saved.getId(), why != null ? why : "Poste ajouté")
+                    .then(workRules.notifyShift(saved.getDriverId(), "Nouveau poste",
+                            "Un poste vous est attribué " + WorkRulesService.describe(saved) + suffix(why),
+                            WorkRulesService.ShiftChangeKind.NEW, saved.getScheduleId(), saved.getId()));
         });
     }
 
     private Mono<Void> notifyChange(Assignment before, Assignment after, String reason) {
-        Mono<Void> record = workRules.recordChange(after.getId(), reason);
+        String why = WorkRulesService.clean(reason);
+        Mono<Void> record = workRules.recordChange(after.getId(), why != null ? why : "Poste modifié");
         if (!before.getDriverId().equals(after.getDriverId())) {
             return record
-                    .then(workRules.notifyDriver(before.getDriverId(), "Poste retiré",
-                            "Le poste " + WorkRulesService.describe(before) + " ne vous est plus attribué : " + reason,
-                            before.getScheduleId(), before.getId()))
-                    .then(workRules.notifyDriver(after.getDriverId(), "Nouveau poste",
-                            "Un poste vous est attribué " + WorkRulesService.describe(after) + " : " + reason,
-                            after.getScheduleId(), after.getId()));
+                    .then(workRules.notifyShift(before.getDriverId(), "Poste retiré",
+                            "Le poste " + WorkRulesService.describe(before) + " ne vous est plus attribué" + suffix(why),
+                            WorkRulesService.ShiftChangeKind.REMOVED, before.getScheduleId(), before.getId()))
+                    .then(workRules.notifyShift(after.getDriverId(), "Nouveau poste",
+                            "Un poste vous est attribué " + WorkRulesService.describe(after) + suffix(why),
+                            WorkRulesService.ShiftChangeKind.NEW, after.getScheduleId(), after.getId()));
         }
-        return record.then(workRules.notifyDriver(after.getDriverId(), "Poste modifié",
-                "Votre poste " + WorkRulesService.describe(before) + " devient " + WorkRulesService.describe(after) + " : " + reason,
-                after.getScheduleId(), after.getId()));
+        String vehicleNote = before.getVehicleId().equals(after.getVehicleId()) ? "" : " (changement de véhicule)";
+        return record.then(workRules.notifyShift(after.getDriverId(), "Poste modifié",
+                "Votre poste " + WorkRulesService.describe(before) + " devient " + WorkRulesService.describe(after)
+                        + vehicleNote + suffix(why),
+                WorkRulesService.ShiftChangeKind.MODIFIED, after.getScheduleId(), after.getId()));
+    }
+
+    /** « : motif » ou un point final quand aucun motif n'est donné. */
+    static String suffix(String reason) {
+        String why = WorkRulesService.clean(reason);
+        return why != null ? " : " + why : ".";
     }
 
     @Override
@@ -331,11 +347,12 @@ public class AssignmentService implements ManageAssignmentUseCase {
                         return Mono.error(PlanningException.assignmentNotDeletable(id));
                     }
                     return workRules.requireReasonIfPublished(a.getScheduleId(), reason)
-                            .flatMap(why -> assignmentPersistencePort.deleteById(id)
-                                    .then(why.isEmpty() || a.getStatus() != Assignment.Status.PENDING ? Mono.<Void>empty()
-                                            : workRules.notifyDriver(a.getDriverId(), "Poste supprimé",
-                                                    "Le poste " + WorkRulesService.describe(a) + " est supprimé : " + why,
-                                                    a.getScheduleId(), a.getId())));
+                            .flatMap(why -> workRules.isVisibleToDriver(a.getScheduleId())
+                                    .flatMap(visible -> assignmentPersistencePort.deleteById(id)
+                                            .then(!visible || a.getStatus() != Assignment.Status.PENDING ? Mono.<Void>empty()
+                                                    : workRules.notifyShift(a.getDriverId(), "Poste supprimé",
+                                                            "Le poste " + WorkRulesService.describe(a) + " est supprimé" + suffix(why),
+                                                            WorkRulesService.ShiftChangeKind.DELETED, a.getScheduleId(), a.getId()))));
                 });
     }
 

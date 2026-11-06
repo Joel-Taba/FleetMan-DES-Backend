@@ -130,4 +130,8 @@ public class OperationException extends DomainException {
         return new OperationException("La date de l'incident ne peut pas être dans le futur.",
                 org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "OPS_INC_105");
     }
+
+    public static OperationException incidentMessageRequired() {
+        return new OperationException("Écrivez votre message.", org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "OPS_INC_106");
+    }
 }

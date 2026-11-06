@@ -55,6 +55,33 @@ public class MaintenanceEntity implements Persistable<UUID> {
     @Column("driver_full_name")
     private String driverFullName;
 
+    @Column("status")
+    private String status;
+
+    @Column("maintenance_type")
+    private String maintenanceType;
+
+    @Column("urgent")
+    private Boolean urgent;
+
+    @Column("planned_at")
+    private LocalDateTime plannedAt;
+
+    @Column("started_at")
+    private LocalDateTime startedAt;
+
+    @Column("completed_at")
+    private LocalDateTime completedAt;
+
+    @Column("cancelled_at")
+    private LocalDateTime cancelledAt;
+
+    @Column("cancel_reason")
+    private String cancelReason;
+
+    @Column("requested_by")
+    private UUID requestedBy;
+
     @Transient
     private boolean isNew = false;
 

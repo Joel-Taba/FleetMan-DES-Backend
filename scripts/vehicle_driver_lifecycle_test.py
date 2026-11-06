@@ -87,6 +87,18 @@ saved_vehicles = sql("select json_agg(row_to_json(v)) from (select id, status, s
 saved_drivers = sql("select json_agg(row_to_json(d)) from (select user_id, status, left_at, left_reason, hire_date, assigned_vehicle_id "
                     f"from fleet.drivers where user_id in ('{D['driver.bella']}','{D['driver.mvogo']}','{D['driver.meke']}')) d")
 created_trips = []
+# Données de démonstration (pièces en règle ajoutées le 03/11, plannings de démo) : écrites avant cet
+# essai, elles faussent ses hypothèses. Mises de côté le temps de l'essai, restaurées dans finally.
+parked_docs = sql("select coalesce(string_agg(id::text, ','), '') from fleet.documents where is_current "
+                  "and notes in ('Document de démonstration','Permis de démonstration') and target_id in (select user_id from fleet.drivers union select id from fleet.vehicles where license_plate in ('DL-203-FF','DL-201-CC','CE-456-AB'))")
+if parked_docs:
+    sql("update fleet.documents set is_current=false where id in (" + ",".join(repr(x) for x in parked_docs.split(",")) + ")")
+parked_shifts = sql("select coalesce(string_agg(id::text || ':' || status, ','), '') from fleet.assignments "
+                    "where status in ('PENDING','IN_PROGRESS') and (driver_id in (select id from fleet.users where username in ('driver.bella','driver.mvogo','driver.meke')) or vehicle_id in (select id from fleet.vehicles where license_plate in ('DL-203-FF','DL-201-CC','CE-456-AB'))) "
+                    "and end_datetime > now() - interval '12 hours' and start_datetime < now() + interval '40 days'")
+if parked_shifts:
+    sql("update fleet.assignments set status='CANCELLED' where id in (" + ",".join(repr(x.split(':')[0]) for x in parked_shifts.split(",")) + ")")
+
 # Depuis la migration 059, seules les pièces approuvées comptent : permis valides pour tous les
 # chauffeurs, visite technique expirée sur DL-201-CC (contrôle de conformité), le temps de l'essai.
 sql("insert into fleet.documents (id, target_type, target_id, doc_type, doc_number, license_categories, expiry_date, file_url, "
@@ -110,6 +122,7 @@ def trip(vehicle, driver, n):
         "vehicleId": vehicle, "driverId": driver, "startDate": day(n), "startTime": "08:00:00",
         "scheduledReturnDatetime": f"{day(n)}T12:00:00", "departureKmIndex": 1000, "departureFuelIndex": 30, "destinationLocation": "Essai",
     }, M)
+
 
 
 try:
@@ -265,3 +278,8 @@ finally:
     plan_id, plan_status = saved_plan.split("|")
     sql(f"update fleet.companies set plan_id='{plan_id}', subscription_status='{plan_status}' where id='{COMPANY}'")
     print(f"  ↺ données restaurées — {sum(results)}/{len(results)} contrôles OK")
+    for x in (parked_shifts.split(",") if parked_shifts else []):
+        sql(f"update fleet.assignments set status='{x.split(':')[1]}' where id='{x.split(':')[0]}'")
+    if parked_docs:
+        sql("update fleet.documents d set is_current=true where d.id in (" + ",".join(repr(x) for x in parked_docs.split(","))
+            + ") and not exists (select 1 from fleet.documents o where o.target_id=d.target_id and o.doc_type=d.doc_type and o.is_current)")

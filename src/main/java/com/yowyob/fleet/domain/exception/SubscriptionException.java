@@ -22,26 +22,26 @@ public class SubscriptionException extends DomainException {
 
     public static SubscriptionException fleetLimitReached(int max) {
         return new SubscriptionException(
-                "Limite de flottes atteinte pour votre plan (max " + max + ").",
+                "Limite de flottes atteinte pour l'offre de votre entreprise (max " + max + "). Seul l'administrateur de l'entreprise peut changer d'offre.",
                 HttpStatus.FORBIDDEN, "SUB_003");
     }
 
     public static SubscriptionException vehicleLimitReached(int max) {
         return new SubscriptionException(
-                "Limite de véhicules atteinte pour votre plan (max " + max + ").",
+                "Limite de véhicules atteinte pour l'offre de votre entreprise (max " + max + "). Seul l'administrateur de l'entreprise peut changer d'offre.",
                 HttpStatus.FORBIDDEN, "SUB_004");
     }
 
     public static SubscriptionException driverLimitReached(int max) {
         return new SubscriptionException(
-                "Limite de conducteurs atteinte pour votre plan (max " + max + ").",
+                "Limite de chauffeurs atteinte pour l'offre de votre entreprise (max " + max + "). Seul l'administrateur de l'entreprise peut changer d'offre.",
                 HttpStatus.FORBIDDEN, "SUB_005");
     }
 
     public static SubscriptionException featureDisabled(String featureLabel) {
         return new SubscriptionException(
-                "Fonctionnalité non incluse dans votre plan : " + featureLabel
-                        + ". Passez à un plan supérieur pour y accéder.",
+                "Fonctionnalité non incluse dans l'offre de votre entreprise : " + featureLabel
+                        + ". Seul l'administrateur de l'entreprise peut changer d'offre.",
                 HttpStatus.FORBIDDEN, "SUB_006");
     }
 

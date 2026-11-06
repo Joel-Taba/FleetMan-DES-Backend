@@ -41,14 +41,47 @@ public record FuelRechargeResponse(
         UUID driverId,
 
         @Schema(description = "Nom complet du chauffeur")
-        String driverFullName
+        String driverFullName,
+        @Schema(description = "Nom de la station tel que saisi")
+        String stationLabel,
+        @Schema(description = "Kilométrage relevé au plein")
+        BigDecimal odometerKm,
+        @Schema(description = "Photo du ticket")
+        String receiptUrl,
+        String receiptName,
+        String receiptMime,
+        @Schema(description = "Auteur de la saisie")
+        UUID createdBy,
+        @Schema(description = "Plein déclaré par le chauffeur lui-même")
+        boolean declaredByDriver,
+        @Schema(description = "Dépense générée (circuit de validation)")
+        UUID expenseId,
+        @Schema(description = "Statut de la dépense : PENDING, APPROVED, REJECTED")
+        String expenseStatus,
+        @Schema(description = "Motif du rejet de la dépense")
+        String expenseRejectionReason,
+        @Schema(description = "Niveau de validation exigé : MANAGER ou ADMIN")
+        String expenseApprovalLevel,
+
+        @Schema(description = "Flotte de l'opération, figée à sa création (le véhicule peut avoir changé de flotte depuis)")
+        java.util.UUID fleetId
 ) {
+    /** Même réponse avec la flotte de l'opération. */
+    public FuelRechargeResponse withFleet(java.util.UUID fleet) {
+        return new FuelRechargeResponse(id, quantity, price, unitCost, rechargeDateTime, stationName, location, vehicleId, vehicleRegistration, driverId, driverFullName, stationLabel, odometerKm, receiptUrl, receiptName, receiptMime, createdBy, declaredByDriver, expenseId, expenseStatus, expenseRejectionReason, expenseApprovalLevel, fleet);
+    }
+
+    public static FuelRechargeResponse from(FuelRecharge f) {
+        return from(f, null);
+    }
+
 
     /**
      * Méthode de fabrique : construit la réponse depuis le modèle domaine.
      * Calcule automatiquement le coût unitaire via la méthode métier de l'entité.
      */
-    public static FuelRechargeResponse from(FuelRecharge f) {
+    public static FuelRechargeResponse from(FuelRecharge f,
+                                            com.yowyob.fleet.application.service.OperationLookup.ExpenseBrief expense) {
         MaintenanceResponse.LocationDto location = null;
         if (f.getLocation() != null) {
             location = new MaintenanceResponse.LocationDto(
@@ -69,7 +102,18 @@ public record FuelRechargeResponse(
                 f.getVehicleId(),
                 f.getVehicleRegistration(),
                 f.getDriverId(),
-                f.getDriverFullName()
-        );
+                f.getDriverFullName(),
+                f.getStationLabel(),
+                f.getOdometerKm(),
+                f.getReceiptUrl(),
+                f.getReceiptName(),
+                f.getReceiptMime(),
+                f.getCreatedBy(),
+                f.getCreatedBy() != null && f.getCreatedBy().equals(f.getDriverId()),
+                expense != null ? expense.id() : null,
+                expense != null ? expense.status() : null,
+                expense != null ? expense.rejectionReason() : null,
+                expense != null ? expense.approvalLevel() : null
+        , null);
     }
 }

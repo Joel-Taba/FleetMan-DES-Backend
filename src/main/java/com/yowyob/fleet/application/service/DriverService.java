@@ -60,6 +60,7 @@ public class DriverService implements ManageDriverUseCase {
     private final com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.DriverR2dbcRepository driverRepository;
     private final DriverAbsenceService absenceService;
     private final org.springframework.r2dbc.core.DatabaseClient db;
+    private final AppNotifier notifier;
 
     private static final String SERVICE_NAME = "FLEET_MANAGEMENT";
 
@@ -325,13 +326,50 @@ public class DriverService implements ManageDriverUseCase {
                     // On appelle l'API pour dire "Ce chauffeur conduit maintenant ce véhicule"
                     Mono<Void> remoteSync = externalVehiclePort.assignDriverRemote(targetVehicleId, driverId, token);
 
-                    // 3. Exécution chainée
-                    return clearOldVehicleOfDriver
+                    // 3. Exécution chainée (états avant changement gardés pour prévenir les chauffeurs)
+                    Mono<UUID> previousVehicle = driverPersistencePort.findById(driverId)
+                            .flatMap(d -> Mono.justOrEmpty(d.assignedVehicleId()))
+                            .defaultIfEmpty(NO_ID);
+                    Mono<UUID> previousDriver = driverPersistencePort.findByAssignedVehicleId(targetVehicleId)
+                            .map(Driver::userId)
+                            .defaultIfEmpty(NO_ID);
+                    return Mono.zip(previousVehicle, previousDriver).flatMap(before -> clearOldVehicleOfDriver
                             .then(clearOldDriverOfVehicle)
                             .then(remoteSync) // <--- Appel distant ici
                             .then(updateVehicleLink(targetVehicleId, driverId))
-                            .then(driverPersistencePort.updateVehicleAssignment(driverId, targetVehicleId));
+                            .then(driverPersistencePort.updateVehicleAssignment(driverId, targetVehicleId))
+                            .then(notifyRegularVehicle(driverId, targetVehicleId, before.getT1(), before.getT2(), requesterId)));
                 });
+    }
+
+    private static final UUID NO_ID = new UUID(0, 0);
+
+    /**
+     * Véhicule attitré : le chauffeur est prévenu de son nouveau véhicule (et de celui qu'il rend),
+     * l'ancien titulaire du véhicule de son retrait. Rien si rien ne change.
+     */
+    private Mono<Void> notifyRegularVehicle(UUID driverId, UUID vehicleId, UUID previousVehicleId, UUID previousDriverId,
+                                            UUID requesterId) {
+        if (vehicleId.equals(previousVehicleId)) return Mono.empty();
+        return accessScope.resolveLocalUserId(requesterId).defaultIfEmpty(NO_ID).flatMap(actor -> Mono.zip(
+                        plate(vehicleId), NO_ID.equals(previousVehicleId) ? Mono.just("") : plate(previousVehicleId))
+                .flatMap(p -> notifier.toUser(driverId, actor, "Véhicule attitré",
+                                "Le véhicule " + p.getT1() + " vous est attribué comme véhicule attitré"
+                                        + (p.getT2().isEmpty() ? "" : " (il remplace " + p.getT2() + ")") + ".",
+                                AppNotifier.Level.INFO, "VEHICLE_ASSIGNED", AppNotifier.refs("vehicleId", vehicleId, "driverId", driverId))
+                        .then(NO_ID.equals(previousDriverId) || previousDriverId.equals(driverId) ? Mono.<Void>empty()
+                                : notifier.toUser(previousDriverId, actor, "Véhicule attitré retiré",
+                                        "Le véhicule " + p.getT1() + " ne vous est plus attribué : il a été confié à un autre chauffeur.",
+                                        AppNotifier.Level.WARNING, "VEHICLE_UNASSIGNED",
+                                        AppNotifier.refs("vehicleId", vehicleId, "driverId", previousDriverId)))));
+    }
+
+    private Mono<String> plate(UUID vehicleId) {
+        return db.sql("SELECT license_plate FROM fleet.vehicles WHERE id = :id")
+                .bind("id", vehicleId)
+                .map((row, meta) -> row.get("license_plate", String.class))
+                .one()
+                .defaultIfEmpty("-");
     }
 
     
@@ -342,9 +380,15 @@ public class DriverService implements ManageDriverUseCase {
                 .flatMap(driver -> {
                     if (driver.assignedVehicleId() == null)
                         return Mono.empty();
-                    return assertNoTripInProgress(driverId, driver.assignedVehicleId())
-                            .then(updateVehicleLink(driver.assignedVehicleId(), null))
-                            .then(driverPersistencePort.updateVehicleAssignment(driverId, null));
+                    UUID vehicleId = driver.assignedVehicleId();
+                    return assertNoTripInProgress(driverId, vehicleId)
+                            .then(updateVehicleLink(vehicleId, null))
+                            .then(driverPersistencePort.updateVehicleAssignment(driverId, null))
+                            .then(accessScope.resolveLocalUserId(requesterId).defaultIfEmpty(NO_ID))
+                            .flatMap(actor -> plate(vehicleId).flatMap(p -> notifier.toUser(driverId, actor,
+                                    "Véhicule attitré retiré", "Le véhicule " + p + " ne vous est plus attribué comme véhicule attitré.",
+                                    AppNotifier.Level.WARNING, "VEHICLE_UNASSIGNED",
+                                    AppNotifier.refs("vehicleId", vehicleId, "driverId", driverId))));
                 });
     }
 
@@ -635,14 +679,42 @@ private Mono<Void> updateVehicleLink(UUID vehicleId, UUID driverId) {
                         Mono<Void> contract = leaving
                                 ? leaveCompany(userId, java.time.LocalDate.now(), null, managerId).then()
                                 : returning ? reinstate(userId, managerId).then() : Mono.empty();
-                        return licenceCheck
+                        // Instantané avant modification : le chauffeur n'est prévenu que des changements réels
+                        // (le formulaire du gestionnaire renvoie tous les champs à chaque enregistrement).
+                        return getDriverEnriched(userId).flatMap(before -> licenceCheck
                                 .then(fleetMove)
                                 .then(save)
                                 .then(profileUpdate)
                                 .then(contract)
-                                .then(getDriverEnriched(userId));
+                                .then(getDriverEnriched(userId))
+                                .flatMap(after -> notifyRecordChange(before, after, managerId).thenReturn(after)));
                     }));
                 });
+    }
+
+    /** Prévient le chauffeur d'un changement de flotte ou d'une mise à jour de sa fiche par le gestionnaire. */
+    private Mono<Void> notifyRecordChange(com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse before,
+                                          com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.DriverResponse after,
+                                          UUID actorId) {
+        UUID driverId = after.userId();
+        Mono<Void> fleet = !java.util.Objects.equals(before.fleetId(), after.fleetId()) && after.fleetId() != null
+                ? notifier.toUser(driverId, actorId, "Changement de flotte",
+                        "Vous êtes désormais rattaché à la flotte " + (after.fleetName() != null ? after.fleetName() : "") + ".",
+                        AppNotifier.Level.WARNING, "DRIVER_FLEET_CHANGED", AppNotifier.refs("driverId", driverId))
+                : Mono.empty();
+        List<String> changed = new java.util.ArrayList<>();
+        if (!java.util.Objects.equals(before.licenceNumber(), after.licenceNumber())) changed.add("numéro de permis");
+        if (!java.util.Objects.equals(before.firstName(), after.firstName())
+                || !java.util.Objects.equals(before.lastName(), after.lastName())) changed.add("nom");
+        if (!java.util.Objects.equals(before.email(), after.email())) changed.add("adresse email");
+        if (!java.util.Objects.equals(before.phone(), after.phone())) changed.add("téléphone");
+        if (!java.util.Objects.equals(before.photoUrl(), after.photoUrl())) changed.add("photo");
+        Mono<Void> record = changed.isEmpty()
+                ? Mono.empty()
+                : notifier.toUser(driverId, actorId, "Fiche mise à jour",
+                        "Votre gestionnaire a mis à jour votre fiche : " + String.join(", ", changed) + ".",
+                        AppNotifier.Level.INFO, "DRIVER_PROFILE_UPDATED", AppNotifier.refs("driverId", driverId));
+        return fleet.then(record);
     }
 
     @Override
@@ -662,6 +734,10 @@ private Mono<Void> updateVehicleLink(UUID vehicleId, UUID driverId) {
                             .then(driverPersistencePort.updateEmployment(driverId, "LEFT", null, date,
                                     reason == null || reason.isBlank() ? null : reason.trim()));
                 })
+                .then(notifier.toUser(driverId, actorId, "Départ enregistré",
+                        "Votre départ de l'entreprise est enregistré au "
+                                + date.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) + ".",
+                        AppNotifier.Level.WARNING, "DRIVER_LEFT", AppNotifier.refs("driverId", driverId)))
                 .then(getDriverEnriched(driverId))
                 .doOnSuccess(d -> log.info("👋 Chauffeur {} sorti des effectifs le {}", driverId, date));
     }
@@ -680,7 +756,10 @@ private Mono<Void> updateVehicleLink(UUID vehicleId, UUID driverId) {
                             .defaultIfEmpty(actorId)
                             .flatMap(planLimitGuard::assertCanCreateDriver)
                             .then(driverPersistencePort.updateEmployment(driverId, "ACTIVE",
-                                    java.time.LocalDate.now(), null, null));
+                                    java.time.LocalDate.now(), null, null))
+                            .then(notifier.toUser(driverId, actorId, "Réintégration",
+                                    "Vous faites de nouveau partie des effectifs de l'entreprise.",
+                                    AppNotifier.Level.SUCCESS, "DRIVER_REINSTATED", AppNotifier.refs("driverId", driverId)));
                 })
                 .then(getDriverEnriched(driverId));
     }

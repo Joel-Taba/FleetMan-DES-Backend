@@ -11,6 +11,10 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,6 +41,7 @@ public class IncidentCaseService {
     private final ManageExpenseUseCase expenses;
     private final ManageMaintenanceUseCase maintenances;
     private final DatabaseClient db;
+    private final IncidentNotifier notifier;
 
     public record CaseDetails(String locationLabel, BigDecimal estimatedCost, Boolean injuries, Integer injuriesCount,
                               Boolean thirdPartyInvolved, String thirdPartyName, String thirdPartyPlate,
@@ -61,7 +66,18 @@ public class IncidentCaseService {
                              LocalDateTime createdAt) {
     }
 
-    public record TimelineEvent(LocalDateTime at, String type, String fromStatus, String toStatus, String actor, String note) {
+    /** Étape de l'historique ; {@code byDriver} : écrite par un chauffeur (message, réponse, photo). */
+    public record TimelineEvent(LocalDateTime at, String type, String fromStatus, String toStatus, String actor, String note,
+                                boolean byDriver) {
+    }
+
+    /** Résumé d'un incident pour les listes (gestionnaire, chauffeur, administrateur). */
+    public record Summary(String locationLabel, int photoCount, int attachmentCount, String reportedByName, String handlerName,
+                          UUID tripId, String tripCode, boolean tripInterrupted, LocalDateTime declaredAt,
+                          LocalDateTime lastEventAt, String lastEventType, boolean infoRequestPending) {
+    }
+
+    public record Enriched(Incident incident, Summary summary) {
     }
 
     public record CostLine(UUID id, String type, BigDecimal amount, String description, String status, String approvalLevel,
@@ -71,7 +87,7 @@ public class IncidentCaseService {
     public record CaseView(Incident incident, IncidentCaseEntity details, String tripCode, String handlerName, String reportedByName,
                            String vehicleStatus, List<Attachment> attachments, List<TimelineEvent> timeline, List<CostLine> costs,
                            BigDecimal approvedCosts, BigDecimal pendingCosts, BigDecimal netCost, List<String> closureGaps,
-                           List<Map<String, Object>> handlers) {
+                           List<Map<String, Object>> handlers, String pendingInfoRequest) {
     }
 
     // ── Déclaration (appelée à la création de l'incident) ────────────────────
@@ -117,16 +133,7 @@ public class IncidentCaseService {
                             r.get("file_name", String.class), r.get("mime_type", String.class), r.get("who", String.class),
                             r.get("created_at", LocalDateTime.class)))
                     .all().collectList();
-            Mono<List<TimelineEvent>> timeline = db.sql("""
-                    SELECT e.created_at, e.event_type, e.from_status, e.to_status, e.note,
-                           NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '') AS who
-                    FROM fleet.incident_events e LEFT JOIN fleet.users u ON u.id = e.actor_id
-                    WHERE e.incident_id = :id ORDER BY e.created_at, e.id
-                    """).bind("id", incidentId)
-                    .map(r -> new TimelineEvent(r.get("created_at", LocalDateTime.class), r.get("event_type", String.class),
-                            r.get("from_status", String.class), r.get("to_status", String.class), r.get("who", String.class),
-                            r.get("note", String.class)))
-                    .all().collectList();
+            Mono<List<TimelineEvent>> timeline = timeline(incidentId);
             Mono<List<CostLine>> costs = costs(incidentId);
             Mono<Map<String, Object>> labels = db.sql("""
                     SELECT (SELECT trip_code FROM fleet.trips WHERE id = :trip) AS trip_code,
@@ -153,9 +160,103 @@ public class IncidentCaseService {
                 BigDecimal refund = c.getRefundAmount() != null ? c.getRefundAmount() : BigDecimal.ZERO;
                 return new CaseView(incident, c, (String) t.getT4().get("trip_code"), (String) t.getT4().get("handler"),
                         (String) t.getT4().get("reporter"), (String) t.getT4().get("vehicle_status"), t.getT1(), t.getT2(), lines,
-                        approved, pending, approved.subtract(refund), closureGaps(incident, c, t.getT1().size(), lines), t.getT5());
+                        approved, pending, approved.subtract(refund), closureGaps(incident, c, t.getT1().size(), lines), t.getT5(),
+                        pendingInfoRequest(t.getT2()));
             });
         }));
+    }
+
+    private Mono<List<TimelineEvent>> timeline(UUID incidentId) {
+        return db.sql("""
+                SELECT e.created_at, e.event_type, e.from_status, e.to_status, e.note,
+                       NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '') AS who,
+                       EXISTS (SELECT 1 FROM fleet.drivers d WHERE d.user_id = e.actor_id) AS by_driver
+                FROM fleet.incident_events e LEFT JOIN fleet.users u ON u.id = e.actor_id
+                WHERE e.incident_id = :id ORDER BY e.created_at, e.id
+                """).bind("id", incidentId)
+                .map(r -> new TimelineEvent(r.get("created_at", LocalDateTime.class), r.get("event_type", String.class),
+                        r.get("from_status", String.class), r.get("to_status", String.class), r.get("who", String.class),
+                        r.get("note", String.class), Boolean.TRUE.equals(r.get("by_driver", Boolean.class))))
+                .all().collectList();
+    }
+
+    /**
+     * Demande d'information du gestionnaire encore sans réponse du chauffeur (son texte), ou null.
+     * Un message ou une pièce ajoutés par le chauffeur après la demande y répondent.
+     */
+    static String pendingInfoRequest(List<TimelineEvent> timeline) {
+        String pending = null;
+        for (TimelineEvent e : timeline) {
+            if (INFO_REQUESTED.equals(e.type())) {
+                pending = e.note() != null ? e.note() : "";
+            } else if (pending != null && (INFO_PROVIDED.equals(e.type()) || DRIVER_COMMENT.equals(e.type())
+                    || (ATTACHMENT_ADDED.equals(e.type()) && e.byDriver()))) {
+                pending = null;
+            }
+        }
+        return pending;
+    }
+
+    static final String COMMENT = "COMMENT";
+    static final String INFO_REQUESTED = "INFO_REQUESTED";
+    static final String DRIVER_COMMENT = "DRIVER_COMMENT";
+    static final String INFO_PROVIDED = "INFO_PROVIDED";
+    static final String ATTACHMENT_ADDED = "ATTACHMENT_ADDED";
+
+    /** Résumés pour les listes, en une requête ; les plus récemment déclarés d'abord. */
+    public Flux<Enriched> enrich(Flux<Incident> source) {
+        return source.collectList().flatMapMany(list -> summaries(list.stream().map(Incident::getId).toList())
+                .flatMapMany(map -> {
+                    List<Enriched> out = new ArrayList<>();
+                    for (Incident i : list) out.add(new Enriched(i, map.get(i.getId())));
+                    out.sort(Comparator.comparing(IncidentCaseService::declaredAt, Comparator.nullsLast(Comparator.reverseOrder())));
+                    return Flux.fromIterable(out);
+                }));
+    }
+
+    private static LocalDateTime declaredAt(Enriched e) {
+        return e.summary() != null && e.summary().declaredAt() != null ? e.summary().declaredAt() : e.incident().getIncidentDateTime();
+    }
+
+    public Mono<Map<UUID, Summary>> summaries(Collection<UUID> ids) {
+        if (ids.isEmpty()) return Mono.just(Map.of());
+        return db.sql("""
+                SELECT i.id, c.location_label, c.trip_id, t.trip_code,
+                       (t.interrupted_at IS NOT NULL AND t.resumed_at IS NULL AND t.interruption_incident_id = i.id) AS trip_interrupted,
+                       NULLIF(TRIM(COALESCE(ru.first_name, '') || ' ' || COALESCE(ru.last_name, '')), '') AS reporter_name,
+                       NULLIF(TRIM(COALESCE(hu.first_name, '') || ' ' || COALESCE(hu.last_name, '')), '') AS handler_name,
+                       (SELECT COUNT(*) FROM fleet.incident_attachments a WHERE a.incident_id = i.id AND a.kind = 'PHOTO') AS photo_count,
+                       (SELECT COUNT(*) FROM fleet.incident_attachments a WHERE a.incident_id = i.id) AS attachment_count,
+                       (SELECT MIN(e.created_at) FROM fleet.incident_events e WHERE e.incident_id = i.id AND e.event_type = 'DECLARED') AS declared_at,
+                       le.created_at AS last_event_at, le.event_type AS last_event_type,
+                       EXISTS (SELECT 1 FROM fleet.incident_events q WHERE q.incident_id = i.id AND q.event_type = 'INFO_REQUESTED'
+                               AND NOT EXISTS (SELECT 1 FROM fleet.incident_events r WHERE r.incident_id = i.id AND r.created_at >= q.created_at
+                                       AND (r.event_type IN ('INFO_PROVIDED', 'DRIVER_COMMENT')
+                                            OR (r.event_type = 'ATTACHMENT_ADDED' AND EXISTS (SELECT 1 FROM fleet.drivers d WHERE d.user_id = r.actor_id)))))
+                           AS info_pending
+                FROM fleet.incidents i
+                LEFT JOIN fleet.incident_cases c ON c.incident_id = i.id
+                LEFT JOIN fleet.trips t ON t.id = c.trip_id
+                LEFT JOIN fleet.users ru ON ru.id = c.reported_by_id
+                LEFT JOIN fleet.users hu ON hu.id = c.handler_id
+                LEFT JOIN LATERAL (SELECT e.created_at, e.event_type FROM fleet.incident_events e WHERE e.incident_id = i.id
+                                   ORDER BY e.created_at DESC LIMIT 1) le ON TRUE
+                WHERE i.id IN (:ids)
+                """).bind("ids", List.copyOf(ids))
+                .map(r -> Map.entry(r.get("id", UUID.class), new Summary(r.get("location_label", String.class),
+                        count(r.get("photo_count", Long.class)), count(r.get("attachment_count", Long.class)),
+                        r.get("reporter_name", String.class), r.get("handler_name", String.class), r.get("trip_id", UUID.class),
+                        r.get("trip_code", String.class), Boolean.TRUE.equals(r.get("trip_interrupted", Boolean.class)),
+                        r.get("declared_at", LocalDateTime.class), r.get("last_event_at", LocalDateTime.class),
+                        r.get("last_event_type", String.class), Boolean.TRUE.equals(r.get("info_pending", Boolean.class)))))
+                .all()
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue, HashMap::new)
+                .map(m -> (Map<UUID, Summary>) m)
+                .onErrorResume(e -> Mono.just(Map.of()));
+    }
+
+    private static int count(Long n) {
+        return n != null ? n.intValue() : 0;
     }
 
     private static UUID uuidOrZero(UUID id) {
@@ -202,13 +303,16 @@ public class IncidentCaseService {
     @Transactional
     public Mono<CaseView> update(UUID actorId, UUID incidentId, CaseDetails details) {
         return editable(incidentId).flatMap(incident -> requireCase(incident).flatMap(c -> {
+            UUID previousHandler = c.getHandlerId();
             apply(c, details);
             c.setNew(false);
             if (details.policeReportNumber() != null) incident.setPoliceReportNumber(details.policeReportNumber());
             if (details.insuranceClaimNumber() != null) incident.setInsuranceClaimNumber(details.insuranceClaimNumber());
+            boolean reassigned = c.getHandlerId() != null && !c.getHandlerId().equals(previousHandler);
             return cases.save(c).then(incidents.save(incident))
                     .then(resolve(actorId))
-                    .flatMap(actor -> event(incidentId, "UPDATED", null, null, actor.orElse(null), null));
+                    .flatMap(actor -> event(incidentId, "UPDATED", null, null, actor.orElse(null), null)
+                            .then(reassigned ? notifier.assigned(incident, c.getHandlerId(), actor.orElse(null)) : Mono.<Void>empty()));
         })).then(Mono.defer(() -> view(incidentId)));
     }
 
@@ -228,6 +332,7 @@ public class IncidentCaseService {
             c.setNew(false);
 
             Mono<Void> guard = Mono.empty();
+            UUID previousHandler = c.getHandlerId();
             switch (to) {
                 case ACKNOWLEDGED -> {
                     c.setHandlerId(cmd.handlerId() != null ? cmd.handlerId() : actor.orElse(null));
@@ -258,9 +363,13 @@ public class IncidentCaseService {
             return guard
                     .then(Mono.defer(() -> cases.save(c)))
                     .then(Mono.defer(() -> incidents.save(incident)))
-                    .flatMap(impact::applyImpact)
+                    .flatMap(saved -> impact.applyImpact(saved, actor.orElse(null)))
                     .then(event(incidentId, "STATUS_CHANGED", from.name(), to.name(), actor.orElse(null), cmd.note()))
-                    .then(notifyPeople(incident, c, to, actor.orElse(null)));
+                    .then(Mono.defer(() -> notifier.statusChanged(incident, from, to, actor.orElse(null),
+                            to == Incident.Status.RESOLVED && cmd.note() == null ? cmd.report() : cmd.note())))
+                    .then(Mono.defer(() -> c.getHandlerId() != null && !c.getHandlerId().equals(previousHandler)
+                            ? notifier.assigned(incident, c.getHandlerId(), actor.orElse(null))
+                            : Mono.<Void>empty()));
         }))).then(Mono.defer(() -> view(incidentId)));
     }
 
@@ -277,22 +386,28 @@ public class IncidentCaseService {
         if (reason == null || reason.isBlank()) {
             return Mono.error(OperationException.incidentReasonRequired());
         }
-        return editable(incidentId).flatMap(incident -> {
+        return editable(incidentId).flatMap(incident -> resolve(actorId).flatMap(actor -> {
             incident.setImmobilizationOverride(immobilized);
             return incidents.save(incident)
-                    .flatMap(impact::applyImpact)
-                    .then(resolve(actorId))
-                    .flatMap(actor -> event(incidentId, immobilized ? "IMMOBILIZED" : "RELEASED", null, null, actor.orElse(null), reason.trim()));
-        }).then(Mono.defer(() -> view(incidentId)));
+                    .flatMap(saved -> impact.applyImpact(saved, actor.orElse(null)))
+                    .then(event(incidentId, immobilized ? "IMMOBILIZED" : "RELEASED", null, null, actor.orElse(null), reason.trim()))
+                    .then(Mono.defer(() -> notifier.immobilization(incident, immobilized, actor.orElse(null), reason.trim())));
+        })).then(Mono.defer(() -> view(incidentId)));
     }
 
     @Transactional
     public Mono<CaseView> addAttachment(UUID actorId, UUID incidentId, AttachmentCommand cmd) {
+        return addAttachment(actorId, incidentId, cmd, false);
+    }
+
+    /** Pièce jointe ; {@code fromDriver} : ajoutée par le chauffeur (le bureau est prévenu), sinon le chauffeur l'est. */
+    @Transactional
+    public Mono<CaseView> addAttachment(UUID actorId, UUID incidentId, AttachmentCommand cmd, boolean fromDriver) {
         if (cmd.fileUrl() == null || !cmd.fileUrl().startsWith("/api/v1/files/")) {
             return Mono.error(OperationException.incidentFileRequired());
         }
         String kind = List.of("PHOTO", "REPORT", "INVOICE", "OTHER").contains(cmd.kind()) ? cmd.kind() : "PHOTO";
-        return editable(incidentId).then(resolve(actorId)).flatMap(actor -> {
+        return editable(incidentId).flatMap(incident -> resolve(actorId).flatMap(actor -> {
             var spec = db.sql("""
                     INSERT INTO fleet.incident_attachments (id, incident_id, kind, file_url, file_name, mime_type, size_bytes, uploaded_by, created_at)
                     VALUES (gen_random_uuid(), :incident, :kind, :url, :name, :mime, :size, :by, :now)
@@ -304,8 +419,30 @@ public class IncidentCaseService {
             spec = cmd.sizeBytes() != null ? spec.bind("size", cmd.sizeBytes()) : spec.bindNull("size", Long.class);
             spec = actor.isPresent() ? spec.bind("by", actor.get()) : spec.bindNull("by", UUID.class);
             return spec.fetch().rowsUpdated()
-                    .then(event(incidentId, "ATTACHMENT_ADDED", null, null, actor.orElse(null), cmd.fileName()));
-        }).then(Mono.defer(() -> view(incidentId)));
+                    .then(event(incidentId, ATTACHMENT_ADDED, null, null, actor.orElse(null), cmd.fileName()))
+                    .then(Mono.defer(() -> notifier.attachmentAdded(incident, actor.orElse(null), fromDriver, cmd.fileName())));
+        })).then(Mono.defer(() -> view(incidentId)));
+    }
+
+    /**
+     * Échange sur le dossier. Le gestionnaire écrit au chauffeur (simple message ou demande d'information,
+     * {@code requestInfo}) ; le chauffeur répond ou ajoute une précision. Chaque message entre dans
+     * l'historique et prévient l'autre côté. Dossier clôturé ou annulé : plus d'échange.
+     */
+    @Transactional
+    public Mono<CaseView> comment(UUID actorId, UUID incidentId, boolean fromDriver, String message, boolean requestInfo) {
+        if (message == null || message.isBlank()) {
+            return Mono.error(OperationException.incidentMessageRequired());
+        }
+        String text = message.trim().length() > 2000 ? message.trim().substring(0, 2000) : message.trim();
+        return editable(incidentId).flatMap(incident -> resolve(actorId).flatMap(actor -> timeline(incidentId).flatMap(events -> {
+            boolean answers = pendingInfoRequest(events) != null;
+            String type = fromDriver ? (answers ? INFO_PROVIDED : DRIVER_COMMENT) : (requestInfo ? INFO_REQUESTED : COMMENT);
+            return event(incidentId, type, null, null, actor.orElse(null), text)
+                    .then(Mono.defer(() -> fromDriver
+                            ? notifier.driverMessage(incident, actor.orElse(null), answers, text)
+                            : notifier.staffMessage(incident, actor.orElse(null), requestInfo, text)));
+        }))).then(Mono.defer(() -> view(incidentId)));
     }
 
     /** Coût réel : une dépense en attente de validation, avec justificatif. Le budget n'est touché qu'à l'approbation. */
@@ -335,7 +472,8 @@ public class IncidentCaseService {
                         return cases.save(c);
                     })
                     .then(resolve(actorId))
-                    .flatMap(actor -> event(incidentId, "REPAIR_ORDER", null, null, actor.orElse(null), title));
+                    .flatMap(actor -> event(incidentId, "REPAIR_ORDER", null, null, actor.orElse(null), title)
+                            .then(Mono.defer(() -> notifier.repairOrder(incident, actor.orElse(null), c.getMaintenanceId(), title))));
         })).then(Mono.defer(() -> view(incidentId)));
     }
 
@@ -392,33 +530,5 @@ public class IncidentCaseService {
         spec = actor != null ? spec.bind("actor", actor) : spec.bindNull("actor", UUID.class);
         spec = note != null ? spec.bind("note", note) : spec.bindNull("note", String.class);
         return spec.fetch().rowsUpdated().then();
-    }
-
-    private static final Map<Incident.Status, String> STATUS_TEXT = Map.of(
-            Incident.Status.ACKNOWLEDGED, "a été pris en charge",
-            Incident.Status.UNDER_INVESTIGATION, "est en cours de traitement",
-            Incident.Status.RESOLVED, "est résolu",
-            Incident.Status.CLOSED, "est clôturé",
-            Incident.Status.CANCELLED, "a été annulé");
-
-    /** Prévient le déclarant, le chauffeur et le responsable du dossier, sauf l'auteur de l'action. */
-    private Mono<Void> notifyPeople(Incident incident, IncidentCaseEntity c, Incident.Status to, UUID actor) {
-        String message = "L'incident sur " + incident.getVehicleRegistration() + " (" + incident.getType().label() + ") "
-                + STATUS_TEXT.getOrDefault(to, "a changé de statut") + ".";
-        return Flux.fromStream(java.util.stream.Stream.of(c.getReportedById(), incident.getDriverId(), c.getHandlerId())
-                        .filter(java.util.Objects::nonNull)
-                        .filter(u -> !u.equals(actor))
-                        .distinct())
-                .concatMap(u -> db.sql("""
-                        INSERT INTO fleet.notifications (id, user_id, title, message, type, is_read, created_at, data, tenant_id)
-                        SELECT gen_random_uuid(), x.id, 'Suivi d''incident', :message, 'INFO', FALSE, :now, :data, x.tenant_id
-                        FROM fleet.users x WHERE x.id = :user
-                        """)
-                        .bind("message", message)
-                        .bind("now", LocalDateTime.now())
-                        .bind("data", "{\"type\":\"INCIDENT\",\"incidentId\":\"" + incident.getId() + "\"}")
-                        .bind("user", u)
-                        .fetch().rowsUpdated())
-                .then();
     }
 }

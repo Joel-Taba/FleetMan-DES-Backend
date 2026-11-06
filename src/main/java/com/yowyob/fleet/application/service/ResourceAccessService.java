@@ -17,6 +17,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -86,20 +88,30 @@ public class ResourceAccessService {
 
     /**
      * Un chauffeur ne déclare (carburant, incident, maintenance) que pour le véhicule
-     * qui lui est affecté ou celui de son trajet en cours.
+     * qui lui est affecté, celui de son trajet en cours ou celui d'un de ses postes du jour
+     * (affectation PENDING dont le créneau chevauche aujourd'hui, ou IN_PROGRESS).
      */
     public Mono<Void> assertDriverOperatesVehicle(UUID driverActorId, UUID vehicleId) {
         return accessScope.resolveLocalUserId(driverActorId).flatMap(localId ->
                 driverRepo.findById(localId)
                         .filter(d -> Objects.equals(d.getAssignedVehicleId(), vehicleId))
                         .map(d -> true)
-                        .switchIfEmpty(tripRepo.findInProgressTripForDriver(localId)
-                                .map(t -> Objects.equals(t.getVehicleId(), vehicleId)))
+                        .switchIfEmpty(Mono.defer(() -> tripRepo.findInProgressTripForDriver(localId)
+                                .filter(t -> Objects.equals(t.getVehicleId(), vehicleId))
+                                .map(t -> true)))
+                        .switchIfEmpty(Mono.defer(() -> hasShiftToday(localId, vehicleId)))
                         .defaultIfEmpty(false)
                         .flatMap(ok -> Boolean.TRUE.equals(ok)
                                 ? Mono.<Void>empty()
                                 : Mono.<Void>error(new AccessDeniedException(
-                                        "Ce véhicule ne vous est pas affecté et n'est pas celui de votre trajet en cours."))));
+                                        "Ce véhicule ne vous est pas affecté : ce n'est ni votre véhicule habituel, "
+                                                + "ni celui de votre trajet en cours, ni celui d'un de vos postes du jour."))));
+    }
+
+    private Mono<Boolean> hasShiftToday(UUID driverId, UUID vehicleId) {
+        if (vehicleId == null) return Mono.just(false);
+        LocalDateTime dayStart = LocalDate.now().atStartOfDay();
+        return assignmentRepo.existsOpenShiftForDriverOnVehicle(driverId, vehicleId, dayStart, dayStart.plusDays(1));
     }
 
     // ── Planification ────────────────────────────────────────────────────────

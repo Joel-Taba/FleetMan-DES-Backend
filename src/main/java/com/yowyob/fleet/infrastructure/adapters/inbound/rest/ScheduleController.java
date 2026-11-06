@@ -33,6 +33,13 @@ public class ScheduleController {
     private final ManageScheduleUseCase scheduleUseCase;
     private final AccessScopeService accessScope;
     private final ResourceAccessService resourceAccess;
+    private final com.yowyob.fleet.application.service.WorkRulesService workRules;
+
+    /** Ajoute le suivi des accusés de réception (postes à venir, confirmés, modifiés non confirmés). */
+    private Mono<ScheduleResponse> withAcks(com.yowyob.fleet.domain.model.Schedule s) {
+        return workRules.ackSummary(s.getId())
+                .map(a -> ScheduleResponse.from(s).withAcks(a.upcoming(), a.acknowledged(), a.changedUnacknowledged()));
+    }
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -60,7 +67,7 @@ public class ScheduleController {
                         request.notes()
                 );
         return accessScope.assertFleetAccess(getUserId(auth), request.fleetId())
-                .then(scheduleUseCase.createSchedule(cmd)).map(ScheduleResponse::from);
+                .then(scheduleUseCase.createSchedule(cmd)).flatMap(this::withAcks);
     }
 
     // ── LECTURE ───────────────────────────────────────────────────────────────
@@ -76,7 +83,7 @@ public class ScheduleController {
 
         return PageResponse.of(
                 scheduleUseCase.getAllByManager(getUserId(auth))
-                        .map(ScheduleResponse::from),
+                        .concatMap(this::withAcks),
                 page, size
         );
     }
@@ -88,7 +95,7 @@ public class ScheduleController {
             @Parameter(description = "ID du planning") @PathVariable UUID id,
             Authentication auth) {
         return resourceAccess.assertScheduleAccess(getUserId(auth), id)
-                .then(scheduleUseCase.getById(id)).map(ScheduleResponse::from);
+                .then(scheduleUseCase.getById(id)).flatMap(this::withAcks);
     }
 
     @GetMapping("/fleet/{fleetId}")
@@ -102,7 +109,7 @@ public class ScheduleController {
 
         return PageResponse.of(
                 accessScope.assertFleetAccess(getUserId(auth), fleetId)
-                        .thenMany(scheduleUseCase.getAllByFleet(fleetId)).map(ScheduleResponse::from),
+                        .thenMany(scheduleUseCase.getAllByFleet(fleetId)).concatMap(this::withAcks),
                 page, size
         );
     }
@@ -122,7 +129,7 @@ public class ScheduleController {
 
         return PageResponse.of(
                 scheduleUseCase.getByPeriod(getUserId(auth), start, end)
-                        .map(ScheduleResponse::from),
+                        .concatMap(this::withAcks),
                 page, size
         );
     }
@@ -135,7 +142,7 @@ public class ScheduleController {
                description = "Passe le planning de DRAFT à PUBLISHED. Le rend visible aux conducteurs.")
     public Mono<ScheduleResponse> publish(@PathVariable UUID id, Authentication auth) {
         return resourceAccess.assertScheduleAccess(getUserId(auth), id)
-                .then(scheduleUseCase.publish(id)).map(ScheduleResponse::from);
+                .then(scheduleUseCase.publish(id)).flatMap(this::withAcks);
     }
 
     @PatchMapping("/{id}/publish")
@@ -151,7 +158,7 @@ public class ScheduleController {
                description = "Archive le planning. Action irréversible.")
     public Mono<ScheduleResponse> archive(@PathVariable UUID id, Authentication auth) {
         return resourceAccess.assertScheduleAccess(getUserId(auth), id)
-                .then(scheduleUseCase.archive(id)).map(ScheduleResponse::from);
+                .then(scheduleUseCase.archive(id)).flatMap(this::withAcks);
     }
 
     @PatchMapping("/{id}/archive")
@@ -177,7 +184,7 @@ public class ScheduleController {
                         id, request.title(), request.notes()
                 );
         return resourceAccess.assertScheduleAccess(getUserId(auth), id)
-                .then(scheduleUseCase.update(cmd)).map(ScheduleResponse::from);
+                .then(scheduleUseCase.update(cmd)).flatMap(this::withAcks);
     }
 
     // ── SUPPRESSION ───────────────────────────────────────────────────────────

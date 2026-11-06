@@ -101,7 +101,7 @@ public class FuelRechargePersistenceAdapter implements FuelRechargePersistencePo
             }
         }
 
-        return new FuelRecharge(
+        FuelRecharge recharge = new FuelRecharge(
                 e.getId(),
                 e.getQuantity(),
                 e.getPrice(),
@@ -113,6 +113,11 @@ public class FuelRechargePersistenceAdapter implements FuelRechargePersistencePo
                 e.getDriverId(),
                 e.getDriverFullName()
         );
+        recharge.setOdometerKm(e.getOdometerKm() != null && e.getOdometerKm().signum() >= 0 ? e.getOdometerKm() : null);
+        recharge.setStationLabel(e.getStationLabel());
+        recharge.attachReceipt(e.getReceiptUrl(), e.getReceiptName(), e.getReceiptMime());
+        recharge.setCreatedBy(e.getCreatedBy());
+        return recharge;
     }
 
     // ── Conversion Domain → Entity ────────────────────────────────────────────
@@ -128,6 +133,12 @@ public class FuelRechargePersistenceAdapter implements FuelRechargePersistencePo
         entity.setVehicleRegistration(f.getVehicleRegistration());
         entity.setDriverId(f.getDriverId());
         entity.setDriverFullName(f.getDriverFullName());
+        entity.setOdometerKm(f.getOdometerKm());
+        entity.setStationLabel(f.getStationLabel());
+        entity.setReceiptUrl(f.getReceiptUrl());
+        entity.setReceiptName(f.getReceiptName());
+        entity.setReceiptMime(f.getReceiptMime());
+        entity.setCreatedBy(f.getCreatedBy());
 
         if (f.getLocation() != null) {
             entity.setLongitude(f.getLocation().longitude());

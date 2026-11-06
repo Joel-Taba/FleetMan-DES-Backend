@@ -18,6 +18,17 @@ public interface MaintenanceR2dbcRepository extends ReactiveCrudRepository<Maint
 
     Flux<MaintenanceEntity> findByDriverId(UUID driverId);
 
+    @Query("""
+            SELECT m.* FROM fleet.maintenances m
+            WHERE m.driver_id = :driverId
+               OR m.requested_by = :driverId
+               OR (m.vehicle_id = :vehicleId
+                   AND (m.status IN ('REQUESTED', 'PLANNED', 'IN_PROGRESS') OR m.date_time >= :since))
+            ORDER BY m.date_time DESC
+            LIMIT 100
+            """)
+    Flux<MaintenanceEntity> findForDriver(UUID driverId, UUID vehicleId, LocalDateTime since);
+
     /**
      * Récupère toutes les maintenances des véhicules appartenant à un manager donné.
      */

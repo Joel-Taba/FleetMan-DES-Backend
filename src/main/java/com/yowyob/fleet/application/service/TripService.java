@@ -5,7 +5,6 @@ import com.yowyob.fleet.domain.model.Trip;
 import com.yowyob.fleet.domain.model.TripDetail;
 import com.yowyob.fleet.domain.ports.in.ManageTripUseCase;
 import com.yowyob.fleet.domain.ports.out.*;
-import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.RedisTelemetryAdapter;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.TripDetailEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.TripEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.TripMissionSubmissionEntity;
@@ -45,7 +44,6 @@ public class TripService implements ManageTripUseCase {
     private final VehicleLocalR2dbcRepository vehicleRepository;
     private final DriverPersistencePort driverPersistence;
     private final OperationalParameterR2dbcRepository operationalRepo;
-    private final RedisTelemetryAdapter redisTelemetry;
     private final DistanceCalculatorPort distanceCalculator;
     private final ExternalGeofencePort geofenceApi;
     private final DatabaseClient db;
@@ -53,6 +51,7 @@ public class TripService implements ManageTripUseCase {
     private final ResourceAvailabilityService availability;
     private final FuelRechargeR2dbcRepository fuelRechargeRepository;
     private final TripStopService stopService;
+    private final TripNotifier notifier;
 
     // ── Création d'un trajet (Manager) ────────────────────────────────────────
 
@@ -172,6 +171,7 @@ public class TripService implements ManageTripUseCase {
         return relinkAssignment(entity)
                 .flatMap(tripRepository::save)
                 .flatMap(saved -> stopService.persistPlan(saved, cmd.stops(), cmd.details())
+                        .then(Mono.defer(() -> notifier.assigned(saved, cmd.managerId())))
                         .then(loadTripWithDetails(saved.getId())));
     }
 
@@ -262,6 +262,8 @@ public class TripService implements ManageTripUseCase {
                                     })
                                     // Le premier départ ouvre le poste qui couvre le trajet.
                                     .flatMap(saved -> startShift(saved.getAssignmentId()).thenReturn(saved))
+                                    // Le chauffeur est prévenu : la tournée devient son trajet actif.
+                                    .flatMap(saved -> notifier.departed(saved, managerId).thenReturn(saved))
                                     .flatMap(saved -> loadTripWithDetails(saved.getId()));
                             }));
                         });
@@ -327,7 +329,11 @@ public class TripService implements ManageTripUseCase {
                 return deliveries
                     .then(Mono.defer(() -> stopService.completeRemaining(tripId, trip.getArrivedAt(), cmd.notes())))
                     .then(Mono.defer(() -> tripRepository.save(trip)))
-                    .flatMap(saved -> loadTripWithDetails(saved.getId()));
+                    .flatMap(saved -> loadTripWithDetails(saved.getId()))
+                    .flatMap(loaded -> {
+                        long served = loaded.getStops().stream().filter(st -> "COMPLETED".equals(st.status())).count();
+                        return notifier.tourDone(trip, served, loaded.getStops().size(), actorId).thenReturn(loaded);
+                    });
             });
     }
 
@@ -481,6 +487,7 @@ public class TripService implements ManageTripUseCase {
                         : Mono.empty();
                     return Mono.when(vehicleFree, odometer, detailsUpdate, unlinkPair, stopService.closeRemaining(trip.getId()))
                         .then(tripRepository.save(tripToSave))
+                        .flatMap(saved -> notifier.completed(saved, actorId).thenReturn(saved))
                         .flatMap(saved -> loadTripWithDetails(saved.getId()));
                 });
             });
@@ -543,10 +550,12 @@ public class TripService implements ManageTripUseCase {
                 if (!isModifiable(trip.getStatus())) {
                     return Mono.error(TripException.tripNotModifiable());
                 }
+                Snapshot before = Snapshot.of(trip);
                 return changeResources(trip, managerId, trip.getVehicleId(), newDriverId,
-                        trip.getStartDate(), trip.getStartTime())
+                        trip.getStartDate(), trip.getStartTime(), null)
                     .flatMap(this::relinkAssignment)
                     .flatMap(tripRepository::save)
+                    .flatMap(saved -> notifyChanges(before, saved, managerId).thenReturn(saved))
                     .flatMap(saved -> loadTripWithDetails(saved.getId()));
             });
     }
@@ -589,6 +598,7 @@ public class TripService implements ManageTripUseCase {
                 return freeVehicle
                     .then(unlinkPair)
                     .then(tripRepository.save(trip))
+                    .flatMap(saved -> notifier.cancelled(saved, managerId, reason).thenReturn(saved))
                     .flatMap(saved -> loadTripWithDetails(saved.getId()));
             });
     }
@@ -616,7 +626,8 @@ public class TripService implements ManageTripUseCase {
             .flatMap(trip -> accessScope.assertTripFleetAccess(managerId, trip.getFleetId()).then(Mono.defer(() -> {
                 String status = trip.getStatus();
                 if ("SCHEDULED".equals(status) || "CANCELLED".equals(status)) {
-                    return tripRepository.deleteById(tripId);
+                    // Le chauffeur d'un trajet encore planifié apprend qu'il est retiré du planning.
+                    return notifier.deleted(trip, managerId).then(tripRepository.deleteById(tripId));
                 }
                 return Mono.error(new IllegalStateException(
                         "Seuls les trajets SCHEDULED ou CANCELLED peuvent être supprimés. Annulez-le d'abord."));
@@ -665,10 +676,12 @@ public class TripService implements ManageTripUseCase {
                 if (!isModifiable(trip.getStatus())) {
                     return Mono.error(TripException.tripNotModifiable());
                 }
+                Snapshot before = Snapshot.of(trip);
                 return changeResources(trip, managerId, newVehicleId, trip.getDriverId(),
-                        trip.getStartDate(), trip.getStartTime())
+                        trip.getStartDate(), trip.getStartTime(), null)
                     .flatMap(this::relinkAssignment)
                     .flatMap(tripRepository::save)
+                    .flatMap(saved -> notifyChanges(before, saved, managerId).thenReturn(saved))
                     .flatMap(saved -> loadTripWithDetails(saved.getId()));
             });
     }
@@ -688,13 +701,15 @@ public class TripService implements ManageTripUseCase {
                 // puis appliqués sur CETTE instance, enregistrée une seule fois. L'ancien code
                 // changeait le véhicule via updateTripVehicle puis réenregistrait une copie
                 // périmée du trajet, ce qui annulait le changement de véhicule.
+                Snapshot before = Snapshot.of(trip);
                 return changeResources(
                         trip,
                         cmd.managerId(),
                         cmd.vehicleId() != null ? cmd.vehicleId() : trip.getVehicleId(),
                         cmd.driverId() != null ? cmd.driverId() : trip.getDriverId(),
                         cmd.startDate() != null ? cmd.startDate() : trip.getStartDate(),
-                        cmd.startTime() != null ? cmd.startTime() : trip.getStartTime())
+                        cmd.startTime() != null ? cmd.startTime() : trip.getStartTime(),
+                        cmd.scheduledReturnDatetime())
                     .flatMap(updated -> {
                         if (cmd.departureLocation() != null) updated.setDepartureLocation(
                             cmd.departureLocation()
@@ -725,6 +740,7 @@ public class TripService implements ManageTripUseCase {
                         return relinkAssignment(updated).flatMap(tripRepository::save)
                             .flatMap(saved -> stopMove.then(Mono.defer(() -> tripRepository.findById(saved.getId()))));
                     })
+                    .flatMap(saved -> notifyChanges(before, saved, cmd.managerId()).thenReturn(saved))
                     .flatMap(saved -> loadTripWithDetails(saved.getId()));
             });
     }
@@ -737,17 +753,20 @@ public class TripService implements ManageTripUseCase {
      */
     private Mono<TripEntity> changeResources(TripEntity trip, UUID actorId,
                                              UUID nextVehicleId, UUID nextDriverId,
-                                             LocalDate nextStartDate, LocalTime nextStartTime) {
+                                             LocalDate nextStartDate, LocalTime nextStartTime,
+                                             LocalDateTime nextReturn) {
+        LocalDateTime returnAt = nextReturn != null ? nextReturn : trip.getScheduledReturnDatetime();
         boolean vehicleChanged = !nextVehicleId.equals(trip.getVehicleId());
         boolean driverChanged = !nextDriverId.equals(trip.getDriverId());
         boolean slotChanged = !java.util.Objects.equals(nextStartDate, trip.getStartDate())
-                || !java.util.Objects.equals(nextStartTime, trip.getStartTime());
+                || !java.util.Objects.equals(nextStartTime, trip.getStartTime())
+                || !java.util.Objects.equals(returnAt, trip.getScheduledReturnDatetime());
         if (!vehicleChanged && !driverChanged && !slotChanged) {
             return Mono.just(trip);
         }
         boolean inProgress = isInProgress(trip.getStatus());
         LocalDateTime start = ResourceAvailabilityService.slotStart(nextStartDate, nextStartTime);
-        LocalDateTime end = ResourceAvailabilityService.slotEnd(trip.getScheduledReturnDatetime());
+        LocalDateTime end = ResourceAvailabilityService.slotEnd(returnAt);
         if (!end.isAfter(start)) {
             return Mono.error(TripException.invalidSchedule());
         }
@@ -800,6 +819,7 @@ public class TripService implements ManageTripUseCase {
                 trip.setDriverId(nextDriverId);
                 trip.setStartDate(nextStartDate);
                 trip.setStartTime(nextStartTime);
+                trip.setScheduledReturnDatetime(returnAt);
                 trip.setNew(false);
                 return trip;
             }));
@@ -876,9 +896,8 @@ public class TripService implements ManageTripUseCase {
                 sub.setStatus("PENDING");
                 sub.setCreatedAt(Instant.now());
                 sub.setNew(true);
-                return stopCheck.then(detailCheck).then(submissionRepository.save(sub)).map(
-                    TripMissionSubmissionEntity::getId
-                );
+                return stopCheck.then(detailCheck).then(submissionRepository.save(sub))
+                    .flatMap(saved -> notifier.submissionCreated(trip, saved, driverId).thenReturn(saved.getId()));
             });
     }
 
@@ -916,6 +935,7 @@ public class TripService implements ManageTripUseCase {
                                     return detailRepository.save(de);
                                 })
                                 .then(submissionRepository.save(sub))
+                                .then(Mono.defer(() -> notifier.submissionReviewed(trip, sub, true, managerId)))
                                 .then(loadTripWithDetails(trip.getId()));
                         }
                         TripDetailEntity detail = new TripDetailEntity();
@@ -939,6 +959,7 @@ public class TripService implements ManageTripUseCase {
                             .doOnNext(detail::setStopId)
                             .then(Mono.defer(() -> detailRepository.save(detail)))
                             .then(submissionRepository.save(sub))
+                            .then(Mono.defer(() -> notifier.submissionReviewed(trip, sub, true, managerId)))
                             .then(loadTripWithDetails(trip.getId()));
                     })
             );
@@ -960,15 +981,17 @@ public class TripService implements ManageTripUseCase {
             )
             .flatMap(sub -> tripRepository
                 .findById(sub.getTripId())
-                .flatMap(trip -> accessScope.assertTripFleetAccess(managerId, trip.getFleetId()))
-                .then(Mono.defer(() -> {
-                    sub.setStatus("REJECTED");
-                    sub.setRejectionReason(reason);
-                    sub.setReviewedBy(managerId);
-                    sub.setReviewedAt(Instant.now());
-                    sub.setNew(false);
-                    return submissionRepository.save(sub).then();
-                })));
+                .switchIfEmpty(Mono.error(TripException.notFound(sub.getTripId())))
+                .flatMap(trip -> accessScope.assertTripFleetAccess(managerId, trip.getFleetId())
+                    .then(Mono.defer(() -> {
+                        sub.setStatus("REJECTED");
+                        sub.setRejectionReason(reason);
+                        sub.setReviewedBy(managerId);
+                        sub.setReviewedAt(Instant.now());
+                        sub.setNew(false);
+                        return submissionRepository.save(sub)
+                            .then(notifier.submissionReviewed(trip, sub, false, managerId));
+                    }))));
     }
 
     @Override
@@ -980,62 +1003,71 @@ public class TripService implements ManageTripUseCase {
             .thenMany(Flux.defer(() -> submissionRepository.findAllByTripIdOrderByCreatedAtDesc(tripId)));
     }
 
-    // ── Télémétrie (conservé) ─────────────────────────────────────────────────
-
-    @Override
-    public Mono<Void> sendTelemetry(
-        UUID tripId,
-        UUID driverId,
-        Double lat,
-        Double lng,
-        Double speed
-    ) {
-        return tripRepository
-            .findById(tripId)
-            // Un chauffeur ne peut alimenter que la position de SON trajet.
-            .flatMap(t -> driverId.equals(t.getDriverId())
-                ? Mono.just(t)
-                : Mono.<TripEntity>error(TripException.forbidden()))
-            .filter(
-                t ->
-                    "DEPARTED".equals(t.getStatus()) ||
-                    "ARRIVED".equals(t.getStatus())
-            )
-            .switchIfEmpty(Mono.error(TripException.actionOnCompletedTrip()))
-            .flatMap(trip -> {
-                Mono<Void> redisTask = redisTelemetry.addPoint(
-                    tripId,
-                    lat,
-                    lng
-                );
-                Mono<Void> sqlTask = operationalRepo
-                    .findByVehicleId(trip.getVehicleId())
-                    .flatMap(op -> {
-                        op.setCurrentSpeed(
-                            BigDecimal.valueOf(speed != null ? speed : 0.0)
-                        );
-                        op.setTimestamp(Instant.now());
-                        return operationalRepo.save(op);
-                    })
-                    .then();
-                geofenceApi.checkPointInZone(null, lat, lng).subscribe();
-                return Mono.when(redisTask, sqlTask);
-            });
-    }
+    // ── Chauffeur : trajet actif et historique ───────────────────────────────
+    // (Le suivi GPS en direct est dans TripTrackingService.)
 
     @Override
     public Mono<Trip> getMyActiveTrip(UUID driverId) {
-        return tripRepository
+        // L'identifiant du jeton peut être l'id Kernel : ramené à l'id local du chauffeur.
+        return accessScope.resolveLocalUserId(driverId)
+            .defaultIfEmpty(driverId)
             // Parti (DEPARTED) ou arrivé à destination (ARRIVED) : les deux sont « en cours ».
-            .findInProgressTripForDriver(driverId)
+            .flatMap(tripRepository::findInProgressTripForDriver)
             .flatMap(e -> loadTripWithDetails(e.getId()));
     }
 
     @Override
     public Flux<Trip> getMyTripHistory(UUID driverId) {
-        return tripRepository
-            .findAllByDriverId(driverId)
+        return accessScope.resolveLocalUserId(driverId)
+            .defaultIfEmpty(driverId)
+            .flatMapMany(tripRepository::findAllByDriverId)
             .flatMap(e -> loadTripWithDetails(e.getId()));
+    }
+
+    // ── Notifications des modifications ──────────────────────────────────────
+
+    /** État d'un trajet avant modification, pour résumer au chauffeur ce qui a changé. */
+    record Snapshot(UUID vehicleId, UUID driverId, LocalDate startDate, LocalTime startTime,
+                    LocalDateTime scheduledReturn, String missionObject, String departureLocation, String destination) {
+        static Snapshot of(TripEntity t) {
+            return new Snapshot(t.getVehicleId(), t.getDriverId(), t.getStartDate(), t.getStartTime(),
+                    t.getScheduledReturnDatetime(), t.getMissionObject(), t.getDepartureLocation(), t.getDestinationLocation());
+        }
+    }
+
+    /**
+     * Chauffeur remplacé : l'ancien apprend que le trajet lui est retiré, le nouveau qu'il lui est
+     * assigné. Sinon le chauffeur reçoit un résumé des changements (aucun envoi si rien n'a changé).
+     */
+    Mono<Void> notifyChanges(Snapshot before, TripEntity after, UUID actorId) {
+        if (!java.util.Objects.equals(before.driverId(), after.getDriverId())) {
+            return notifier.unassigned(after, before.driverId(), actorId).then(notifier.assigned(after, actorId));
+        }
+        List<String> changes = new java.util.ArrayList<>();
+        if (!java.util.Objects.equals(before.startDate(), after.getStartDate())
+                || !java.util.Objects.equals(before.startTime(), after.getStartTime())) {
+            changes.add("départ déplacé au " + TripNotifier.when(after.getStartDate(), after.getStartTime()));
+        }
+        if (!java.util.Objects.equals(before.scheduledReturn(), after.getScheduledReturnDatetime())) {
+            changes.add("retour prévu le " + TripNotifier.when(after.getScheduledReturnDatetime()));
+        }
+        if (!java.util.Objects.equals(before.missionObject(), after.getMissionObject())) {
+            changes.add("mission : " + after.getMissionObject());
+        }
+        if (!java.util.Objects.equals(before.departureLocation(), after.getDepartureLocation())) {
+            changes.add("lieu de départ : " + after.getDepartureLocation());
+        }
+        if (!java.util.Objects.equals(before.destination(), after.getDestinationLocation())) {
+            changes.add("destination : " + after.getDestinationLocation());
+        }
+        Mono<List<String>> all = java.util.Objects.equals(before.vehicleId(), after.getVehicleId())
+            ? Mono.just(changes)
+            : notifier.vehicleChange(after.getVehicleId()).map(v -> {
+                List<String> withVehicle = new java.util.ArrayList<>(changes);
+                withVehicle.add(0, v);
+                return withVehicle;
+            });
+        return all.flatMap(list -> notifier.updated(after, actorId, list));
     }
 
     // ── Helpers privés ────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
+import com.yowyob.fleet.domain.model.Maintenance;
 import com.yowyob.fleet.domain.ports.in.ManageMaintenanceUseCase;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.MaintenanceRequest;
@@ -29,7 +30,34 @@ import java.util.UUID;
 public class MaintenanceController {
 
     private final ManageMaintenanceUseCase maintenanceUseCase;
+    private final com.yowyob.fleet.application.service.OperationFleetLookup fleetLookup;
     private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
+    private final com.yowyob.fleet.application.service.OperationLookup lookup;
+
+    /** Joint à chaque maintenance l'état de sa dépense générée. */
+    private Flux<MaintenanceResponse> withExpenses(Flux<Maintenance> maintenances) {
+        return maintenances.collectList().flatMapMany(list -> lookup.autoExpenses(list.stream().map(Maintenance::getId).toList())
+                .flatMapMany(expenses -> Flux.fromIterable(list)
+                        .map(m -> MaintenanceResponse.from(m, expenses.get(m.getId())))))
+                .transform(f -> fleetLookup.attach(f, "maintenances", MaintenanceResponse::id, MaintenanceResponse::withFleet));
+    }
+
+    private Mono<MaintenanceResponse> withExpense(Mono<Maintenance> maintenance) {
+        return withExpenses(maintenance.flux()).next();
+    }
+
+    /** Avancement d'une maintenance par le gestionnaire. */
+    public record TransitionRequest(
+            @jakarta.validation.constraints.NotBlank(message = "Indiquez l'action.")
+            @io.swagger.v3.oas.annotations.media.Schema(allowableValues = {"PLAN", "START", "COMPLETE", "CANCEL"})
+            String action,
+            LocalDateTime plannedAt,
+            String garage,
+            @jakarta.validation.constraints.PositiveOrZero(message = "Le coût ne peut pas être négatif.")
+            java.math.BigDecimal cost,
+            String report,
+            String reason
+    ) {}
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -46,8 +74,26 @@ public class MaintenanceController {
             @Valid @RequestBody MaintenanceRequest request,
             Authentication auth) {
 
-        ManageMaintenanceUseCase.CreateMaintenanceCommand cmd =
-                new ManageMaintenanceUseCase.CreateMaintenanceCommand(
+        UUID actor = getUserId(auth);
+        boolean driver = com.yowyob.fleet.infrastructure.config.security.AuthPrincipal.isFleetDriver(auth);
+        Maintenance.Status status = null;
+        if (!driver && request.status() != null && !request.status().isBlank()) {
+            try {
+                status = Maintenance.Status.valueOf(request.status().trim().toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                return Mono.error(com.yowyob.fleet.domain.exception.MaintenanceWorkflowException
+                        .invalidTransition("REQUESTED", request.status()));
+            }
+        }
+        Maintenance.Status initial = status;
+        // Un chauffeur ne fait qu'une demande (statut REQUESTED), pour lui-même et pour le véhicule
+        // qu'il conduit ; un gestionnaire saisit pour un véhicule de son périmètre.
+        Mono<UUID> driverIdMono = driver ? lookup.localUser(actor) : Mono.justOrEmpty(request.driverId());
+        Mono<Void> scope = driver
+                ? resourceAccess.assertDriverOperatesVehicle(actor, request.vehicleId())
+                : resourceAccess.assertVehicleAccess(actor, request.vehicleId());
+        return scope.then(driverIdMono.map(java.util.Optional::of).defaultIfEmpty(java.util.Optional.empty()))
+                .flatMap(driverId -> maintenanceUseCase.createMaintenance(new ManageMaintenanceUseCase.CreateMaintenanceCommand(
                         request.subject(),
                         request.cost(),
                         request.report(),
@@ -55,15 +101,42 @@ public class MaintenanceController {
                         request.latitude(),
                         request.locationName(),
                         request.vehicleId(),
-                        request.driverId()
-                );
+                        driverId.orElse(null),
+                        driver ? Maintenance.Status.REQUESTED : initial,
+                        request.maintenanceType() != null ? request.maintenanceType().trim().toUpperCase() : null,
+                        Boolean.TRUE.equals(request.urgent()),
+                        request.plannedAt(),
+                        actor)))
+                .flatMap(saved -> withExpense(Mono.just(saved)));
+    }
+
+    @PostMapping("/{id}/transition")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN')")
+    @Operation(summary = "Faire avancer une maintenance",
+               description = "PLAN (date prévue + garage), START (véhicule à l'atelier), COMPLETE (coût et rapport définitifs), "
+                       + "CANCEL (motif obligatoire). Le chauffeur demandeur et ceux du véhicule sont notifiés.")
+    public Mono<MaintenanceResponse> transition(
+            @Parameter(description = "ID de la maintenance") @PathVariable UUID id,
+            @Valid @RequestBody TransitionRequest request,
+            Authentication auth) {
         UUID actor = getUserId(auth);
-        // Un chauffeur ne déclare que pour le véhicule qu'il conduit ; un gestionnaire,
-        // pour un véhicule de son périmètre.
-        Mono<Void> scope = com.yowyob.fleet.infrastructure.config.security.AuthPrincipal.isFleetDriver(auth)
-                ? resourceAccess.assertDriverOperatesVehicle(actor, request.vehicleId())
-                : resourceAccess.assertVehicleAccess(actor, request.vehicleId());
-        return scope.then(maintenanceUseCase.createMaintenance(cmd)).map(MaintenanceResponse::from);
+        if (com.yowyob.fleet.infrastructure.config.security.AuthPrincipal.isFleetDriver(auth)
+                && !com.yowyob.fleet.infrastructure.config.security.AuthPrincipal.isFleetManager(auth)) {
+            return Mono.error(com.yowyob.fleet.domain.exception.MaintenanceWorkflowException.driverCannotEdit());
+        }
+        return maintenanceUseCase.getById(id)
+                .flatMap(m -> resourceAccess.assertVehicleAccess(actor, m.getVehicleId()))
+                .then(withExpense(maintenanceUseCase.transition(new ManageMaintenanceUseCase.TransitionCommand(
+                        id, actor, request.action(), request.plannedAt(), request.garage(),
+                        request.cost(), request.report(), request.reason()))));
+    }
+
+    @GetMapping("/mine")
+    @PreAuthorize("hasRole('FLEET_DRIVER')")
+    @Operation(summary = "Mes maintenances (chauffeur)",
+               description = "Demandes du chauffeur, maintenances où il est cité et celles de son véhicule (ouvertes ou des 30 derniers jours).")
+    public Flux<MaintenanceResponse> mine(Authentication auth) {
+        return withExpenses(maintenanceUseCase.getForDriver(getUserId(auth)));
     }
 
     // ── LECTURE ───────────────────────────────────────────────────────────────
@@ -73,7 +146,7 @@ public class MaintenanceController {
     @Operation(summary = "Lister mes maintenances",
                description = "Retourne toutes les maintenances des véhicules gérés par le manager connecté.")
     public Flux<MaintenanceResponse> listAll(Authentication auth) {
-        return maintenanceUseCase.getAllByManager(getUserId(auth)).map(MaintenanceResponse::from);
+        return withExpenses(maintenanceUseCase.getAllByManager(getUserId(auth)));
     }
 
     @GetMapping("/{id}")
@@ -83,7 +156,7 @@ public class MaintenanceController {
             @Parameter(description = "ID de la maintenance") @PathVariable UUID id,
             Authentication auth) {
         return resourceAccess.assertMaintenanceAccess(getUserId(auth), id)
-                .then(maintenanceUseCase.getById(id)).map(MaintenanceResponse::from);
+                .then(withExpense(maintenanceUseCase.getById(id)));
     }
 
     @GetMapping("/vehicle/{vehicleId}")
@@ -94,7 +167,7 @@ public class MaintenanceController {
             @Parameter(description = "ID du véhicule") @PathVariable UUID vehicleId,
             Authentication auth) {
         return resourceAccess.assertVehicleAccess(getUserId(auth), vehicleId)
-                .thenMany(maintenanceUseCase.getByVehicleId(vehicleId)).map(MaintenanceResponse::from);
+                .thenMany(withExpenses(maintenanceUseCase.getByVehicleId(vehicleId)));
     }
 
     @GetMapping("/driver/{driverId}")
@@ -105,7 +178,7 @@ public class MaintenanceController {
             @Parameter(description = "ID du chauffeur") @PathVariable UUID driverId,
             Authentication auth) {
         return resourceAccess.assertDriverAccess(getUserId(auth), driverId)
-                .thenMany(maintenanceUseCase.getByDriverId(driverId)).map(MaintenanceResponse::from);
+                .thenMany(withExpenses(maintenanceUseCase.getByDriverId(driverId)));
     }
 
     @GetMapping("/range")
@@ -117,7 +190,7 @@ public class MaintenanceController {
             @Parameter(description = "Date de fin (ISO 8601)", example = "2026-12-31T23:59:59")
             @RequestParam LocalDateTime end,
             Authentication auth) {
-        return maintenanceUseCase.getByDateRange(start, end, getUserId(auth)).map(MaintenanceResponse::from);
+        return withExpenses(maintenanceUseCase.getByDateRange(start, end, getUserId(auth)));
     }
 
     // ── MISE À JOUR ───────────────────────────────────────────────────────────
@@ -142,7 +215,7 @@ public class MaintenanceController {
                         request.locationName()
                 );
         return resourceAccess.assertMaintenanceAccess(getUserId(auth), id)
-                .then(maintenanceUseCase.update(cmd)).map(MaintenanceResponse::from);
+                .then(withExpense(maintenanceUseCase.update(cmd)));
     }
 
     // ── SUPPRESSION ───────────────────────────────────────────────────────────

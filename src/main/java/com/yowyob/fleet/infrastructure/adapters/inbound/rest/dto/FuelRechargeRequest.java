@@ -37,5 +37,18 @@ public record FuelRechargeRequest(
         Double longitude,
 
         @Schema(description = "Latitude GPS de la station (optionnel)", example = "3.8480")
-        Double latitude
+        Double latitude,
+
+        @jakarta.validation.constraints.PositiveOrZero(message = "Le kilométrage ne peut pas être négatif.")
+        @Schema(description = "Kilométrage relevé au plein (optionnel)", example = "84250")
+        BigDecimal odometerKm,
+
+        @Schema(description = "Photo du ticket : URL renvoyée par /api/v1/files/upload (optionnel)")
+        String receiptUrl,
+
+        @Schema(description = "Nom du fichier du ticket (optionnel)")
+        String receiptName,
+
+        @Schema(description = "Type MIME du ticket (optionnel)")
+        String receiptMime
 ) {}

@@ -76,6 +76,16 @@ public interface ManageExpenseUseCase {
     /** Supprime la dépense auto-générée d'une opération supprimée. */
     Mono<Void> deleteAutoExpenses(UUID sourceId);
 
+    /**
+     * Dépense générée par une déclaration du chauffeur (plein) : contrairement aux dépenses
+     * générées par une saisie du gestionnaire, elle attend la validation (gestionnaire, ou
+     * administrateur au-dessus du seuil de l'entreprise / en dépassement de budget). Le ticket
+     * éventuel lui est joint, le chauffeur en est l'auteur. Une dépense existante suit le montant.
+     */
+    Mono<Void> syncDeclaredAutoExpense(Expense.ExpenseType type, UUID sourceId, BigDecimal amount, String description,
+                                       UUID vehicleId, UUID driverId, String receiptUrl, String receiptName,
+                                       String receiptMime);
+
     /** Coût réel d'un incident : dépense en attente d'approbation, justificatif obligatoire. */
     Mono<Expense> createIncidentCost(IncidentCostCommand cmd);
 

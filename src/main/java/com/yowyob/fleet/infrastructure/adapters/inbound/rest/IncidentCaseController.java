@@ -1,12 +1,16 @@
 package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
 import com.yowyob.fleet.application.service.IncidentCaseService;
+import com.yowyob.fleet.application.service.OrganizationService;
 import com.yowyob.fleet.application.service.ResourceAccessService;
 import com.yowyob.fleet.domain.model.Incident;
+import com.yowyob.fleet.domain.ports.out.IncidentPersistencePort;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.IncidentResponse;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.IncidentCaseEntity;
+import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.IncidentR2dbcRepository;
 import com.yowyob.fleet.infrastructure.config.OpenApiConfig;
+import com.yowyob.fleet.infrastructure.config.security.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,18 +41,26 @@ public class IncidentCaseController {
 
     private final IncidentCaseService service;
     private final ResourceAccessService access;
+    private final OrganizationService organizations;
+    private final IncidentR2dbcRepository incidentRepo;
+    private final IncidentPersistencePort incidentPort;
 
     public record CaseResponse(IncidentResponse incident, IncidentCaseEntity details, String tripCode, String handlerName,
                                String reportedByName, String vehicleStatus, boolean vehicleImmobilized, boolean vehicleDrivable,
                                List<IncidentCaseService.Attachment> attachments, List<IncidentCaseService.TimelineEvent> timeline,
                                List<IncidentCaseService.CostLine> costs, BigDecimal approvedCosts, BigDecimal pendingCosts,
-                               BigDecimal netCost, List<String> closureGaps, List<Map<String, Object>> handlers) {
+                               BigDecimal netCost, List<String> closureGaps, List<Map<String, Object>> handlers,
+                               String pendingInfoRequest) {
 
         static CaseResponse from(IncidentCaseService.CaseView v) {
             return new CaseResponse(IncidentResponse.from(v.incident()), v.details(), v.tripCode(), v.handlerName(), v.reportedByName(),
                     v.vehicleStatus(), v.incident().isVehicleImmobilized(), v.incident().isVehicleDrivable(), v.attachments(), v.timeline(),
-                    v.costs(), v.approvedCosts(), v.pendingCosts(), v.netCost(), v.closureGaps(), v.handlers());
+                    v.costs(), v.approvedCosts(), v.pendingCosts(), v.netCost(), v.closureGaps(), v.handlers(), v.pendingInfoRequest());
         }
+    }
+
+    /** Message sur le dossier ; {@code requestInfo} (bureau seulement) : demande de précisions au chauffeur. */
+    public record CommentRequest(@NotBlank(message = "Écrivez votre message.") String message, Boolean requestInfo) {
     }
 
     public record TransitionRequest(@NotNull Incident.Status status, UUID handlerId, String note, String report, String rootCause,
@@ -73,7 +85,28 @@ public class IncidentCaseController {
     @PreAuthorize(ANY_ROLE)
     @Operation(summary = "Mes incidents (chauffeur concerné ou déclarant)")
     public Flux<IncidentResponse> mine(Authentication auth) {
-        return service.mine(userId(auth)).map(IncidentResponse::from);
+        return service.enrich(service.mine(userId(auth))).map(e -> IncidentResponse.from(e.incident()).withSummary(e.summary()));
+    }
+
+    @GetMapping("/organization")
+    @PreAuthorize("hasAnyRole('FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Incidents de toutes les flottes de l'entreprise (suivi par l'administrateur)")
+    public Flux<IncidentResponse> organization(@RequestParam(required = false) UUID adminId, Authentication auth) {
+        return organizations.resolveOrganizationAdminId(auth, adminId)
+                .flatMapMany(orgId -> service.enrich(incidentRepo.findAllByOrganizationAdminId(orgId).concatMap(e -> incidentPort.findById(e.getId()))))
+                .map(e -> IncidentResponse.from(e.incident()).withSummary(e.summary()));
+    }
+
+    @PostMapping("/{id}/comments")
+    @PreAuthorize(ANY_ROLE)
+    @Operation(summary = "Écrire sur le dossier",
+               description = "Gestionnaire : message au chauffeur ou demande d'information (requestInfo). Chauffeur : réponse ou précision. "
+                       + "L'autre côté est notifié ; refusé sur un dossier clôturé ou annulé.")
+    public Mono<CaseResponse> comment(@PathVariable UUID id, @Valid @RequestBody CommentRequest r, Authentication auth) {
+        boolean fromDriver = AuthPrincipal.isFleetDriver(auth);
+        return scope(id, auth)
+                .then(service.comment(userId(auth), id, fromDriver, r.message(), !fromDriver && Boolean.TRUE.equals(r.requestInfo())))
+                .map(CaseResponse::from);
     }
 
     @GetMapping("/{id}/case")
@@ -106,7 +139,7 @@ public class IncidentCaseController {
     @PreAuthorize(ANY_ROLE)
     @Operation(summary = "Joindre une photo ou une pièce")
     public Mono<CaseResponse> attach(@PathVariable UUID id, @RequestBody IncidentCaseService.AttachmentCommand cmd, Authentication auth) {
-        return scope(id, auth).then(service.addAttachment(userId(auth), id, cmd)).map(CaseResponse::from);
+        return scope(id, auth).then(service.addAttachment(userId(auth), id, cmd, AuthPrincipal.isFleetDriver(auth))).map(CaseResponse::from);
     }
 
     @PostMapping("/{id}/costs")

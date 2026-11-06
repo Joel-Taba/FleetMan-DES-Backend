@@ -4,6 +4,7 @@ import com.yowyob.fleet.domain.exception.AuthException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
 import java.nio.charset.StandardCharsets;
@@ -86,6 +87,28 @@ class KernelJwtVerifierTest {
         StepVerifier.create(verifier.verify(token)).expectError(AuthException.class).verify();
         StepVerifier.create(verifier.verify(token)).expectError(AuthException.class).verify();
         assertEquals(1, jwksCalls.get(), "un kid inconnu ne doit pas recharger le JWKS à chaque requête");
+    }
+
+    @Test
+    void concurrentRequestsWaitForTheJwksLoadInProgress() throws Exception {
+        String jwks = jwks((RSAPublicKey) kernelKeys.getPublic(), "kernel-core-key-1");
+        Sinks.One<String> slowKernel = Sinks.one();
+        KernelJwtVerifier coldVerifier = new KernelJwtVerifier(() -> {
+            jwksCalls.incrementAndGet();
+            return slowKernel.asMono();
+        });
+        String token = sign("{\"alg\":\"RS256\",\"kid\":\"kernel-core-key-1\"}", PAYLOAD, kernelKeys.getPrivate());
+
+        // Au démarrage, un écran lance plusieurs requêtes avant la fin du premier chargement du JWKS.
+        Mono<Void> first = coldVerifier.verify(token).cache();
+        Mono<Void> second = coldVerifier.verify(token).cache();
+        first.subscribe(v -> { }, e -> { });
+        second.subscribe(v -> { }, e -> { });
+        slowKernel.tryEmitValue(jwks);
+
+        StepVerifier.create(first).verifyComplete();
+        StepVerifier.create(second).verifyComplete();
+        assertEquals(1, jwksCalls.get(), "un seul chargement du JWKS, partagé par les requêtes concurrentes");
     }
 
     private static String sign(String header, String payload, PrivateKey key) throws Exception {

@@ -13,5 +13,8 @@ public record TelemetryRequest(
     Double lng,
 
     @Schema(description = "Vitesse instantanée en km/h", example = "45.5")
-    Double speed
+    Double speed,
+
+    @Schema(description = "Précision de la mesure en mètres (facultative)", example = "12")
+    Double accuracy
 ) {}

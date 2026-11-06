@@ -130,4 +130,123 @@ public class Maintenance {
 
     /** Setter réservé à la couche persistance (assignation de l'ID après sauvegarde) */
     public void setId(UUID id)                 { this.id = id; }
+
+    // ── Cycle de vie (demande du chauffeur → atelier → clôture) ──────────────
+
+    /**
+     * <pre>
+     *   REQUESTED ─┬→ PLANNED ─┬→ IN_PROGRESS → COMPLETED
+     *              │           └→ COMPLETED
+     *              ├→ IN_PROGRESS / COMPLETED
+     *              └→ CANCELLED (depuis tout état ouvert, motif obligatoire)
+     * </pre>
+     * Une intervention saisie par le gestionnaire après coup naît directement COMPLETED.
+     */
+    public enum Status {
+        REQUESTED, PLANNED, IN_PROGRESS, COMPLETED, CANCELLED;
+
+        public boolean isOpen() { return this != COMPLETED && this != CANCELLED; }
+    }
+
+    public static final java.util.Set<String> TYPES = java.util.Set.of("PREVENTIVE", "CORRECTIVE", "EMERGENCY");
+
+    private Status status = Status.COMPLETED;
+    private String maintenanceType;
+    private boolean urgent;
+    private LocalDateTime plannedAt;
+    private LocalDateTime startedAt;
+    private LocalDateTime completedAt;
+    private LocalDateTime cancelledAt;
+    private String cancelReason;
+    private UUID requestedBy;
+
+    public Status getStatus()                  { return status; }
+    public String getMaintenanceType()         { return maintenanceType; }
+    public boolean isUrgent()                  { return urgent; }
+    public LocalDateTime getPlannedAt()        { return plannedAt; }
+    public LocalDateTime getStartedAt()        { return startedAt; }
+    public LocalDateTime getCompletedAt()      { return completedAt; }
+    public LocalDateTime getCancelledAt()      { return cancelledAt; }
+    public String getCancelReason()            { return cancelReason; }
+    public UUID getRequestedBy()               { return requestedBy; }
+
+    /** Restauration depuis la persistance (aucune règle appliquée). */
+    public void restoreWorkflow(Status status, String type, boolean urgent, LocalDateTime plannedAt,
+                                LocalDateTime startedAt, LocalDateTime completedAt, LocalDateTime cancelledAt,
+                                String cancelReason, UUID requestedBy) {
+        this.status = status != null ? status : Status.COMPLETED;
+        this.maintenanceType = type;
+        this.urgent = urgent;
+        this.plannedAt = plannedAt;
+        this.startedAt = startedAt;
+        this.completedAt = completedAt;
+        this.cancelledAt = cancelledAt;
+        this.cancelReason = cancelReason;
+        this.requestedBy = requestedBy;
+    }
+
+    /** État initial d'une nouvelle maintenance (demande, ordre planifié, intervention en cours ou terminée). */
+    public void initWorkflow(Status initial, String type, boolean urgent, LocalDateTime plannedAt, UUID requestedBy,
+                             LocalDateTime now) {
+        Status s = initial != null ? initial : Status.COMPLETED;
+        if (s == Status.CANCELLED) {
+            throw com.yowyob.fleet.domain.exception.MaintenanceWorkflowException.invalidTransition("REQUESTED", "CANCELLED");
+        }
+        if (s == Status.PLANNED && plannedAt == null) {
+            throw com.yowyob.fleet.domain.exception.MaintenanceWorkflowException.plannedDateRequired();
+        }
+        this.status = s;
+        this.maintenanceType = type != null && TYPES.contains(type) ? type : null;
+        this.urgent = urgent || "EMERGENCY".equals(this.maintenanceType);
+        this.plannedAt = plannedAt;
+        this.requestedBy = requestedBy;
+        if (s == Status.IN_PROGRESS) this.startedAt = now;
+        if (s == Status.COMPLETED) this.completedAt = now;
+    }
+
+    private void require(Status target, Status... allowed) {
+        for (Status a : allowed) {
+            if (a == status) return;
+        }
+        throw com.yowyob.fleet.domain.exception.MaintenanceWorkflowException.invalidTransition(status.name(), target.name());
+    }
+
+    /** Planifie (ou replanifie) l'intervention : date prévue obligatoire, garage optionnel. */
+    public void plan(LocalDateTime plannedAt, String garage) {
+        require(Status.PLANNED, Status.REQUESTED, Status.PLANNED);
+        if (plannedAt == null) {
+            throw com.yowyob.fleet.domain.exception.MaintenanceWorkflowException.plannedDateRequired();
+        }
+        this.plannedAt = plannedAt;
+        if (garage != null && !garage.isBlank()) this.locationName = garage.trim();
+        this.status = Status.PLANNED;
+    }
+
+    /** Le véhicule entre à l'atelier. */
+    public void start(LocalDateTime now) {
+        require(Status.IN_PROGRESS, Status.REQUESTED, Status.PLANNED);
+        this.status = Status.IN_PROGRESS;
+        this.startedAt = now;
+    }
+
+    /** Intervention terminée : coût et rapport définitifs optionnels. */
+    public void complete(LocalDateTime now, BigDecimal finalCost, String finalReport) {
+        require(Status.COMPLETED, Status.REQUESTED, Status.PLANNED, Status.IN_PROGRESS);
+        if (finalCost != null) updateCost(finalCost);
+        if (finalReport != null && !finalReport.isBlank()) this.report = finalReport.trim();
+        if (this.startedAt == null) this.startedAt = now;
+        this.completedAt = now;
+        this.status = Status.COMPLETED;
+    }
+
+    /** Annulation d'une maintenance encore ouverte, motif obligatoire. */
+    public void cancel(LocalDateTime now, String reason) {
+        require(Status.CANCELLED, Status.REQUESTED, Status.PLANNED, Status.IN_PROGRESS);
+        if (reason == null || reason.isBlank()) {
+            throw com.yowyob.fleet.domain.exception.MaintenanceWorkflowException.cancelReasonRequired();
+        }
+        this.cancelReason = reason.trim();
+        this.cancelledAt = now;
+        this.status = Status.CANCELLED;
+    }
 }

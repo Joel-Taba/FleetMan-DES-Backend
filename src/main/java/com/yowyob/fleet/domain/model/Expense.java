@@ -230,6 +230,17 @@ public class Expense {
         this.amount = sourceAmount;
     }
 
+    /**
+     * Dépense générée par une déclaration du chauffeur : elle attend la validation au lieu
+     * d'être approuvée d'office comme celles nées d'une saisie du gestionnaire.
+     */
+    public void requireValidation() {
+        if (this.sourceType != SourceType.AUTO || this.validatedAt != null) {
+            throw new IllegalStateException("Seule une dépense auto-générée non validée peut être remise en attente.");
+        }
+        this.status = ExpenseStatus.PENDING;
+    }
+
     public boolean isManualAndPending() {
         return this.sourceType == SourceType.MANUAL && this.status == ExpenseStatus.PENDING;
     }

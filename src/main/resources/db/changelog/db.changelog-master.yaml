@@ -245,3 +245,26 @@ databaseChangeLog:
   # 66. Plannings : règles de temps de travail, changements après publication, modèles de postes.
   - include:
       file: db/changelog/changes/066-planning-workforce.sql
+  # 69. Effectifs : demandes d'absence, relevés terrain, pièces demandées, alertes de postes.
+  - include:
+      file: db/changelog/changes/069-workforce-cross-role.sql
+  # 70. Opérations : pleins détaillés (compteur, station, justificatif), cycle de vie des maintenances.
+  - include:
+      file: db/changelog/changes/070-operations-cross-role.sql
+  # 71. Messagerie gestionnaire <-> chauffeur.
+  - include:
+      file: db/changelog/changes/071-driver-messages.sql
+  # 72. Suivi GPS en direct des trajets : historique borné des positions, dernière position connue.
+  - include:
+      file: db/changelog/changes/072-trip-positions.sql
+  # 73. Inscription des chauffeurs : demande depuis l'application, validation par le gestionnaire,
+  #     code d'activation, profil et pièces obligatoires à compléter avant l'accès au travail.
+  - include:
+      file: db/changelog/changes/073-driver-registrations.sql
+  # 74. Blocage du compte d'un chauffeur par son gestionnaire (sans suppression, réversible).
+  - include:
+      file: db/changelog/changes/074-driver-account-block.sql
+  # 75. Séparation des flottes : incidents, entretiens et pleins gardent la flotte de leur création
+  #     (seuls chauffeurs et véhicules changent de flotte, leur historique reste à l'ancienne).
+  - include:
+      file: db/changelog/changes/075-operations-fleet.sql

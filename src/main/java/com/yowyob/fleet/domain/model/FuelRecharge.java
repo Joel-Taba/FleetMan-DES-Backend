@@ -120,4 +120,54 @@ public class FuelRecharge {
 
     /** Setter réservé à la couche persistance */
     public void setId(UUID id)               { this.id = id; }
+
+    // ── Détails déclarés sur le terrain (relevé, station réelle, ticket) ─────
+
+    /** Kilométrage relevé au moment du plein (optionnel, positif). */
+    private BigDecimal odometerKm;
+    /** Nom de la station tel que saisi (« Total Bastos »), en plus de l'enseigne normalisée. */
+    private String stationLabel;
+    private String receiptUrl;
+    private String receiptName;
+    private String receiptMime;
+    /** Utilisateur local qui a saisi le plein (chauffeur ou gestionnaire). */
+    private UUID createdBy;
+
+    public BigDecimal getOdometerKm()        { return odometerKm; }
+    public String getStationLabel()          { return stationLabel; }
+    public String getReceiptUrl()            { return receiptUrl; }
+    public String getReceiptName()           { return receiptName; }
+    public String getReceiptMime()           { return receiptMime; }
+    public UUID getCreatedBy()               { return createdBy; }
+    public boolean hasReceipt()              { return receiptUrl != null && !receiptUrl.isBlank(); }
+
+    public void setOdometerKm(BigDecimal odometerKm) {
+        if (odometerKm != null && odometerKm.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Le kilométrage ne peut pas être négatif.");
+        }
+        this.odometerKm = odometerKm;
+    }
+
+    public void setStationLabel(String stationLabel) {
+        this.stationLabel = stationLabel == null || stationLabel.isBlank() ? null : stationLabel.trim();
+    }
+
+    public void attachReceipt(String url, String name, String mime) {
+        this.receiptUrl = url == null || url.isBlank() ? null : url;
+        this.receiptName = this.receiptUrl == null ? null : name;
+        this.receiptMime = this.receiptUrl == null ? null : mime;
+    }
+
+    public void setCreatedBy(UUID createdBy)  { this.createdBy = createdBy; }
+
+    /** Recopie les détails terrain sur une nouvelle instance (les champs quantité/prix sont immuables). */
+    public FuelRecharge copyDetailsTo(FuelRecharge target) {
+        target.odometerKm = this.odometerKm;
+        target.stationLabel = this.stationLabel;
+        target.receiptUrl = this.receiptUrl;
+        target.receiptName = this.receiptName;
+        target.receiptMime = this.receiptMime;
+        target.createdBy = this.createdBy;
+        return target;
+    }
 }

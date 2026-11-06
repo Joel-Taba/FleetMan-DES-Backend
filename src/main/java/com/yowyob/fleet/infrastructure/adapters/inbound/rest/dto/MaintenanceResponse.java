@@ -38,8 +38,37 @@ public record MaintenanceResponse(
         UUID driverId,
 
         @Schema(description = "Nom complet du chauffeur")
-        String driverFullName
+        String driverFullName,
+        @Schema(description = "REQUESTED, PLANNED, IN_PROGRESS, COMPLETED, CANCELLED")
+        String status,
+        @Schema(description = "PREVENTIVE, CORRECTIVE, EMERGENCY")
+        String maintenanceType,
+        boolean urgent,
+        @Schema(description = "Garage / lieu de l'intervention")
+        String garage,
+        LocalDateTime plannedAt,
+        LocalDateTime startedAt,
+        LocalDateTime completedAt,
+        LocalDateTime cancelledAt,
+        String cancelReason,
+        @Schema(description = "Chauffeur à l'origine de la demande")
+        UUID requestedBy,
+        UUID expenseId,
+        String expenseStatus,
+        String expenseRejectionReason,
+
+        @Schema(description = "Flotte de l'opération, figée à sa création (le véhicule peut avoir changé de flotte depuis)")
+        java.util.UUID fleetId
 ) {
+    /** Même réponse avec la flotte de l'opération. */
+    public MaintenanceResponse withFleet(java.util.UUID fleet) {
+        return new MaintenanceResponse(id, subject, cost, dateTime, report, location, vehicleId, vehicleRegistration, driverId, driverFullName, status, maintenanceType, urgent, garage, plannedAt, startedAt, completedAt, cancelledAt, cancelReason, requestedBy, expenseId, expenseStatus, expenseRejectionReason, fleet);
+    }
+
+    public static MaintenanceResponse from(Maintenance m) {
+        return from(m, null);
+    }
+
 
     /**
      * DTO imbriqué pour la localisation GPS.
@@ -49,7 +78,8 @@ public record MaintenanceResponse(
     /**
      * Méthode de fabrique : construit la réponse depuis le modèle domaine.
      */
-    public static MaintenanceResponse from(Maintenance m) {
+    public static MaintenanceResponse from(Maintenance m,
+                                           com.yowyob.fleet.application.service.OperationLookup.ExpenseBrief expense) {
         LocationDto location = null;
         if (m.getLocation() != null) {
             location = new LocationDto(
@@ -71,7 +101,20 @@ public record MaintenanceResponse(
                 m.getVehicleId(),
                 m.getVehicleRegistrationNumber(),
                 m.getDriverId(),
-                m.getDriverFullName()
-        );
+                m.getDriverFullName(),
+                m.getStatus().name(),
+                m.getMaintenanceType(),
+                m.isUrgent(),
+                m.getLocationName(),
+                m.getPlannedAt(),
+                m.getStartedAt(),
+                m.getCompletedAt(),
+                m.getCancelledAt(),
+                m.getCancelReason(),
+                m.getRequestedBy(),
+                expense != null ? expense.id() : null,
+                expense != null ? expense.status() : null,
+                expense != null ? expense.rejectionReason() : null
+        , null);
     }
 }

@@ -65,6 +65,13 @@ public class MaintenancePersistenceAdapter implements MaintenancePersistencePort
     }
 
     @Override
+    public Flux<Maintenance> findForDriver(UUID driverId, UUID vehicleId) {
+        // Sans véhicule attitré : identifiant nul (aucun véhicule ne correspond).
+        UUID vehicle = vehicleId != null ? vehicleId : new UUID(0L, 0L);
+        return repository.findForDriver(driverId, vehicle, LocalDateTime.now().minusDays(30)).map(this::toDomain);
+    }
+
+    @Override
     public Mono<Long> countByDriverId(UUID driverId) {
         return repository.countByDriverId(driverId);
     }
@@ -86,7 +93,7 @@ public class MaintenancePersistenceAdapter implements MaintenancePersistencePort
                 ? new Coordinates(e.getLongitude(), e.getLatitude())
                 : null;
 
-        return new Maintenance(
+        Maintenance maintenance = new Maintenance(
                 e.getId(),
                 e.getSubject(),
                 e.getCost(),
@@ -99,6 +106,16 @@ public class MaintenancePersistenceAdapter implements MaintenancePersistencePort
                 e.getDriverId(),
                 e.getDriverFullName()
         );
+        Maintenance.Status status;
+        try {
+            status = e.getStatus() != null ? Maintenance.Status.valueOf(e.getStatus()) : Maintenance.Status.COMPLETED;
+        } catch (IllegalArgumentException ex) {
+            status = Maintenance.Status.COMPLETED;
+        }
+        maintenance.restoreWorkflow(status, e.getMaintenanceType(), Boolean.TRUE.equals(e.getUrgent()),
+                e.getPlannedAt(), e.getStartedAt(), e.getCompletedAt(), e.getCancelledAt(),
+                e.getCancelReason(), e.getRequestedBy());
+        return maintenance;
     }
 
     // ── Conversion Domain → Entity ────────────────────────────────────────────
@@ -115,6 +132,15 @@ public class MaintenancePersistenceAdapter implements MaintenancePersistencePort
         entity.setVehicleRegistration(m.getVehicleRegistrationNumber());
         entity.setDriverId(m.getDriverId());
         entity.setDriverFullName(m.getDriverFullName());
+        entity.setStatus(m.getStatus().name());
+        entity.setMaintenanceType(m.getMaintenanceType());
+        entity.setUrgent(m.isUrgent());
+        entity.setPlannedAt(m.getPlannedAt());
+        entity.setStartedAt(m.getStartedAt());
+        entity.setCompletedAt(m.getCompletedAt());
+        entity.setCancelledAt(m.getCancelledAt());
+        entity.setCancelReason(m.getCancelReason());
+        entity.setRequestedBy(m.getRequestedBy());
 
         if (m.getLocation() != null) {
             entity.setLongitude(m.getLocation().longitude());

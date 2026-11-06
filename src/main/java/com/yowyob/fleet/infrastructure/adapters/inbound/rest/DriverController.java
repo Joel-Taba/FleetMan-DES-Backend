@@ -40,14 +40,16 @@ public class DriverController {
     private final ManageDriverUseCase driverUseCase;
     private final com.yowyob.fleet.application.service.ResourceAccessService resourceAccess;
     private final com.yowyob.fleet.application.service.DriverAbsenceService absenceService;
+    private final com.yowyob.fleet.application.service.DriverAccountService accountService;
 
     private UUID getUserId(Authentication auth) { return ((AuthPort.UserDetail) auth.getPrincipal()).id(); }
     private String getToken(String header) { return header.startsWith("Bearer ") ? header.substring(7) : header; }
 
+    // Le gestionnaire ne crée plus de comptes chauffeur : réservé à l'administrateur de l'entreprise.
     @PostMapping("/drivers")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
-    @Operation(summary = "Créer un chauffeur")
+    @PreAuthorize("hasAnyRole('FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Créer un chauffeur", description = "Réservé à l'administrateur de l'entreprise.")
     public Mono<DriverResponse> createDriver(
             @org.springframework.web.bind.annotation.RequestBody ManagerDriverCreateRequest request,
             Authentication auth
@@ -63,6 +65,14 @@ public class DriverController {
             @org.springframework.web.bind.annotation.RequestBody ManagerDriverUpdateRequest request,
             Authentication auth
     ) {
+        // Les informations personnelles (identité, coordonnées, permis, photo) ne sont modifiables
+        // que par le chauffeur lui-même (« Mon profil ») ; ici seuls le statut et la flotte restent.
+        if (request.firstName() != null || request.lastName() != null || request.email() != null
+                || request.phone() != null || request.licenceNumber() != null || request.photoUrl() != null) {
+            return Mono.error(new com.yowyob.fleet.domain.exception.DriverException(
+                    "Les informations personnelles d'un chauffeur ne sont modifiables que par le chauffeur lui-même.",
+                    HttpStatus.FORBIDDEN, "DRV_025"));
+        }
         return driverUseCase.updateDriverForManager(userId, request, getUserId(auth));
     }
 
@@ -76,7 +86,7 @@ public class DriverController {
 
     @PostMapping(value = "/fleets/{fleetId}/drivers/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @PreAuthorize("hasAnyRole('FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
     @Operation(
         summary = "Créer un nouveau Chauffeur",
         description = "Crée le compte Auth + Profil local + Photo de profil."
@@ -153,8 +163,9 @@ public class DriverController {
     // ── Absences datées ──────────────────────────────────────────────────────
 
     @GetMapping("/drivers/{userId}/absences")
-    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
-    @Operation(summary = "Absences d'un chauffeur (congés, arrêts maladie, suspensions)")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN', 'FLEET_DRIVER')")
+    @Operation(summary = "Absences d'un chauffeur (congés, arrêts maladie, suspensions)",
+            description = "Le gestionnaire de la flotte, ou le chauffeur lui-même (lecture seule).")
     public Flux<com.yowyob.fleet.domain.model.DriverAbsence> absences(@PathVariable UUID userId, Authentication auth) {
         return absenceService.list(userId, getUserId(auth));
     }
@@ -206,4 +217,30 @@ public class DriverController {
     }
 
     public record VehicleAssignRequest(UUID vehicleId) {}
+
+    public record BlockRequest(String reason) {}
+
+    @GetMapping("/drivers/{userId}/account")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "État du compte d'un chauffeur (bloqué ou non, motif)")
+    public Mono<com.yowyob.fleet.application.service.DriverAccountService.AccountState> accountState(
+            @PathVariable UUID userId, Authentication auth) {
+        return accountService.state(getUserId(auth), userId);
+    }
+
+    @PostMapping("/drivers/{userId}/block")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Bloquer le compte d'un chauffeur", description = "Connexion refusée, chauffeur non engageable, historique conservé. Motif obligatoire ; refusé s'il a un trajet ou un poste ouvert.")
+    public Mono<com.yowyob.fleet.application.service.DriverAccountService.AccountState> block(
+            @PathVariable UUID userId, @org.springframework.web.bind.annotation.RequestBody BlockRequest req, Authentication auth) {
+        return accountService.block(getUserId(auth), userId, req.reason());
+    }
+
+    @PostMapping("/drivers/{userId}/unblock")
+    @PreAuthorize("hasRole('FLEET_MANAGER')")
+    @Operation(summary = "Débloquer le compte d'un chauffeur")
+    public Mono<com.yowyob.fleet.application.service.DriverAccountService.AccountState> unblock(
+            @PathVariable UUID userId, Authentication auth) {
+        return accountService.unblock(getUserId(auth), userId);
+    }
 }

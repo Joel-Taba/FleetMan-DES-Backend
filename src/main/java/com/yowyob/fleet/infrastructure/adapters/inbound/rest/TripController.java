@@ -2,6 +2,8 @@ package com.yowyob.fleet.infrastructure.adapters.inbound.rest;
 
 import com.yowyob.fleet.domain.model.Trip;
 import com.yowyob.fleet.domain.ports.in.ManageTripUseCase;
+import com.yowyob.fleet.domain.ports.in.TrackTripUseCase;
+import com.yowyob.fleet.domain.model.TripTracking;
 import com.yowyob.fleet.domain.ports.out.AuthPort;
 import com.yowyob.fleet.infrastructure.adapters.inbound.rest.dto.TelemetryRequest;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.TripMissionSubmissionEntity;
@@ -34,6 +36,7 @@ import reactor.core.publisher.Mono;
 public class TripController {
 
     private final ManageTripUseCase tripUseCase;
+    private final TrackTripUseCase trackingUseCase;
 
     private UUID getUserId(Authentication auth) {
         return ((AuthPort.UserDetail) auth.getPrincipal()).id();
@@ -118,7 +121,8 @@ public class TripController {
         String missionObject,
         String destinationLocation,
         BigDecimal destinationLat,
-        BigDecimal destinationLng
+        BigDecimal destinationLng,
+        java.time.LocalDateTime scheduledReturnDatetime
     ) {}
 
     public record MissionSubmissionRequest(
@@ -328,7 +332,8 @@ public class TripController {
                 req.missionObject(),
                 req.destinationLocation(),
                 req.destinationLat(),
-                req.destinationLng()
+                req.destinationLng(),
+                req.scheduledReturnDatetime()
             )
         );
     }
@@ -473,13 +478,37 @@ public class TripController {
     @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)
     @PostMapping("/{id}/telemetry")
     @PreAuthorize("hasRole('FLEET_DRIVER')")
-    @Operation(summary = "Envoyer un point de télémétrie GPS")
-    public Mono<Void> telemetry(
+    @Operation(summary = "Partager sa position GPS pendant le trajet en cours (un point toutes les ~30 s ; "
+        + "les points à moins de 15 s du précédent sont ignorés : accepted=false)")
+    public Mono<TripTracking.TelemetryAck> telemetry(
         @PathVariable UUID id,
         @RequestBody TelemetryRequest r,
         Authentication auth
     ) {
-        return tripUseCase.sendTelemetry(id, getUserId(auth), r.lat(), r.lng(), r.speed());
+        return trackingUseCase.sendTelemetry(id, getUserId(auth), r.lat(), r.lng(), r.speed(), r.accuracy());
+    }
+
+    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+    @GetMapping("/{id}/positions")
+    @PreAuthorize("hasAnyRole('FLEET_DRIVER', 'FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Suivi en direct d'un trajet : dernière position connue et tracé récent (du plus ancien au plus récent)")
+    public Mono<TripTracking.TripPositions> positions(
+        @PathVariable UUID id,
+        @RequestParam(required = false) Integer limit,
+        Authentication auth
+    ) {
+        return trackingUseCase.getPositions(id, getUserId(auth), limit);
+    }
+
+    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+    @GetMapping("/live-positions")
+    @PreAuthorize("hasAnyRole('FLEET_MANAGER', 'FLEET_ADMIN', 'FLEET_SUPER_ADMIN')")
+    @Operation(summary = "Suivi en direct : dernière position et tracé récent de tous les trajets en cours des flottes gérées")
+    public Flux<TripTracking.LiveTripPosition> livePositions(
+        @RequestParam(required = false) UUID fleetId,
+        Authentication auth
+    ) {
+        return trackingUseCase.getLivePositions(getUserId(auth), fleetId);
     }
 
     @Tag(name = OpenApiConfig.TAG_TRIPS_OPS)

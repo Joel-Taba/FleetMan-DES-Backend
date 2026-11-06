@@ -6,7 +6,6 @@ import com.yowyob.fleet.domain.ports.in.ManageTripUseCase.CreateTripCommand;
 import com.yowyob.fleet.domain.ports.out.DistanceCalculatorPort;
 import com.yowyob.fleet.domain.ports.out.DriverPersistencePort;
 import com.yowyob.fleet.domain.ports.out.ExternalGeofencePort;
-import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.RedisTelemetryAdapter;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.VehicleLocalEntity;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.FuelRechargeR2dbcRepository;
 import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.repository.OperationalParameterR2dbcRepository;
@@ -48,7 +47,6 @@ class TripServiceConflictTest {
     @Mock VehicleLocalR2dbcRepository vehicleRepository;
     @Mock DriverPersistencePort driverPersistence;
     @Mock OperationalParameterR2dbcRepository operationalRepo;
-    @Mock RedisTelemetryAdapter redisTelemetry;
     @Mock DistanceCalculatorPort distanceCalculator;
     @Mock ExternalGeofencePort geofenceApi;
     @Mock DatabaseClient db;
@@ -56,6 +54,7 @@ class TripServiceConflictTest {
     @Mock ResourceAvailabilityService availability;
     @Mock FuelRechargeR2dbcRepository fuelRechargeRepository;
     @Mock TripStopService stopService;
+    @Mock TripNotifier notifier;
 
     private TripService tripService;
     private UUID vehicleId;
@@ -66,8 +65,8 @@ class TripServiceConflictTest {
     void setUp() {
         tripService = new TripService(
                 tripRepository, detailRepository, submissionRepository, vehicleRepository,
-                driverPersistence, operationalRepo, redisTelemetry, distanceCalculator,
-                geofenceApi, db, accessScope, availability, fuelRechargeRepository, stopService
+                driverPersistence, operationalRepo, distanceCalculator,
+                geofenceApi, db, accessScope, availability, fuelRechargeRepository, stopService, notifier
         );
         vehicleId = UUID.randomUUID();
         driverId = UUID.randomUUID();

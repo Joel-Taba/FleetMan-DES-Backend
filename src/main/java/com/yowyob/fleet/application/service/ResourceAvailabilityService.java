@@ -163,10 +163,40 @@ public class ResourceAvailabilityService {
      */
     public Mono<Void> assertCrewQualified(UUID driverId, UUID vehicleId,
                                           LocalDateTime start, LocalDateTime end) {
-        return assertDriverPresent(driverId, start, end)
+        return assertSameFleet(driverId, vehicleId)
+                .then(assertDriverPresent(driverId, start, end))
                 .then(assertDriverLicensed(driverId, vehicleId, start, end))
                 .then(assertDriverFileCompliant(driverId, start, end))
                 .then(assertVehicleCompliant(vehicleId, start, end));
+    }
+
+    /**
+     * Un trajet ou un poste associe un chauffeur et un véhicule de la même flotte : chaque flotte
+     * garde ses ressources et son personnel séparés. Pour faire rouler un chauffeur sur le véhicule
+     * d'une autre flotte, le gestionnaire le change d'abord de flotte.
+     */
+    public Mono<Void> assertSameFleet(UUID driverId, UUID vehicleId) {
+        if (db == null || driverId == null || vehicleId == null) return Mono.empty();
+        return db.sql("""
+                        SELECT d.fleet_id AS driver_fleet, v.fleet_id AS vehicle_fleet,
+                               fd.name AS driver_fleet_name, fv.name AS vehicle_fleet_name
+                        FROM fleet.drivers d
+                        CROSS JOIN fleet.vehicles v
+                        LEFT JOIN fleet.fleets fd ON fd.id = d.fleet_id
+                        LEFT JOIN fleet.fleets fv ON fv.id = v.fleet_id
+                        WHERE d.user_id = :driver AND v.id = :vehicle
+                        """)
+                .bind("driver", driverId)
+                .bind("vehicle", vehicleId)
+                .map((row, meta) -> {
+                    UUID df = row.get("driver_fleet", UUID.class);
+                    UUID vf = row.get("vehicle_fleet", UUID.class);
+                    return java.util.Objects.equals(df, vf) ? "" : (row.get("driver_fleet_name", String.class) + "|"
+                            + row.get("vehicle_fleet_name", String.class));
+                })
+                .one()
+                .flatMap(diff -> diff.isEmpty() ? Mono.<Void>empty() : Mono.<Void>error(DriverException.fleetMismatch(
+                        diff.split("\\|", -1)[0], diff.split("\\|", -1)[1])));
     }
 
     /** Aucune absence (congé, arrêt maladie, suspension) sur les jours du créneau. */
@@ -277,7 +307,16 @@ public class ResourceAvailabilityService {
         if (!"ACTIVE".equals(driver.status()) || driver.fleetId() == null) {
             return Mono.error(onInactive.get());
         }
-        return accessScope.assertFleetAccess(actorId, driver.fleetId());
+        if (db == null) return accessScope.assertFleetAccess(actorId, driver.fleetId());
+        // Compte bloqué par le gestionnaire : le chauffeur reste dans l'effectif mais n'est plus engageable.
+        return db.sql("SELECT COALESCE(is_active, TRUE) AS active FROM fleet.users WHERE id = :id")
+                .bind("id", driver.userId())
+                .map((row, meta) -> Boolean.TRUE.equals(row.get("active", Boolean.class)))
+                .one()
+                .defaultIfEmpty(true)
+                .flatMap(active -> active
+                        ? accessScope.assertFleetAccess(actorId, driver.fleetId())
+                        : Mono.<Void>error(onInactive.get()));
     }
 
     private static Mono<Void> fail(Boolean condition, Supplier<? extends RuntimeException> error) {

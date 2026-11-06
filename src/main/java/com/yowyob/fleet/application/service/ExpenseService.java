@@ -29,6 +29,7 @@ public class ExpenseService implements ManageExpenseUseCase {
     private final CompanyScopeService companyScope;
     private final BudgetJournal budgetJournal;
     private final org.springframework.r2dbc.core.DatabaseClient db;
+    private final OperationNotifier notifications;
 
     // ── 1. CRÉATION MANUELLE ─────────────────────────────────────────────────
 
@@ -83,7 +84,8 @@ public class ExpenseService implements ManageExpenseUseCase {
                         if (cmd.receiptUrl() != null && !cmd.receiptUrl().isBlank()) {
                             expense.attachReceipt(cmd.receiptUrl(), cmd.receiptName(), cmd.receiptMime());
                         }
-                        return evaluateApproval(expense).flatMap(expensePersistence::save);
+                        return evaluateApproval(expense).flatMap(expensePersistence::save)
+                                .flatMap(saved -> notifications.expenseCreated(saved, cmd.createdBy()).thenReturn(saved));
                     }));
                 }));
     }
@@ -134,7 +136,8 @@ public class ExpenseService implements ManageExpenseUseCase {
                                     null);
                             expense.setCreatedBy(cmd.createdBy());
                             expense.attachReceipt(cmd.receiptUrl(), cmd.receiptName(), cmd.receiptMime());
-                            return evaluateApproval(expense).flatMap(expensePersistence::save);
+                            return evaluateApproval(expense).flatMap(expensePersistence::save)
+                                    .flatMap(saved -> notifications.expenseCreated(saved, cmd.createdBy()).thenReturn(saved));
                         })));
     }
 
@@ -297,7 +300,9 @@ public class ExpenseService implements ManageExpenseUseCase {
                 .flatMap(saved -> {
                     log.info("✅ Dépense auto [{}] créée pour véhicule {} : montant: {} FCFA",
                             type, vehicleId, amount);
-                    return refreshBudgets(fleetId, vehicleId, saved.getExpenseDate()).thenReturn(saved);
+                    return refreshBudgets(fleetId, vehicleId, saved.getExpenseDate())
+                            .then(notifications.expenseCreated(saved, null))
+                            .thenReturn(saved);
                 });
     }
 
@@ -336,6 +341,34 @@ public class ExpenseService implements ManageExpenseUseCase {
                                         driverId, null))
                                 .thenReturn(true)))
                 .then();
+    }
+
+    @Override
+    public Mono<Void> syncDeclaredAutoExpense(Expense.ExpenseType type, UUID sourceId, BigDecimal amount, String description,
+                                              UUID vehicleId, UUID driverId, String receiptUrl, String receiptName,
+                                              String receiptMime) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return syncAutoExpense(type, sourceId, amount, description, vehicleId, driverId);
+        }
+        return expensePersistence.findBySourceId(sourceId)
+                .filter(e -> e.getSourceType() == Expense.SourceType.AUTO)
+                .hasElements()
+                .flatMap(exists -> exists
+                        ? syncAutoExpense(type, sourceId, amount, description, vehicleId, driverId)
+                        : vehiclePersistence.getLocalDataById(vehicleId)
+                                .flatMap(v -> fullName(driverId).flatMap(name -> {
+                                    Expense expense = new Expense(null, type, amount, description, LocalDateTime.now(),
+                                            Expense.SourceType.AUTO, sourceId, vehicleId, v.licensePlate(), v.fleetId(),
+                                            v.managerId(), driverId, name.isBlank() ? null : name, null);
+                                    expense.requireValidation();
+                                    expense.setCreatedBy(driverId);
+                                    if (receiptUrl != null && !receiptUrl.isBlank()) {
+                                        expense.attachReceipt(receiptUrl, receiptName, receiptMime);
+                                    }
+                                    return evaluateApproval(expense).flatMap(expensePersistence::save)
+                                            .flatMap(saved -> notifications.expenseCreated(saved, driverId));
+                                }))
+                                .then());
     }
 
     @Override
@@ -456,11 +489,16 @@ public class ExpenseService implements ManageExpenseUseCase {
                     return Mono.zip(approvalNeeds(expense), isCompanyAdminOfFleet(managerId, expense.getFleetId()))
                             .flatMap(t -> {
                                 ApprovalNeeds needs = t.getT1();
+                                boolean newlyEscalated = needs.admin() && expense.getApprovalLevel() != Expense.ApprovalLevel.ADMIN;
                                 expense.setApprovalLevel(needs.admin() ? Expense.ApprovalLevel.ADMIN : Expense.ApprovalLevel.MANAGER);
                                 expense.setOverBudget(needs.overBudget());
                                 if (needs.admin() && !Boolean.TRUE.equals(t.getT2())) {
-                                    // Escalade : la dépense reste en attente, désormais chez l'administrateur.
+                                    // Escalade : la dépense reste en attente, désormais chez l'administrateur
+                                    // (prévenu la première fois que la dépense passe à son niveau).
                                     return expensePersistence.save(expense)
+                                            .flatMap(saved -> newlyEscalated
+                                                    ? notifications.expenseEscalated(saved, managerId, needs.reason())
+                                                    : Mono.<Void>empty())
                                             .then(Mono.<Expense>error(BudgetException.adminApprovalRequired(needs.reason())));
                                 }
                                 expense.approve(managerId);
@@ -468,6 +506,7 @@ public class ExpenseService implements ManageExpenseUseCase {
                                         .flatMap(saved -> refreshBudgets(saved.getFleetId(), saved.getVehicleId(),
                                                 saved.getExpenseDate()).thenReturn(saved))
                                         .flatMap(saved -> syncIncidentCost(saved.getSourceId()).thenReturn(saved))
+                                        .flatMap(saved -> notifications.expenseDecided(saved, managerId).thenReturn(saved))
                                         .doOnSuccess(saved -> log.info("✅ Dépense {} approuvée par {}", expenseId, managerId));
                             });
                 });
@@ -493,6 +532,7 @@ public class ExpenseService implements ManageExpenseUseCase {
                         }
                         expense.reject(cmd.managerId(), cmd.rejectionReason());
                         return expensePersistence.save(expense)
+                                .flatMap(saved -> notifications.expenseDecided(saved, cmd.managerId()).thenReturn(saved))
                                 .doOnSuccess(saved -> log.info("❌ Dépense {} rejetée par {} : motif: {}",
                                         cmd.expenseId(), cmd.managerId(), cmd.rejectionReason()));
                     });

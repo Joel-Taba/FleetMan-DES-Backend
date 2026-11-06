@@ -27,7 +27,9 @@ import java.util.function.Supplier;
  * Les clés sont mises en cache par {@code kid}. Un {@code kid} inconnu déclenche
  * un rechargement du JWKS (rotation de clé côté Kernel), au plus une fois par
  * minute pour qu'un token forgé avec des {@code kid} aléatoires ne puisse pas
- * provoquer un appel au Kernel à chaque requête.
+ * provoquer un appel au Kernel à chaque requête. Les requêtes qui arrivent pendant
+ * un chargement en cours l'attendent : au démarrage, les appels parallèles d'un même
+ * écran étaient sinon refusés (401) et le client se déconnectait.
  */
 @Slf4j
 public class KernelJwtVerifier {
@@ -38,6 +40,8 @@ public class KernelJwtVerifier {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, PublicKey> keysByKid = new ConcurrentHashMap<>();
     private volatile Instant lastReload = Instant.EPOCH;
+    /** Dernier chargement du JWKS, partagé (mis en cache) avec les requêtes concurrentes. */
+    private volatile Mono<Void> lastLoad = Mono.empty();
 
     public KernelJwtVerifier(Supplier<Mono<String>> jwksFetcher) {
         this.jwksFetcher = jwksFetcher;
@@ -86,25 +90,33 @@ public class KernelJwtVerifier {
         if (cached != null) {
             return Mono.just(cached);
         }
-        if (Instant.now().isBefore(lastReload.plus(MIN_RELOAD_INTERVAL))) {
-            log.warn("⚠️ [JWT] Clé inconnue (kid={}), rechargement JWKS trop récent", kid);
-            return Mono.error(AuthException.tokenExpired());
+        Mono<Void> load;
+        synchronized (this) {
+            if (Instant.now().isBefore(lastReload.plus(MIN_RELOAD_INTERVAL))) {
+                // Pas de nouvel appel au Kernel : on attend le chargement récent (éventuellement
+                // encore en cours) puis on cherche la clé ; un kid inconnu reste refusé.
+                load = lastLoad;
+            } else {
+                lastReload = Instant.now();
+                load = jwksFetcher.get()
+                        .doOnNext(this::loadKeys)
+                        .then()
+                        .onErrorResume(e -> {
+                            log.error("❌ [JWT] Chargement JWKS Kernel impossible : {}", e.getMessage());
+                            return Mono.error(AuthException.remoteServiceUnavailable());
+                        })
+                        .cache();
+                lastLoad = load;
+            }
         }
-        lastReload = Instant.now();
-        return jwksFetcher.get()
-                .doOnNext(this::loadKeys)
-                .onErrorResume(e -> {
-                    log.error("❌ [JWT] Chargement JWKS Kernel impossible : {}", e.getMessage());
-                    return Mono.error(AuthException.remoteServiceUnavailable());
-                })
-                .then(Mono.defer(() -> {
-                    PublicKey key = findKey(kid);
-                    if (key == null) {
-                        log.warn("⚠️ [JWT] Aucune clé Kernel pour kid={}", kid);
-                        return Mono.<PublicKey>error(AuthException.tokenExpired());
-                    }
-                    return Mono.just(key);
-                }));
+        return load.then(Mono.defer(() -> {
+            PublicKey key = findKey(kid);
+            if (key == null) {
+                log.warn("⚠️ [JWT] Aucune clé Kernel pour kid={}", kid);
+                return Mono.<PublicKey>error(AuthException.tokenExpired());
+            }
+            return Mono.just(key);
+        }));
     }
 
     /** Sans {@code kid} dans l'en-tête, on n'accepte que si le JWKS ne contient qu'une clé. */

@@ -16,6 +16,9 @@ public interface NotificationR2dbcRepository extends ReactiveCrudRepository<Noti
 
     Mono<Long> countByUserId(UUID userId);
 
+    @Query("SELECT COUNT(*) FROM fleet.notifications WHERE user_id = :userId AND is_read = false")
+    Mono<Long> countUnreadByUserId(UUID userId);
+
     Mono<NotificationEntity> findByIdAndUserId(UUID id, UUID userId);
 
     @Modifying

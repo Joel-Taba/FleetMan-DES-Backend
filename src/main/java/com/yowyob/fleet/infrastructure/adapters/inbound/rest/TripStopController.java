@@ -56,6 +56,15 @@ public class TripStopController {
 
     public record SkipRequest(String reason) {}
 
+    /** Ligne du manifeste rattachée à un arrêt (modifiable avant le départ). */
+    public record ManifestLineRequest(UUID stopId, @jakarta.validation.constraints.NotBlank String itemType,
+                                      String description, @NotNull Integer quantity,
+                                      java.math.BigDecimal weight, Integer departureQuantity) {
+        ManageTripUseCase.TripDetailInput toInput() {
+            return new ManageTripUseCase.TripDetailInput(itemType, description, quantity, weight, departureQuantity, null);
+        }
+    }
+
     @GetMapping("/availability")
     @PreAuthorize(MANAGERS)
     @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
@@ -155,5 +164,33 @@ public class TripStopController {
     public Mono<TripStop> skip(@PathVariable UUID tripId, @PathVariable UUID stopId,
                                @RequestBody SkipRequest req, Authentication auth) {
         return stops.skip(tripId, stopId, AuthPrincipal.userId(auth), req.reason());
+    }
+
+    @PostMapping("/{tripId}/details")
+    @PreAuthorize(MANAGERS)
+    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+    @Operation(summary = "Ajouter une ligne au manifeste d'un trajet planifié (stopId obligatoire)")
+    public Mono<Void> addLine(@PathVariable UUID tripId, @Valid @RequestBody ManifestLineRequest req, Authentication auth) {
+        if (req.stopId() == null) {
+            return Mono.error(TripException.invalidManifestLine("Choisissez l'arrêt de la ligne."));
+        }
+        return stops.addLine(tripId, req.stopId(), AuthPrincipal.userId(auth), req.toInput());
+    }
+
+    @PutMapping("/{tripId}/details/{detailId}")
+    @PreAuthorize(MANAGERS)
+    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+    @Operation(summary = "Modifier une ligne du manifeste avant le départ")
+    public Mono<Void> updateLine(@PathVariable UUID tripId, @PathVariable UUID detailId,
+                                 @Valid @RequestBody ManifestLineRequest req, Authentication auth) {
+        return stops.updateLine(tripId, detailId, req.stopId(), AuthPrincipal.userId(auth), req.toInput());
+    }
+
+    @DeleteMapping("/{tripId}/details/{detailId}")
+    @PreAuthorize(MANAGERS)
+    @Tag(name = OpenApiConfig.TAG_TRIPS_MGT)
+    @Operation(summary = "Retirer une ligne du manifeste avant le départ")
+    public Mono<Void> deleteLine(@PathVariable UUID tripId, @PathVariable UUID detailId, Authentication auth) {
+        return stops.deleteLine(tripId, detailId, AuthPrincipal.userId(auth));
     }
 }

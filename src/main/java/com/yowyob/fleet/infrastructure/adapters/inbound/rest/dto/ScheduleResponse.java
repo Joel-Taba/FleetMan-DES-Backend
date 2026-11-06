@@ -18,8 +18,19 @@ public record ScheduleResponse(
         LocalDate endDate,
         String status,
         String notes,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        @Schema(description = "Postes à venir ou en cours")
+        Long upcomingShifts,
+        @Schema(description = "Postes à venir dont le chauffeur a accusé réception")
+        Long acknowledgedShifts,
+        @Schema(description = "Postes modifiés après publication et pas encore confirmés")
+        Long changedUnacknowledged
 ) {
+    public ScheduleResponse withAcks(long upcoming, long acknowledged, long changed) {
+        return new ScheduleResponse(id, fleetId, managerId, title, periodType, startDate, endDate, status, notes, createdAt,
+                upcoming, acknowledged, changed);
+    }
+
     public static ScheduleResponse from(Schedule s) {
         return new ScheduleResponse(
                 s.getId(),
@@ -31,7 +42,8 @@ public record ScheduleResponse(
                 s.getEndDate(),
                 s.getStatus().name(),
                 s.getNotes(),
-                s.getCreatedAt()
+                s.getCreatedAt(),
+                null, null, null
         );
     }
 }

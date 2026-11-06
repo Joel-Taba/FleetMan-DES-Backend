@@ -38,4 +38,7 @@ public interface MaintenancePersistencePort {
     Mono<Boolean> existsById(UUID id);
 
     Mono<Void> deleteById(UUID id);
+
+    /** Demandes du chauffeur, maintenances où il est cité, et celles (ouvertes ou récentes) de son véhicule. */
+    Flux<Maintenance> findForDriver(UUID driverId, UUID vehicleId);
 }

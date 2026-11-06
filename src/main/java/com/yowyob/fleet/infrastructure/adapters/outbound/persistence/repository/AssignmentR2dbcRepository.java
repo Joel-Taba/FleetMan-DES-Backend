@@ -4,6 +4,7 @@ import com.yowyob.fleet.infrastructure.adapters.outbound.persistence.entity.Assi
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -79,4 +80,21 @@ public interface AssignmentR2dbcRepository
                                                     LocalDateTime startDatetime,
                                                     LocalDateTime endDatetime,
                                                     UUID excludeId);
+
+    /**
+     * Poste ouvert du chauffeur sur ce véhicule : en cours, ou en attente et dont le
+     * créneau chevauche la journée [dayStart, dayEnd).
+     */
+    @Query("""
+            SELECT COUNT(*) > 0 FROM fleet.assignments
+            WHERE driver_id = :driverId
+              AND vehicle_id = :vehicleId
+              AND status IN ('PENDING','IN_PROGRESS')
+              AND (status = 'IN_PROGRESS'
+                   OR (start_datetime < :dayEnd AND end_datetime > :dayStart))
+            """)
+    Mono<Boolean> existsOpenShiftForDriverOnVehicle(UUID driverId,
+                                                    UUID vehicleId,
+                                                    LocalDateTime dayStart,
+                                                    LocalDateTime dayEnd);
 }

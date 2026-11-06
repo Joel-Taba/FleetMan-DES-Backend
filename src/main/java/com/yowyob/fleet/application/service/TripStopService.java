@@ -50,6 +50,7 @@ public class TripStopService {
     private final TripR2dbcRepository trips;
     private final AccessScopeService accessScope;
     private final DatabaseClient db;
+    private final TripNotifier notifier;
 
     // ── Plan ─────────────────────────────────────────────────────────────────
 
@@ -134,7 +135,8 @@ public class TripStopService {
                         .then(details.saveAll(manifest).then())
                         .then(reopen)
                         .then(syncDestination(tripId))
-                        .then(Mono.defer(() -> stops.findById(stop.getId()).map(TripStopService::toDomain)));
+                        .then(Mono.defer(() -> stops.findById(stop.getId())))
+                        .flatMap(saved -> notifier.stopAdded(trip, saved, actorId).thenReturn(toDomain(saved)));
             });
         });
     }
@@ -158,7 +160,8 @@ public class TripStopService {
                 }
                 apply(stop, input);
                 stop.setNew(false);
-                return stops.save(stop);
+                return stops.save(stop)
+                        .flatMap(saved -> notifier.stopUpdated(trip, saved, actorId).thenReturn(saved));
             });
         }).flatMap(saved -> syncDestination(tripId).thenReturn(toDomain(saved)));
     }
@@ -181,7 +184,8 @@ public class TripStopService {
                 List<UUID> order = existing.stream().map(TripStopEntity::getId).filter(id -> !id.equals(stopId)).toList();
                 return db.sql("DELETE FROM fleet.trip_details WHERE stop_id = :stop").bind("stop", stopId).fetch().rowsUpdated()
                         .then(stops.delete(target))
-                        .then(resequence(tripId, order));
+                        .then(resequence(tripId, order))
+                        .then(notifier.updated(trip, actorId, List.of("arrêt « " + target.getLocation() + " » retiré de la tournée")));
             });
         });
     }
@@ -210,9 +214,96 @@ public class TripStopService {
                         previous = planned;
                     }
                 }
-                return resequence(tripId, order).then(stopsOf(tripId));
+                boolean changed = !order.equals(ids);
+                return resequence(tripId, order)
+                        .then(changed ? notifier.updated(trip, actorId, List.of("ordre de passage des arrêts modifié")) : Mono.<Void>empty())
+                        .then(stopsOf(tripId));
             });
         });
+    }
+
+    // ── Manifeste (avant le départ) ──────────────────────────────────────────
+
+    /** Ajoute une ligne de chargement à un arrêt d'un trajet planifié. */
+    @Transactional
+    public Mono<Void> addLine(UUID tripId, UUID stopId, UUID actorId, TripDetailInput input) {
+        validateLine(input);
+        return plannedTrip(tripId, actorId).flatMap(trip -> owned(tripId, stopId).flatMap(stop ->
+                details.findAllByTripIdOrderBySortOrder(tripId).collectList().flatMap(all -> {
+                    int next = all.stream().mapToInt(TripDetailEntity::getSortOrder).max().orElse(-1) + 1;
+                    TripDetailEntity line = newLine(tripId, stopId, input, next);
+                    return details.save(line).then(notifier.updated(trip, actorId,
+                            List.of("manifeste : " + lineLabel(line) + " ajouté à l'arrêt « " + stop.getLocation() + " »")));
+                })));
+    }
+
+    /** Modifie une ligne du manifeste (type, description, quantité, poids, arrêt) avant le départ. */
+    @Transactional
+    public Mono<Void> updateLine(UUID tripId, UUID detailId, UUID stopId, UUID actorId, TripDetailInput input) {
+        validateLine(input);
+        return plannedTrip(tripId, actorId).flatMap(trip -> ownedLine(tripId, detailId).flatMap(line -> {
+            Mono<UUID> target = stopId == null ? Mono.just(line.getStopId()) : owned(tripId, stopId).map(TripStopEntity::getId);
+            return target.flatMap(sid -> {
+                line.setStopId(sid);
+                line.setItemType(input.itemType());
+                line.setDescription(input.description());
+                line.setQuantity(input.quantity());
+                line.setWeight(input.weight());
+                line.setDepartureQuantity(input.departureQuantity() != null ? input.departureQuantity() : input.quantity());
+                line.setNew(false);
+                return details.save(line).then(notifier.updated(trip, actorId,
+                        List.of("manifeste : " + lineLabel(line) + " modifié")));
+            });
+        }));
+    }
+
+    /** Retire une ligne du manifeste avant le départ. */
+    @Transactional
+    public Mono<Void> deleteLine(UUID tripId, UUID detailId, UUID actorId) {
+        return plannedTrip(tripId, actorId).flatMap(trip -> ownedLine(tripId, detailId).flatMap(line ->
+                details.delete(line).then(notifier.updated(trip, actorId,
+                        List.of("manifeste : " + lineLabel(line) + " retiré")))));
+    }
+
+    private Mono<TripEntity> plannedTrip(UUID tripId, UUID actorId) {
+        return tripFor(tripId, actorId, true).flatMap(trip -> "SCHEDULED".equals(trip.getStatus())
+                ? Mono.just(trip)
+                : Mono.error(TripException.manifestOnlyPlanned()));
+    }
+
+    private Mono<TripDetailEntity> ownedLine(UUID tripId, UUID detailId) {
+        return details.findById(detailId)
+                .filter(d -> tripId.equals(d.getTripId()))
+                .switchIfEmpty(Mono.error(TripException.detailNotInTrip()));
+    }
+
+    static void validateLine(TripDetailInput input) {
+        if (input == null || input.itemType() == null) {
+            throw TripException.invalidManifestLine("Indiquez le type de chargement.");
+        }
+        try {
+            com.yowyob.fleet.domain.model.TripDetail.ItemType.valueOf(input.itemType());
+        } catch (IllegalArgumentException e) {
+            throw TripException.invalidManifestLine("Type de chargement inconnu : " + input.itemType() + ".");
+        }
+        if (input.quantity() < 1) {
+            throw TripException.invalidManifestLine("La quantité doit être d'au moins 1.");
+        }
+        if (input.departureQuantity() != null && input.departureQuantity() < 0) {
+            throw TripException.invalidManifestLine("La quantité chargée ne peut pas être négative.");
+        }
+        if (input.weight() != null && input.weight().signum() < 0) {
+            throw TripException.invalidManifestLine("Le poids ne peut pas être négatif.");
+        }
+        if (input.description() != null && input.description().length() > 255) {
+            throw TripException.invalidManifestLine("La description ne doit pas dépasser 255 caractères.");
+        }
+    }
+
+    private static String lineLabel(TripDetailEntity line) {
+        String name = line.getDescription() != null && !line.getDescription().isBlank()
+                ? "« " + line.getDescription().trim() + " »" : "ligne " + line.getItemType();
+        return name + " × " + line.getQuantity();
     }
 
     // ── Exécution ────────────────────────────────────────────────────────────
@@ -229,7 +320,14 @@ public class TripStopService {
             stop.setArrivedAt(TripStopRules.boundedTime(declaredAt, departedAt(ctx.trip()), now()));
             stop.setUpdatedAt(LocalDateTime.now());
             stop.setNew(false);
-            return stops.save(stop).map(TripStopService::toDomain);
+            return stops.save(stop).flatMap(saved -> {
+                // Seule une arrivée en retard (au-delà de la tolérance) remonte au gestionnaire.
+                Long delay = TripStopRules.delayMinutes(saved.getPlannedArrival(), saved.getArrivedAt());
+                Mono<Void> late = "LATE".equals(TripStopRules.punctuality(saved.getPlannedArrival(), saved.getArrivedAt()))
+                        ? notifier.lateArrival(ctx.trip(), saved, delay, actorId)
+                        : Mono.empty();
+                return late.thenReturn(toDomain(saved));
+            });
         });
     }
 
@@ -286,8 +384,13 @@ public class TripStopService {
                 stop.setFailureNotes(null);
                 stop.setUpdatedAt(LocalDateTime.now());
                 stop.setNew(false);
+                int shortages = (int) ofStop.stream()
+                        .filter(l -> l.getDeliveredQuantity() != null && l.getDeliveredQuantity() < expectedQuantity(l))
+                        .count();
                 return details.saveAll(ofStop).then(stops.save(stop))
-                        .flatMap(saved -> closeTourIfDone(ctx.trip()).thenReturn(toDomain(saved)));
+                        .flatMap(saved -> (shortages > 0 ? notifier.stopShortage(ctx.trip(), saved, shortages, actorId) : Mono.<Void>empty())
+                                .then(closeTourIfDone(ctx.trip(), actorId))
+                                .thenReturn(toDomain(saved)));
             });
         });
     }
@@ -296,10 +399,8 @@ public class TripStopService {
     @Transactional
     public Mono<TripStop> fail(UUID tripId, UUID stopId, UUID actorId, String reason, String notes) {
         TripStopRules.validateFailureReason(reason);
-        return servable(tripId, stopId, actorId).flatMap(ctx -> close(ctx, "FAILED", reason, TripStopRules.clean(notes))
-                .flatMap(stop -> notifyManager(ctx.trip(), "Arrêt non servi",
-                        "Trajet " + ctx.trip().getTripCode() + " : l'arrêt « " + stop.location() + " » n'a pas pu être servi.",
-                        "TRIP_STOP_FAILED").thenReturn(stop)));
+        return servable(tripId, stopId, actorId).flatMap(ctx -> close(ctx, "FAILED", reason, TripStopRules.clean(notes), actorId,
+                saved -> notifier.stopFailed(ctx.trip(), saved, actorId)));
     }
 
     /** Le gestionnaire retire un arrêt de la tournée en route (client annulé, réorganisation). */
@@ -311,7 +412,8 @@ public class TripStopService {
         }
         return tripFor(tripId, actorId, true)
                 .then(servable(tripId, stopId, actorId))
-                .flatMap(ctx -> close(ctx, "SKIPPED", null, why));
+                .flatMap(ctx -> close(ctx, "SKIPPED", null, why, actorId,
+                        saved -> notifier.stopSkipped(ctx.trip(), saved, why, actorId)));
     }
 
     // ── Liens avec le cycle du trajet ────────────────────────────────────────
@@ -372,7 +474,7 @@ public class TripStopService {
             stop.setLongitude(lng);
             stop.setUpdatedAt(LocalDateTime.now());
             stop.setNew(false);
-            return stops.save(stop).then();
+            return stops.save(stop).then(syncDestination(tripId));
         });
     }
 
@@ -391,7 +493,8 @@ public class TripStopService {
         });
     }
 
-    private Mono<TripStop> close(Context ctx, String status, String reason, String notes) {
+    private Mono<TripStop> close(Context ctx, String status, String reason, String notes, UUID actorId,
+                                 java.util.function.Function<TripStopEntity, Mono<Void>> notify) {
         TripStopEntity stop = ctx.stop();
         return details.findAllByTripIdOrderBySortOrder(stop.getTripId())
                 .filter(d -> stop.getId().equals(d.getStopId()))
@@ -411,11 +514,13 @@ public class TripStopService {
                     stop.setNew(false);
                     return stops.save(stop);
                 }))
-                .flatMap(saved -> closeTourIfDone(ctx.trip()).thenReturn(toDomain(saved)));
+                .flatMap(saved -> notify.apply(saved)
+                        .then(closeTourIfDone(ctx.trip(), actorId))
+                        .thenReturn(toDomain(saved)));
     }
 
     /** Tous les arrêts clos : livraisons terminées, le chauffeur rentre à la base. */
-    private Mono<Void> closeTourIfDone(TripEntity trip) {
+    private Mono<Void> closeTourIfDone(TripEntity trip, UUID actorId) {
         return stops.findAllByTripIdOrderBySequence(trip.getId()).collectList().flatMap(all -> {
             if (!TripStopRules.allTerminal(all.stream().map(TripStopEntity::getStatus).toList())) {
                 return Mono.<Void>empty();
@@ -432,22 +537,9 @@ public class TripStopService {
                     """)
                     .bind("at", at).bind("location", last.getLocation()).bind("id", trip.getId())
                     .fetch().rowsUpdated()
-                    .then(notifyManager(trip, "Tournée terminée",
-                            "Trajet " + trip.getTripCode() + " : " + served + "/" + all.size()
-                                    + " arrêt(s) servi(s), retour à la base en cours.", "TRIP_TOUR_DONE"));
+                    // Une seule notification : seulement quand c'est cette action qui clôt la tournée.
+                    .flatMap(updated -> updated > 0 ? notifier.tourDone(trip, served, all.size(), actorId) : Mono.<Void>empty());
         });
-    }
-
-    private Mono<Void> notifyManager(TripEntity trip, String title, String message, String type) {
-        return db.sql("""
-                INSERT INTO fleet.notifications (id, user_id, title, message, type, is_read, created_at, data, tenant_id)
-                SELECT gen_random_uuid(), f.manager_id, :title, :message, 'INFO', FALSE, :now, :data, f.tenant_id
-                FROM fleet.fleets f WHERE f.id = :fleet AND f.manager_id IS NOT NULL
-                """)
-                .bind("title", title).bind("message", message).bind("now", LocalDateTime.now())
-                .bind("data", "{\"type\":\"" + type + "\",\"tripId\":\"" + trip.getId() + "\"}")
-                .bind("fleet", trip.getFleetId())
-                .fetch().rowsUpdated().then();
     }
 
     /** Le trajet, si l'acteur en est le chauffeur ou gère sa flotte ({@code managerOnly} : gestionnaire seul). */

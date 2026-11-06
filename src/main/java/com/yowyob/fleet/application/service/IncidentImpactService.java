@@ -44,21 +44,30 @@ public class IncidentImpactService {
     private final TripR2dbcRepository tripRepository;
     private final IncidentPersistencePort incidentPersistence;
     private final AssignmentPersistencePort assignmentPort;
+    private final IncidentNotifier notifier;
 
     /** Applique (ou lève) l'immobilisation selon l'état courant de l'incident, déjà enregistré. */
     public Mono<Incident> applyImpact(Incident incident) {
+        return applyImpact(incident, null);
+    }
+
+    /**
+     * Idem, en prévenant le chauffeur du trajet interrompu ou repris (sauf s'il est l'auteur de
+     * l'action, {@code actorId} = utilisateur local).
+     */
+    public Mono<Incident> applyImpact(Incident incident, UUID actorId) {
         if (incident.immobilizesVehicle() && !incident.isVehicleImmobilized()) {
-            return immobilize(incident);
+            return immobilize(incident, actorId);
         }
         if (!incident.immobilizesVehicle() && incident.isVehicleImmobilized()) {
-            return release(incident);
+            return release(incident, actorId);
         }
         return Mono.just(incident);
     }
 
     /** À appeler avant la suppression d'un incident : libère le véhicule s'il le retenait. */
     public Mono<Void> releaseBeforeDelete(Incident incident) {
-        return incident.isVehicleImmobilized() ? release(incident).then() : Mono.empty();
+        return incident.isVehicleImmobilized() ? release(incident, null).then() : Mono.empty();
     }
 
     /**
@@ -91,7 +100,7 @@ public class IncidentImpactService {
         });
     }
 
-    private Mono<Incident> immobilize(Incident incident) {
+    private Mono<Incident> immobilize(Incident incident, UUID actorId) {
         UUID vehicleId = incident.getVehicleId();
         return vehicleRepository.findById(vehicleId)
                 .filter(v -> v.getDeletedAt() == null)
@@ -110,7 +119,7 @@ public class IncidentImpactService {
                         return Mono.just(incident);
                     }
                     incident.setVehicleImmobilized(true);
-                    return interruptTrips(vehicleId, incident.getId())
+                    return interruptTrips(incident, actorId)
                             .then(incidentPersistence.save(incident))
                             .doOnSuccess(i -> log.info("⛔ Véhicule {} immobilisé par l'incident {}",
                                     vehicleId, incident.getId()));
@@ -118,13 +127,13 @@ public class IncidentImpactService {
                 .defaultIfEmpty(incident);
     }
 
-    private Mono<Incident> release(Incident incident) {
+    private Mono<Incident> release(Incident incident, UUID actorId) {
         UUID vehicleId = incident.getVehicleId();
         incident.setVehicleImmobilized(false);
         Mono<Void> freeVehicle = otherImmobilizingIncident(incident).hasElement()
                 .flatMap(stillHeld -> Boolean.TRUE.equals(stillHeld)
                         ? Mono.<Void>empty()
-                        : freeVehicle(vehicleId).then(resumeTrips(vehicleId)));
+                        : freeVehicle(vehicleId).then(resumeTrips(incident, actorId)));
         return incidentPersistence.save(incident)
                 .flatMap(saved -> freeVehicle.thenReturn(saved));
     }
@@ -150,30 +159,35 @@ public class IncidentImpactService {
                 .then();
     }
 
-    private Mono<Void> interruptTrips(UUID vehicleId, UUID incidentId) {
+    private Mono<Void> interruptTrips(Incident incident, UUID actorId) {
         LocalDateTime now = LocalDateTime.now();
-        return tripRepository.findInProgressTripsForVehicle(vehicleId)
+        return tripRepository.findInProgressTripsForVehicle(incident.getVehicleId())
                 .filter(trip -> !trip.isInterrupted())
                 .flatMap(trip -> {
                     trip.setInterruptedAt(now);
                     trip.setResumedAt(null);
-                    trip.setInterruptionIncidentId(incidentId);
+                    trip.setInterruptionIncidentId(incident.getId());
                     trip.setNew(false);
                     return tripRepository.save(trip);
                 })
+                .concatMap(trip -> notifier.tripInterrupted(incident, trip.getId(), trip.getTripCode(), trip.getDriverId(), actorId)
+                        .onErrorResume(e -> Mono.empty()))
                 .then();
     }
 
     /** Le véhicule redevient utilisable : ses trajets en cours interrompus reprennent. */
-    private Mono<Void> resumeTrips(UUID vehicleId) {
+    private Mono<Void> resumeTrips(Incident incident, UUID actorId) {
         LocalDateTime now = LocalDateTime.now();
-        return tripRepository.findInProgressTripsForVehicle(vehicleId)
+        return tripRepository.findInProgressTripsForVehicle(incident.getVehicleId())
                 .filter(TripEntity::isInterrupted)
                 .flatMap(trip -> {
                     trip.setResumedAt(now);
                     trip.setNew(false);
                     return tripRepository.save(trip);
                 })
+                .concatMap(trip -> notifier.tripResumed(incident, trip.getId(), trip.getTripCode(), trip.getDriverId(),
+                                trip.getFleetId(), actorId)
+                        .onErrorResume(e -> Mono.empty()))
                 .then();
     }
 

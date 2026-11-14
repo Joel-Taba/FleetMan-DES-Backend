@@ -82,6 +82,11 @@ public class OpenApiConfig {
     public static final String TAG_TRIPS_OPS = "11a. Trips | Opérations Chauffeur (Mobile)";
     public static final String TAG_TRIPS_MGT = "11b. Trips | Suivi & Historique (Manager)";
 
+    // --- MODULE 21 : MISSIONS & LIVRAISON (TiiBnTick & Fleetman - G4) ---
+    public static final String TAG_MISSIONS = "21. Missions | Coordination Livraisons";
+    public static final String TAG_PROOFS   = "22. Preuves | Preuves de Livraison & Intégrité";
+    public static final String TAG_TOURS    = "23. Tournées | Planification & Optimisation OR-Tools";
+
     @Bean
     public OpenAPI customOpenAPI() {
         final String securitySchemeName = "bearerAuth";

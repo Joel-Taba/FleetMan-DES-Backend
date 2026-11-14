@@ -189,3 +189,7 @@ databaseChangeLog:
   # 49. created_by_admin_id NOT NULL + FK vers platform_admins.
   - include:
       file: db/changelog/changes/049-manager-admin-id-not-null.sql
+
+  # 50. G4 : Missions et preuves de livraison (Lien Fleetman ↔ TiiBnTick ↔ Geofence)
+  - include:
+      file: db/changelog/changes/050-mission-delivery-link.sql
